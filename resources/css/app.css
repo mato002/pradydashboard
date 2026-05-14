@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    html {
+        @apply scroll-smooth antialiased;
+    }
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+@layer components {
+    .prady-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+    }
+    .prady-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    .prady-scrollbar::-webkit-scrollbar-thumb {
+        @apply rounded-full bg-slate-500/25;
+    }
+    .prady-glass {
+        @apply border border-white/20 bg-white/70 shadow-glass backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/60;
+    }
+    .prady-table {
+        @apply min-w-full divide-y divide-slate-200/80 text-[13px] leading-snug dark:divide-slate-800/80;
+    }
+    .prady-table thead {
+        @apply sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm dark:bg-slate-900/95;
+    }
+    .prady-table th {
+        @apply px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400;
+    }
+    .prady-table td {
+        @apply px-4 py-3 text-slate-700 dark:text-slate-200;
+    }
+    .prady-table tbody tr {
+        @apply transition-colors hover:bg-slate-50/90 dark:hover:bg-slate-800/40;
+    }
+}

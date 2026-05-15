@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Projects\ProjectOperationsService;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\Server;
@@ -13,15 +14,55 @@ use Illuminate\View\View;
 
 class ProjectController extends Controller
 {
-    public function index(): View
+    public function __construct(
+        private readonly ProjectOperationsService $operations
+    ) {}
+
+    public function index(Request $request): View
     {
-        $projects = Project::query()
+        $query = Project::query()
             ->with('server')
             ->withCount('tenants')
-            ->orderBy('name')
-            ->paginate(15);
+            ->orderBy('name');
 
-        return view('admin.projects.index', compact('projects'));
+        if ($search = trim((string) $request->query('q'))) {
+            $query->where(function ($q) use ($search): void {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('domain', 'like', "%{$search}%");
+            });
+        }
+
+        if ($env = $request->query('environment')) {
+            $query->where('status', $env === 'production' ? 'active' : 'maintenance');
+        }
+
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        $allProjects = Project::query()->with('server')->withCount('tenants')->get();
+        $projects = $query->paginate(12)->withQueryString();
+
+        $enrichedRows = $projects->getCollection()->map(function (Project $project): array {
+            return array_merge(
+                ['project' => $project],
+                $this->operations->enrich($project)
+            );
+        });
+
+        return view('admin.projects.index', [
+            'projects' => $projects,
+            'enrichedRows' => $enrichedRows,
+            'kpis' => $this->operations->kpis($allProjects),
+            'recentDeployments' => $this->operations->recentDeployments($allProjects),
+            'infrastructure' => $this->operations->infrastructureMap($allProjects),
+            'filters' => [
+                'q' => $request->query('q'),
+                'environment' => $request->query('environment'),
+                'status' => $request->query('status'),
+            ],
+            'spark' => fn (string $key) => $this->operations->sparkline($key),
+        ]);
     }
 
     public function create(): View
@@ -44,9 +85,22 @@ class ProjectController extends Controller
 
     public function show(Project $project): View
     {
-        $project->load(['server', 'tenants']);
+        $project->load([
+            'server.latestHealthLog',
+            'tenants',
+            'deployments' => fn ($q) => $q->orderByDesc('deployed_at')->limit(10),
+        ]);
 
-        return view('admin.projects.show', compact('project'));
+        $meta = $this->operations->enrich($project);
+
+        return view('admin.projects.show', [
+            'project' => $project,
+            'meta' => $meta,
+            'pipeline' => $this->operations->pipelineStages($project),
+            'buildLogs' => $this->operations->buildLogs($project),
+            'envVars' => $this->operations->environmentVariables($project),
+            'deploymentHistory' => $this->operations->recentDeployments(collect([$project]), 10),
+        ]);
     }
 
     public function edit(Project $project): View

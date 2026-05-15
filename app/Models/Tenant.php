@@ -13,6 +13,9 @@ class Tenant extends Model
 {
     protected $fillable = [
         'external_key',
+        'tenant_key',
+        'license_secret',
+        'access_level',
         'project_id',
         'server_id',
         'company_name',
@@ -56,6 +59,15 @@ class Tenant extends Model
         static::creating(function (Tenant $tenant): void {
             if (empty($tenant->external_key)) {
                 $tenant->external_key = (string) Str::uuid();
+            }
+            if (empty($tenant->tenant_key) && filled($tenant->company_name)) {
+                $tenant->tenant_key = static::generateTenantKey($tenant->company_name);
+            }
+            if (empty($tenant->license_secret)) {
+                $tenant->license_secret = Str::random(64);
+            }
+            if (empty($tenant->access_level)) {
+                $tenant->access_level = 'full';
             }
         });
     }
@@ -125,5 +137,24 @@ class Tenant extends Model
     public function alerts(): HasMany
     {
         return $this->hasMany(TenantAlert::class)->orderByDesc('id');
+    }
+
+    public function licenseCheckLogs(): HasMany
+    {
+        return $this->hasMany(LicenseCheckLog::class)->orderByDesc('checked_at');
+    }
+
+    public static function generateTenantKey(string $companyName): string
+    {
+        $base = Str::slug($companyName);
+        $key = $base !== '' ? $base : 'tenant';
+        $suffix = 0;
+
+        while (static::query()->where('tenant_key', $key)->exists()) {
+            $suffix++;
+            $key = $base.'-'.$suffix;
+        }
+
+        return $key;
     }
 }

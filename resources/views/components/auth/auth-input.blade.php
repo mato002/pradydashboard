@@ -23,10 +23,10 @@
         ? 'cursor-not-allowed bg-slate-50/90 text-slate-600 dark:bg-slate-900/60 dark:text-slate-300'
         : '';
     $peerBase =
-        'peer block h-14 w-full rounded-2xl border bg-white/95 text-sm text-slate-900 shadow-sm transition-all duration-200 placeholder:text-transparent ' .
+        'peer block h-[3.25rem] w-full rounded-xl border bg-white/95 text-sm text-slate-900 shadow-sm transition-all duration-200 placeholder:text-transparent ' .
         'border-slate-200/90 pt-5 pb-2.5 ' .
         'hover:border-slate-300/90 hover:shadow-md ' .
-        'focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/[0.18] focus:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] ' .
+        'auth-input-glow focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/[0.18] ' .
         'dark:border-white/[0.08] dark:bg-slate-950/50 dark:text-slate-100 dark:hover:border-white/15 ' .
         'dark:focus:border-indigo-400 dark:focus:ring-indigo-400/20 ' .
         $iconPad .
@@ -39,7 +39,7 @@
         <div x-data="{ show: false }" class="group relative">
             @isset($icon)
                 <span
-                    class="pointer-events-none absolute left-0 top-0 z-[2] flex h-14 w-11 items-center justify-center text-slate-400 transition group-focus-within:text-indigo-500 dark:text-slate-500 dark:group-focus-within:text-indigo-400"
+                    class="pointer-events-none absolute left-0 top-0 z-[2] flex h-[3.25rem] w-11 items-center justify-center text-slate-400 transition group-focus-within:text-indigo-500 dark:text-slate-500 dark:group-focus-within:text-indigo-400"
                 >
                     {{ $icon }}
                 </span>
@@ -88,7 +88,7 @@
         <div class="group relative">
             @isset($icon)
                 <span
-                    class="pointer-events-none absolute left-0 top-0 z-[2] flex h-14 w-11 items-center justify-center text-slate-400 transition group-focus-within:text-indigo-500 dark:text-slate-500 dark:group-focus-within:text-indigo-400"
+                    class="pointer-events-none absolute left-0 top-0 z-[2] flex h-[3.25rem] w-11 items-center justify-center text-slate-400 transition group-focus-within:text-indigo-500 dark:text-slate-500 dark:group-focus-within:text-indigo-400"
                 >
                     {{ $icon }}
                 </span>

@@ -16,7 +16,15 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(LicenseModuleSeeder::class);
+        $this->call([
+            LicenseModuleSeeder::class,
+            BackupDemoSeeder::class,
+            SslDomainDemoSeeder::class,
+            SubscriptionDemoSeeder::class,
+            InvoiceDemoSeeder::class,
+            AccessControlDemoSeeder::class,
+            DeploymentDemoSeeder::class,
+        ]);
 
         User::query()->firstOrCreate(
             ['email' => 'admin@pradytecai.test'],

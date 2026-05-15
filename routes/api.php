@@ -6,7 +6,7 @@ use App\Http\Controllers\Api\TenantUsageHeartbeatController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/v1/license/check', LicenseCheckController::class)
-    ->middleware('project.api');
+    ->middleware(['project.api', 'throttle:license-check']);
 
 Route::post('/license/check', EnterpriseLicenseCheckController::class)
     ->middleware('project.api');

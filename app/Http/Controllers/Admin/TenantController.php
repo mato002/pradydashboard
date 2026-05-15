@@ -6,8 +6,12 @@ use App\Domain\Tenancy\Repositories\TenantRepositoryInterface;
 use App\Http\Controllers\Controller;
 use App\Models\LicenseModule;
 use App\Models\Project;
+use App\Models\SaasPlan;
 use App\Models\Server;
 use App\Models\Tenant;
+use App\Models\TenantSubscription;
+use App\Support\TenantOperationsPresenter;
+use Database\Seeders\SubscriptionDemoSeeder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -29,43 +33,34 @@ class TenantController extends Controller
 
     public function __construct(
         private readonly TenantRepositoryInterface $tenants
-    ) {
-        $this->authorizeResource(Tenant::class, 'tenant', [
-            'except' => ['index', 'create', 'store'],
-        ]);
-    }
+    ) {}
 
-    public function index(): View
+    public function index(TenantOperationsPresenter $operations): View
     {
         $this->authorize('viewAny', Tenant::class);
 
         $tenants = Tenant::query()
-            ->with(['project', 'server'])
+            ->with(['project', 'server', 'usageMetric'])
+            ->withCount(['supportTickets', 'invoices'])
             ->orderBy('company_name')
             ->paginate(15);
 
-        $kpis = [
-            'total' => Tenant::query()->count(),
-            'active' => Tenant::query()->where('status', 'active')->count(),
-            'trial' => Tenant::query()->where('status', 'trial')->count(),
-            'overdue' => Tenant::query()->where('status', 'overdue')->count(),
-            'suspended' => Tenant::query()->whereIn('status', ['suspended', 'restricted', 'terminated'])->count(),
-        ];
-
-        return view('admin.tenants.index', compact('tenants', 'kpis'));
+        return view('admin.tenants.index', $operations->present($tenants));
     }
 
     public function create(): View
     {
         $this->authorize('create', Tenant::class);
 
-        $projects = Project::query()->orderBy('name')->get();
-        $servers = Server::query()->orderBy('name')->get();
+        if (SaasPlan::query()->doesntExist()) {
+            (new SubscriptionDemoSeeder)->run();
+        }
 
         return view('admin.tenants.create', [
             'tenant' => new Tenant,
-            'projects' => $projects,
-            'servers' => $servers,
+            'projects' => Project::query()->orderBy('name')->get(),
+            'servers' => Server::query()->orderBy('name')->get(),
+            'plans' => SaasPlan::query()->where('is_active', true)->orderBy('sort_order')->get(),
         ]);
     }
 
@@ -74,13 +69,19 @@ class TenantController extends Controller
         $this->authorize('create', Tenant::class);
 
         $data = $this->validated($request);
-        Tenant::query()->create($data);
+        $saasPlanId = $request->input('saas_plan_id');
+        unset($data['saas_plan_id']);
 
-        return redirect()->route('tenants.index')->with('status', __('Tenant created.'));
+        $tenant = Tenant::query()->create($data);
+        $this->syncSubscription($tenant, $saasPlanId, $data);
+
+        return redirect()->route('tenants.show', $tenant)->with('status', __('Tenant provisioned successfully.'));
     }
 
     public function show(Request $request, Tenant $tenant): View
     {
+        $this->authorize('view', $tenant);
+
         $tab = $this->normalizeTab((string) $request->query('tab', 'overview'));
 
         $tenant = $this->tenants->findForCommandCenter($tenant->id);
@@ -112,14 +113,27 @@ class TenantController extends Controller
 
     public function edit(Tenant $tenant): View
     {
+        $this->authorize('update', $tenant);
+
         $projects = Project::query()->orderBy('name')->get();
         $servers = Server::query()->orderBy('name')->get();
 
-        return view('admin.tenants.edit', compact('tenant', 'projects', 'servers'));
+        if (SaasPlan::query()->doesntExist()) {
+            (new SubscriptionDemoSeeder)->run();
+        }
+
+        return view('admin.tenants.edit', [
+            'tenant' => $tenant,
+            'projects' => $projects,
+            'servers' => $servers,
+            'plans' => SaasPlan::query()->where('is_active', true)->orderBy('sort_order')->get(),
+        ]);
     }
 
     public function update(Request $request, Tenant $tenant): RedirectResponse
     {
+        $this->authorize('update', $tenant);
+
         $data = $this->validated($request);
         $tenant->update($data);
 
@@ -131,6 +145,8 @@ class TenantController extends Controller
 
     public function destroy(Tenant $tenant): RedirectResponse
     {
+        $this->authorize('delete', $tenant);
+
         $tenant->delete();
 
         return redirect()->route('tenants.index')->with('status', __('Tenant removed.'));
@@ -173,6 +189,45 @@ class TenantController extends Controller
             'deployment_version' => ['nullable', 'string', 'max:100'],
             'penalties_total' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
+            'saas_plan_id' => ['nullable', 'exists:saas_plans,id'],
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function syncSubscription(Tenant $tenant, mixed $saasPlanId, array $data): void
+    {
+        $plan = $saasPlanId ? SaasPlan::query()->find($saasPlanId) : null;
+        $cycle = $data['billing_cycle'] ?? 'monthly';
+        $amount = (float) ($data['subscription_amount'] ?? ($plan ? (float) $plan->monthly_price : 0));
+
+        if ($plan && empty($data['subscription_plan'])) {
+            $tenant->update(['subscription_plan' => $plan->name]);
+        }
+
+        $status = match ($tenant->status) {
+            'trial' => 'trial',
+            'overdue' => 'overdue',
+            'suspended', 'restricted', 'terminated', 'cancelled' => 'suspended',
+            default => 'active',
+        };
+
+        $project = Project::query()->find($tenant->project_id);
+
+        TenantSubscription::query()->create([
+            'tenant_id' => $tenant->id,
+            'saas_plan_id' => $plan?->id,
+            'plan_name' => $tenant->subscription_plan ?? $plan?->name ?? 'Custom',
+            'product_name' => $project?->name,
+            'amount' => $cycle === 'annual' && $plan?->annual_price
+                ? (float) $plan->annual_price
+                : $amount,
+            'billing_cycle' => $cycle,
+            'current_period_start' => $data['start_date'] ?? now(),
+            'current_period_end' => $data['renewal_date'] ?? now()->addMonth(),
+            'status' => $status,
+            'auto_renew' => ! in_array($status, ['suspended', 'cancelled'], true),
         ]);
     }
 }

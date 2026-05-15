@@ -321,9 +321,9 @@
             </span>
             <div>
                 <p class="font-semibold">{{ __('License API (hosted projects)') }}</p>
-                <p class="mt-1 text-indigo-900/90 dark:text-indigo-200/90">{{ __('Each project has an API token. Tenant systems call') }}
+                <p class="mt-1 text-indigo-900/90 dark:text-indigo-200/90">{{ __('Hosted products call') }}
                     <code class="rounded-md bg-white/80 px-1.5 py-0.5 text-xs font-mono text-indigo-900 shadow-sm dark:bg-slate-950 dark:text-indigo-100">POST {{ url('/api/v1/license/check') }}</code>
-                    {{ __('with Bearer token and JSON body') }} <code class="rounded-md bg-white/80 px-1.5 py-0.5 text-xs font-mono dark:bg-slate-950">{"tenant_key":"…"}</code>.
+                    {{ __('with Bearer token, tenant/product keys, domain, and HMAC signature.') }}
                 </p>
             </div>
         </div>

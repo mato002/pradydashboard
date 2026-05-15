@@ -31,6 +31,49 @@ class TenantLicenseFormatter
     }
 
     /**
+     * Public control-plane API (POST /api/v1/license/check).
+     *
+     * @return array<string, mixed>
+     */
+    public function toPublicApiArray(TenantLicenseResult $result): array
+    {
+        $tenantStatus = match (true) {
+            in_array($result->tenantLifecycleStatus, ['cancelled', 'terminated'], true) => 'terminated',
+            $result->tenantLifecycleStatus === 'suspended' => 'suspended',
+            $result->accessLevel === 'restricted' => 'restricted',
+            $result->tenantLifecycleStatus === 'overdue' || $result->subscriptionStatus === 'unpaid' => 'overdue',
+            $result->subscriptionStatus === 'grace' || $result->tenantLifecycleStatus === 'warning' => 'overdue',
+            default => 'active',
+        };
+
+        $accessLevel = match (true) {
+            in_array($tenantStatus, ['terminated', 'suspended'], true) => 'blocked',
+            $result->accessLevel === 'restricted' => 'read_only',
+            $tenantStatus === 'overdue' => 'warning',
+            default => 'full',
+        };
+
+        $allowed = ! in_array($accessLevel, ['blocked'], true);
+
+        $message = $result->message ?? match ($accessLevel) {
+            'full' => 'Access granted',
+            'warning' => 'Your subscription is overdue. Please renew to avoid service interruption.',
+            'read_only' => 'Your account is restricted due to pending payment.',
+            'blocked' => 'Your account has been suspended. Contact PradytecAI.',
+            default => null,
+        };
+
+        return [
+            'allowed' => $allowed,
+            'tenant_status' => $tenantStatus,
+            'access_level' => $accessLevel,
+            'message' => $message,
+            'enabled_modules' => $allowed ? $result->enabledModuleKeys : [],
+            'expires_at' => $result->expiresAt,
+        ];
+    }
+
+    /**
      * Enterprise public license API shape.
      *
      * @return array<string, mixed>

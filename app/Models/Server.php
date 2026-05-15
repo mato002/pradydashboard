@@ -26,11 +26,18 @@ class Server extends Model
         'currency',
         'monthly_revenue',
         'notes',
+        'provisioning_meta',
+        'last_synced_at',
+        'sync_status',
+        'sync_message',
+        'telemetry_source',
     ];
 
     protected function casts(): array
     {
         return [
+            'last_synced_at' => 'datetime',
+            'provisioning_meta' => 'array',
             'hosted_domains' => 'array',
             'renewal_expires_at' => 'date',
             'monthly_cost' => 'decimal:2',
@@ -49,6 +56,11 @@ class Server extends Model
     public function tenants(): HasMany
     {
         return $this->hasMany(Tenant::class);
+    }
+
+    public function backups(): HasMany
+    {
+        return $this->hasMany(Backup::class);
     }
 
     public function healthLogs(): HasMany

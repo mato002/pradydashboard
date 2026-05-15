@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthenticateProjectApiToken;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,4 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
-    })->create();
+    })
+    ->withSchedule(function (Schedule $schedule): void {
+        $minutes = max(1, (int) config('infrastructure.sync.interval_minutes', 5));
+        $schedule->command('servers:sync-telemetry')->cron("*/{$minutes} * * * *");
+    })
+    ->create();

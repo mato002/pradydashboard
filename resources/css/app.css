@@ -42,4 +42,91 @@
     .prady-table tbody tr {
         @apply transition-colors hover:bg-slate-50/90 dark:hover:bg-slate-800/40;
     }
+
+    .auth-glass-card {
+        @apply relative overflow-hidden rounded-2xl border border-white/[0.12] bg-white/[0.07] shadow-[0_0_0_1px_rgba(255,255,255,0.05)_inset,0_24px_48px_-12px_rgba(0,0,0,0.45)] backdrop-blur-2xl;
+    }
+
+    .auth-glass-card-light {
+        @apply relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white/85 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_24px_48px_-16px_rgba(15,23,42,0.12),0_0_0_1px_rgba(99,102,241,0.06)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-slate-950/70 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset,0_32px_64px_-20px_rgba(0,0,0,0.65)];
+    }
+
+    .auth-metric-tile {
+        @apply rounded-xl border border-white/10 bg-slate-950/50 p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] ring-1 ring-white/5 backdrop-blur-xl transition duration-300 hover:border-cyan-400/25 hover:ring-cyan-400/20;
+    }
+
+    .auth-feature-row {
+        @apply flex items-center gap-3 rounded-lg px-2 py-1.5 text-[13px] text-slate-200/90 transition duration-200 hover:bg-white/[0.04];
+    }
+
+    .auth-input-glow:focus {
+        box-shadow:
+            0 0 0 1px rgba(99, 102, 241, 0.2),
+            0 0 0 4px rgba(99, 102, 241, 0.12),
+            0 0 20px -4px rgba(34, 211, 238, 0.25);
+    }
+
+    .auth-nav-glass {
+        @apply border-b border-white/[0.08] bg-[#020617]/75 backdrop-blur-xl backdrop-saturate-150;
+    }
+
+    .auth-nav-glass-light {
+        @apply border-b border-slate-200/60 bg-white/80 backdrop-blur-xl backdrop-saturate-150 dark:border-white/[0.08] dark:bg-[#020617]/75;
+    }
+
+    .infra-provision-shell {
+        @apply relative overflow-x-hidden;
+    }
+
+    .infra-provision-hero {
+        @apply relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 p-5 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_24px_48px_-20px_rgba(15,23,42,0.1)] backdrop-blur-xl dark:border-slate-800/80 dark:from-slate-950 dark:via-slate-900/90 dark:to-indigo-950/30 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset];
+    }
+
+    .infra-provision-card {
+        @apply overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-card backdrop-blur-md transition duration-300 hover:border-indigo-500/20 hover:shadow-card-hover dark:border-slate-800/80 dark:bg-slate-900/55;
+    }
+
+    .infra-provision-card-header {
+        @apply flex flex-wrap items-start justify-between gap-3 border-b border-slate-100/90 bg-gradient-to-r from-slate-50/90 to-transparent px-4 py-3.5 sm:px-5 dark:border-slate-800/80 dark:from-slate-800/40;
+    }
+
+    .infra-provision-input {
+        @apply mt-1.5 block w-full min-h-[44px] rounded-xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 text-sm shadow-sm transition duration-200 placeholder:text-slate-400 focus:border-cyan-500/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-400/50 dark:focus:bg-slate-900 dark:focus:ring-cyan-400/15;
+    }
+
+    .infra-provision-input:focus {
+        box-shadow:
+            0 0 0 1px rgba(6, 182, 212, 0.15),
+            0 0 0 4px rgba(6, 182, 212, 0.08),
+            0 0 24px -8px rgba(99, 102, 241, 0.35);
+    }
+
+    .infra-provision-select {
+        @apply infra-provision-input cursor-pointer appearance-none bg-[length:1rem] bg-[right_0.75rem_center] bg-no-repeat pr-10;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    }
+
+    .infra-provision-sidebar {
+        @apply infra-provision-card sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto prady-scrollbar;
+    }
+
+    .infra-provision-meter {
+        @apply h-2 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800;
+    }
+
+    .infra-provision-meter-fill {
+        @apply h-full rounded-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-violet-500 transition-all duration-500 ease-out;
+    }
+
+    .infra-provision-mobile-bar {
+        @apply fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/90 bg-white/90 p-3 shadow-[0_-8px_32px_-8px_rgba(15,23,42,0.15)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90 lg:hidden;
+    }
+
+    .infra-provider-chip {
+        @apply inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:border-indigo-400/40 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10;
+    }
+
+    .infra-provider-chip-active {
+        @apply border-indigo-500/50 bg-indigo-500/10 text-indigo-700 ring-2 ring-indigo-500/20 dark:text-indigo-300;
+    }
 }

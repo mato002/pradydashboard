@@ -7,6 +7,13 @@
             @endif
         </div>
         <div class="flex flex-wrap gap-2">
+            <form method="post" action="{{ route('servers.sync-telemetry', $server) }}">
+                @csrf
+                <button type="submit" class="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-500/15 dark:text-cyan-200">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" /></svg>
+                    {{ __('Sync telemetry') }}
+                </button>
+            </form>
             <a href="{{ route('servers.edit', $server) }}" class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{{ __('Edit') }}</a>
             <form method="post" action="{{ route('servers.destroy', $server) }}" onsubmit="return confirm('{{ __('Delete this server?') }}');">
                 @csrf
@@ -26,6 +33,18 @@
             <div class="flex justify-between gap-4"><dt class="text-gray-500">{{ __('Monthly revenue') }}</dt><dd class="font-medium">{{ $server->monthly_revenue !== null ? $server->currency.' '.number_format((float) $server->monthly_revenue, 2) : '—' }}</dd></div>
             <div class="flex justify-between gap-4"><dt class="text-gray-500">{{ __('Est. monthly profit') }}</dt><dd class="font-medium text-green-700 dark:text-green-400">{{ $server->currency }} {{ $server->monthlyProfit() }}</dd></div>
             <div class="flex justify-between gap-4"><dt class="text-gray-500">{{ __('Renewal') }}</dt><dd class="font-medium">{{ optional($server->renewal_expires_at)->toFormattedDateString() ?? '—' }}</dd></div>
+            <div class="flex justify-between gap-4 border-t border-gray-100 pt-3 dark:border-gray-800">
+                <dt class="text-gray-500">{{ __('Last telemetry sync') }}</dt>
+                <dd class="font-medium text-right">
+                    {{ $server->last_synced_at?->diffForHumans() ?? __('Never') }}
+                    @if ($server->telemetry_source)
+                        <span class="mt-0.5 block font-mono text-[10px] uppercase text-cyan-600 dark:text-cyan-400">{{ $server->telemetry_source }}</span>
+                    @endif
+                    @if ($server->sync_message)
+                        <span class="mt-1 block text-xs font-normal text-slate-500">{{ $server->sync_message }}</span>
+                    @endif
+                </dd>
+            </div>
         </dl>
         <div class="rounded-lg border border-gray-200 bg-white p-5 text-sm shadow-sm dark:border-gray-800 dark:bg-gray-900">
             <h3 class="font-semibold text-gray-900 dark:text-gray-100">{{ __('WHM / cPanel') }}</h3>

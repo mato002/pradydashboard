@@ -14,6 +14,9 @@ class Project extends Model
         'name',
         'domain',
         'product_slug',
+        'product_key',
+        'description',
+        'base_url',
         'technology_stack',
         'git_repository',
         'database_name',
@@ -39,7 +42,32 @@ class Project extends Model
             if (empty($project->api_token)) {
                 $project->api_token = Str::random(64);
             }
+            if (empty($project->product_key) && filled($project->product_slug)) {
+                $project->product_key = $project->product_slug;
+            }
+            if (empty($project->product_slug) && filled($project->product_key)) {
+                $project->product_slug = $project->product_key;
+            }
+            if (empty($project->base_url) && filled($project->domain)) {
+                $project->base_url = 'https://'.$project->domain;
+            }
         });
+
+        static::saving(function (Project $project): void {
+            if (filled($project->product_slug) && empty($project->product_key)) {
+                $project->product_key = $project->product_slug;
+            }
+        });
+    }
+
+    public function resolveProductKey(): string
+    {
+        return (string) ($this->product_key ?: $this->product_slug ?: '');
+    }
+
+    public function licenseCheckLogs(): HasMany
+    {
+        return $this->hasMany(LicenseCheckLog::class);
     }
 
     public function server(): BelongsTo

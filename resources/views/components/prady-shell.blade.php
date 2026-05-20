@@ -121,6 +121,7 @@
                         </div>
 
                         <div class="ml-auto flex items-center gap-1 sm:gap-2">
+                            <x-role-switcher />
                             <div class="relative hidden sm:block" x-data="{ open: false }">
                                 <button
                                     type="button"
@@ -179,7 +180,7 @@
                                             </span>
                                             <span class="hidden min-w-0 sm:block">
                                                 <span class="block max-w-[9rem] truncate text-xs font-semibold text-slate-900 dark:text-white">{{ Auth::user()->name }}</span>
-                                                <span class="block text-[11px] text-slate-500 dark:text-slate-400">{{ __('Super Admin') }}</span>
+                                                <span class="block text-[11px] text-slate-500 dark:text-slate-400">{{ $rbacActiveAssignment?->role?->name ?? __('No active role') }}</span>
                                             </span>
                                             <svg class="hidden h-4 w-4 shrink-0 text-slate-400 sm:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />

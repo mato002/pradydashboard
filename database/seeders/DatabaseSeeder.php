@@ -18,21 +18,32 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             LicenseModuleSeeder::class,
-            BackupDemoSeeder::class,
-            SslDomainDemoSeeder::class,
-            SubscriptionDemoSeeder::class,
-            InvoiceDemoSeeder::class,
-            AccessControlDemoSeeder::class,
-            DeploymentDemoSeeder::class,
+            HrDepartmentSeeder::class,
         ]);
 
         User::query()->firstOrCreate(
-            ['email' => 'admin@pradytecai.test'],
+            ['email' => config('superuser.email')],
             [
-                'name' => 'Prady Admin',
-                'password' => Hash::make('password'),
+                'name' => config('superuser.name'),
+                'password' => Hash::make(config('superuser.password')),
                 'email_verified_at' => now(),
+                'password_changed_at' => now(),
             ]
         );
+
+        $this->call(RbacBootstrapSeeder::class);
+        $this->call(DocumentTemplateSeeder::class);
+
+        if (config('app.demo_mode')) {
+            $this->call([
+                BackupDemoSeeder::class,
+                SslDomainDemoSeeder::class,
+                SubscriptionDemoSeeder::class,
+                InvoiceDemoSeeder::class,
+                AccessControlDemoSeeder::class,
+                DeploymentDemoSeeder::class,
+            ]);
+        }
+
     }
 }

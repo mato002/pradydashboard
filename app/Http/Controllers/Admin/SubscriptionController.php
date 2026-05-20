@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\DemoMode;
+use App\Support\OperationalMetrics;
 use App\Models\SaasPlan;
 use App\Models\Tenant;
 use App\Models\TenantPayment;
@@ -18,7 +20,7 @@ class SubscriptionController extends Controller
 {
     public function create(): View
     {
-        if (SaasPlan::query()->doesntExist()) {
+        if (DemoMode::enabled() && SaasPlan::query()->doesntExist()) {
             (new SubscriptionDemoSeeder)->run();
         }
 
@@ -78,7 +80,7 @@ class SubscriptionController extends Controller
 
     public function index(Request $request): View
     {
-        if (SaasPlan::query()->doesntExist()) {
+        if (DemoMode::enabled() && SaasPlan::query()->doesntExist()) {
             (new SubscriptionDemoSeeder)->run();
         }
 
@@ -107,7 +109,7 @@ class SubscriptionController extends Controller
         $kpis = [
             'mrr' => $this->formatKes($mrr),
             'mrrRaw' => $mrr,
-            'mrrGrowth' => '+14.2%',
+            'mrrGrowth' => $this->mrrGrowthLabel(),
             'active' => $activeCount,
             'trial' => $trialCount,
             'expiring' => $expiringCount,
@@ -116,7 +118,7 @@ class SubscriptionController extends Controller
             'arr' => $this->formatKes($mrr * 12),
         ];
 
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
+        $spark = fn (string $key) => OperationalMetrics::emptySparkline();
         $mrrSeries = $this->buildMrrSeries($mrr);
         $growthSeries = $this->buildGrowthSeries();
         $insights = $this->buildTenantInsights();
@@ -192,8 +194,7 @@ class SubscriptionController extends Controller
                 ->whereBetween('paid_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
                 ->sum('amount');
 
-            $value = $paid > 0 ? $paid : $currentMrr * (0.82 + ($i * 0.035));
-            $series[] = ['label' => $month->format('M'), 'value' => round($value, 0)];
+            $series[] = ['label' => $month->format('M'), 'value' => round($paid, 0)];
         }
 
         return $series;
@@ -207,11 +208,15 @@ class SubscriptionController extends Controller
         $buckets = [];
         foreach ([6, 5, 4, 3, 2, 1, 0] as $monthsAgo) {
             $month = Carbon::now()->subMonths($monthsAgo);
-            $h = crc32('growth-'.$month->format('Y-m'));
+            $start = $month->copy()->startOfMonth();
+            $end = $month->copy()->endOfMonth();
             $buckets[] = [
                 'label' => $month->format('M'),
-                'new' => 2 + ($h & 7),
-                'churned' => ($h >> 4) & 3,
+                'new' => TenantSubscription::query()->whereBetween('created_at', [$start, $end])->count(),
+                'churned' => TenantSubscription::query()
+                    ->where('status', 'cancelled')
+                    ->whereBetween('updated_at', [$start, $end])
+                    ->count(),
             ];
         }
 
@@ -229,20 +234,13 @@ class SubscriptionController extends Controller
             ->latest()
             ->take(6)
             ->get()
-            ->map(function ($sub, $i) {
-                $metrics = [
-                    ['metric' => __('API usage'), 'value' => number_format(($sub->saasPlan?->api_quota ?? 100000) * (0.4 + $i * 0.08)), 'trend' => '+'.(5 + $i * 2).'%'],
-                    ['metric' => __('Storage'), 'value' => ($sub->saasPlan?->storage_gb ?? 50).' GB', 'trend' => '+'.(2 + $i).'%'],
-                    ['metric' => __('Active seats'), 'value' => (3 + $i * 2).' / '.($sub->saasPlan?->max_seats ?? 15), 'trend' => 'stable'],
-                ];
-                $m = $metrics[$i % 3];
-
+            ->map(function ($sub) {
                 return [
                     'tenant' => $sub->tenant?->company_name ?? __('Unknown'),
                     'plan' => $sub->plan_name,
-                    'metric' => $m['metric'],
-                    'value' => $m['value'],
-                    'trend' => $m['trend'],
+                    'metric' => __('Status'),
+                    'value' => ucfirst(str_replace('_', ' ', $sub->status)),
+                    'trend' => $sub->auto_renew ? __('Auto-renew') : __('Manual'),
                 ];
             });
     }
@@ -253,17 +251,43 @@ class SubscriptionController extends Controller
     private function buildAutomationStats(): array
     {
         $total = TenantSubscription::query()->count();
+        $autoRenew = TenantSubscription::query()->where('auto_renew', true)->count();
+        $paymentAttempts = TenantPayment::query()->count();
+        $paymentSuccess = TenantPayment::query()->where('status', 'successful')->count();
 
         return [
-            'auto_renew_enabled' => TenantSubscription::query()->where('auto_renew', true)->count(),
-            'auto_renew_pct' => $total > 0
-                ? round((TenantSubscription::query()->where('auto_renew', true)->count() / $total) * 100)
-                : 0,
+            'auto_renew_enabled' => $autoRenew,
+            'auto_renew_pct' => $total > 0 ? round(($autoRenew / $total) * 100) : 0,
             'retry_queue' => TenantSubscription::query()->where('status', 'overdue')->count(),
             'grace_active' => TenantSubscription::query()->whereIn('status', ['grace_period', 'grace'])->count(),
             'invoice_sync' => TenantSubscription::query()->where('status', 'active')->count(),
-            'payment_success_rate' => 96.4,
+            'payment_success_rate' => $paymentAttempts > 0
+                ? round(($paymentSuccess / $paymentAttempts) * 100, 1)
+                : null,
         ];
+    }
+
+    private function mrrGrowthLabel(): ?string
+    {
+        $lastMonth = Carbon::now()->subMonth();
+        $prevMonth = Carbon::now()->subMonths(2);
+
+        $lastPaid = (float) TenantPayment::query()
+            ->where('status', 'successful')
+            ->whereBetween('paid_at', [$lastMonth->copy()->startOfMonth(), $lastMonth->copy()->endOfMonth()])
+            ->sum('amount');
+        $prevPaid = (float) TenantPayment::query()
+            ->where('status', 'successful')
+            ->whereBetween('paid_at', [$prevMonth->copy()->startOfMonth(), $prevMonth->copy()->endOfMonth()])
+            ->sum('amount');
+
+        if ($prevPaid <= 0) {
+            return null;
+        }
+
+        $pct = round((($lastPaid - $prevPaid) / $prevPaid) * 100, 1);
+
+        return ($pct >= 0 ? '+' : '').$pct.'%';
     }
 
     /**
@@ -308,17 +332,4 @@ class SubscriptionController extends Controller
         return $alerts->take(5);
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 8; $i++) {
-            $pts[] = 32 + (($h >> ($i * 3)) & 0x3F) % 48;
-        }
-
-        return $pts;
-    }
 }

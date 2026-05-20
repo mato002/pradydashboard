@@ -6,6 +6,7 @@ use App\Models\Server;
 
 class ServerConnectionConfig
 {
+    public const MASKED_TOKEN_PLACEHOLDER = '********';
     /**
      * @return array<string, mixed>
      */
@@ -32,7 +33,7 @@ class ServerConnectionConfig
             ?? self::hostFromUrl($meta['api_endpoint'] ?? null)
             ?? self::hostFromUrl($server->ip_address);
 
-        $token = $meta['api_token'] ?? config('infrastructure.whm.api_token');
+        $token = $server->decryptedApiToken();
         $username = $meta['whm_username'] ?? $meta['ssh_username'] ?? config('infrastructure.whm.username', 'root');
 
         if (! $host || ! $token) {

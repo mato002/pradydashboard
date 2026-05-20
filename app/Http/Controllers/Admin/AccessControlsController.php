@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Tenancy\Services\TenantAccessResolver;
 use App\Http\Controllers\Controller;
+use App\Support\DemoMode;
 use App\Models\LicenseModule;
 use App\Models\Tenant;
 use App\Models\TenantAccessControl;
@@ -21,7 +22,7 @@ class AccessControlsController extends Controller
 
     public function index(): View
     {
-        if (TenantAccessControl::query()->doesntExist()) {
+        if (DemoMode::enabled() && TenantAccessControl::query()->doesntExist()) {
             (new AccessControlDemoSeeder)->run();
         }
 
@@ -34,7 +35,7 @@ class AccessControlsController extends Controller
         $policies = $this->buildPolicyRows($tenants);
         $graceAccounts = $this->buildGraceAccounts($tenants);
         $kpis = $this->buildKpis($tenants, $policies);
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
+        $spark = fn (string $key) => \App\Support\OperationalMetrics::emptySparkline();
 
         $enforcementTimeline = $this->buildEnforcementTimeline();
         $securityAnalytics = $this->buildSecurityAnalytics();
@@ -456,17 +457,4 @@ class AccessControlsController extends Controller
         ];
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 12; $i++) {
-            $pts[] = 24 + (($h >> ($i * 3)) & 0x3F) % 56;
-        }
-
-        return $pts;
-    }
 }

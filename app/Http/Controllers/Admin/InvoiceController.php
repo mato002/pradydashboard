@@ -2,108 +2,137 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Activity\ActivityLogger;
+use App\Domain\Activity\ActivityLogQuery;
+use App\Domain\Billing\BillingSettings;
+use App\Domain\Billing\DocumentFinalizer;
+use App\Domain\Billing\DraftInvoiceGenerator;
+use App\Domain\Billing\FinancialOperationsQuery;
+use App\Domain\Billing\InvoiceEmailDelivery;
+use App\Domain\Billing\InvoicePaymentRecorder;
+use App\Domain\Billing\OverdueBillingProcessor;
+use App\Domain\Billing\QuotationConverter;
+use App\Domain\Billing\RecurringBillingProcessor;
+use App\Domain\Rbac\RbacScopeFilter;
 use App\Http\Controllers\Controller;
+use App\Models\BillingAutomationRule;
+use App\Models\DocumentTemplate;
+use App\Models\GeneratedDocument;
 use App\Models\InvoiceRecurringSchedule;
+use App\Models\Tenant;
 use App\Models\TenantInvoice;
-use App\Models\TenantPayment;
-use Carbon\Carbon;
-use Database\Seeders\InvoiceDemoSeeder;
+use App\Support\ActivityLogCategory;
+use App\Support\Billing\BillingDocumentType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class InvoiceController extends Controller
 {
+    private const TABS = [
+        'overview',
+        'invoices',
+        'quotations',
+        'proforma',
+        'receipts',
+        'recurring',
+        'collections',
+        'templates',
+        'statements',
+        'automation',
+        'activity',
+    ];
+
+    public function __construct(
+        private readonly ActivityLogger $activityLogger,
+        private readonly ActivityLogQuery $activityQuery,
+        private readonly FinancialOperationsQuery $operations,
+    ) {}
+
     public function index(Request $request): View
     {
-        if (TenantInvoice::query()->doesntExist()) {
-            (new InvoiceDemoSeeder)->run();
-        }
+        $tab = in_array($request->query('tab'), self::TABS, true)
+            ? $request->query('tab')
+            : 'overview';
 
-        $invoices = TenantInvoice::query()
-            ->with('tenant.project')
-            ->orderByDesc('issued_at')
-            ->orderByDesc('created_at')
-            ->paginate(12)
-            ->withQueryString();
+        $scopeFilter = app(RbacScopeFilter::class);
+        $kpis = $this->operations->overviewKpis($scopeFilter);
 
-        $schedules = InvoiceRecurringSchedule::query()
-            ->with('tenant')
-            ->orderBy('next_run_at')
-            ->get();
-
-        $totalInvoiced = (float) TenantInvoice::query()
-            ->whereNot('status', 'cancelled')
-            ->sum('amount_due');
-
-        $paidInvoices = TenantInvoice::query()->where('status', 'paid')->count();
-        $overdueInvoices = TenantInvoice::query()->where('status', 'overdue')->count();
-        $outstanding = (float) TenantInvoice::query()
-            ->whereIn('status', ['pending', 'overdue', 'partial'])
-            ->get()
-            ->sum(fn (TenantInvoice $inv) => $inv->balance());
-
-        $monthRevenue = (float) TenantPayment::query()
-            ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
-            ->sum('amount');
-
-        if ($monthRevenue <= 0) {
-            $monthRevenue = (float) TenantInvoice::query()
-                ->where('status', 'paid')
-                ->whereBetween('updated_at', [now()->startOfMonth(), now()->endOfMonth()])
-                ->sum('amount_paid');
-        }
-
-        $failedCollections = TenantInvoice::query()->where('collection_failed', true)->count();
-
-        $kpis = [
-            'totalInvoiced' => TenantInvoice::formatMoney($totalInvoiced),
-            'totalInvoicedRaw' => $totalInvoiced,
-            'paid' => $paidInvoices,
-            'overdue' => $overdueInvoices,
-            'outstanding' => TenantInvoice::formatMoney($outstanding),
-            'outstandingRaw' => $outstanding,
-            'monthRevenue' => TenantInvoice::formatMoney($monthRevenue),
-            'monthRevenueRaw' => $monthRevenue,
-            'failedCollections' => $failedCollections,
-            'collectionRate' => $this->collectionEfficiency(),
+        $data = [
+            'tab' => $tab,
+            'kpis' => $kpis,
+            'filterTenants' => $this->operations->filterTenants($scopeFilter),
+            'invoiceTrend' => $this->operations->invoiceTrendSeries($scopeFilter),
+            'revenueSeries' => $this->operations->revenueSeries($scopeFilter),
+            'agingBuckets' => $this->operations->agingBuckets($scopeFilter),
+            'automation' => $this->operations->automationStats($scopeFilter),
+            'alerts' => $this->operations->alerts($scopeFilter),
+            'topDebtors' => $this->operations->topDebtors($scopeFilter),
+            'upcomingRenewals' => $this->operations->upcomingRenewals($scopeFilter),
+            'failedDeliveries' => $this->operations->failedDeliveries($scopeFilter),
+            'expiringSubscriptions' => $this->operations->expiringSubscriptions($scopeFilter),
+            'schedules' => $this->operations->schedules($scopeFilter),
+            'templates' => $this->operations->templates(),
+            'automationRules' => $this->operations->automationRules(),
+            'collectionNotes' => $this->operations->recentCollectionNotes(),
+            'activityLogs' => $this->operations->activityLogs($scopeFilter),
+            'documentTypes' => BillingDocumentType::all(),
         ];
 
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
-        $invoiceTrend = $this->buildInvoiceTrendSeries();
-        $revenueSeries = $this->buildRevenueSeries();
-        $overdueAnalytics = $this->buildOverdueAnalytics();
-        $agingBuckets = $this->buildAgingBuckets();
-        $automation = $this->buildAutomationStats();
-        $alerts = $this->buildAlerts();
+        $data['invoices'] = match ($tab) {
+            'quotations' => $this->operations->invoiceRegister($request, $scopeFilter, BillingDocumentType::QUOTATION),
+            'proforma' => $this->operations->invoiceRegister($request, $scopeFilter, BillingDocumentType::PROFORMA),
+            'receipts' => $this->operations->invoiceRegister($request, $scopeFilter, BillingDocumentType::RECEIPT),
+            'statements' => $this->operations->invoiceRegister($request, $scopeFilter, BillingDocumentType::STATEMENT),
+            'invoices', 'collections' => $this->operations->invoiceRegister(
+                $request,
+                $scopeFilter,
+                $tab === 'collections' ? BillingDocumentType::INVOICE : null,
+            ),
+            default => $this->operations->invoiceRegister($request, $scopeFilter, BillingDocumentType::INVOICE),
+        };
 
-        return view('admin.invoices.index', compact(
-            'invoices',
-            'schedules',
-            'kpis',
-            'spark',
-            'invoiceTrend',
-            'revenueSeries',
-            'overdueAnalytics',
-            'agingBuckets',
-            'automation',
-            'alerts',
-        ));
+        if ($tab === 'collections') {
+            $data['overdueInvoices'] = $this->operations->collectionsData($scopeFilter);
+        }
+
+        return view('admin.invoices.index', $data);
     }
 
-    public function generate(Request $request): RedirectResponse
+    public function generate(Request $request, RecurringBillingProcessor $recurring, DraftInvoiceGenerator $drafts): RedirectResponse
     {
+        $scopeFilter = app(RbacScopeFilter::class);
+        $recurringCount = $recurring->processDueSchedules()->count();
+        $draftCount = 0;
+
+        $tenants = $scopeFilter->isGlobalScope()
+            ? Tenant::query()->where('status', 'active')->get()
+            : $scopeFilter->applyTenantScope(Tenant::query())->where('status', 'active')->get();
+
+        foreach ($tenants as $tenant) {
+            $tenant->load(['projectSubscriptions.moduleSubscriptions.projectModule', 'projectSubscriptions.serviceIntegrations', 'usageMetric']);
+            if ($drafts->generate($tenant)) {
+                $draftCount++;
+            }
+        }
+
         return redirect()
-            ->route('invoices.index')
-            ->with('status', __('Invoice generation queued for eligible tenants and recurring schedules.'));
+            ->route('invoices.index', ['tab' => 'invoices'])
+            ->with('status', __('Generated :recurring recurring and :draft draft invoice(s).', [
+                'recurring' => $recurringCount,
+                'draft' => $draftCount,
+            ]));
     }
 
-    public function sendReminders(Request $request): RedirectResponse
+    public function sendReminders(OverdueBillingProcessor $processor): RedirectResponse
     {
+        $counts = $processor->process();
+
         return redirect()
-            ->route('invoices.index')
-            ->with('status', __('Payment reminders dispatched for overdue and partial invoices.'));
+            ->route('invoices.index', ['tab' => 'collections'])
+            ->with('status', __('Dispatched :count reminder(s).', ['count' => $counts['reminders']]));
     }
 
     public function toggleSchedule(InvoiceRecurringSchedule $schedule): RedirectResponse
@@ -111,230 +140,263 @@ class InvoiceController extends Controller
         $schedule->update(['enabled' => ! $schedule->enabled]);
 
         return redirect()
-            ->route('invoices.index')
+            ->route('invoices.index', ['tab' => 'recurring'])
             ->with('status', $schedule->enabled
                 ? __('Recurring schedule enabled.')
                 : __('Recurring schedule paused.'));
     }
 
-    private function collectionEfficiency(): float
+    public function updateAutomationRules(Request $request): RedirectResponse
     {
-        $total = TenantInvoice::query()->whereNot('status', 'cancelled')->count();
-        if ($total === 0) {
-            return 100.0;
-        }
+        $data = $request->validate([
+            'reminder_after_days' => ['required', 'integer', 'min:1', 'max:90'],
+            'penalty_after_days' => ['required', 'integer', 'min:1', 'max:180'],
+            'suspension_after_days' => ['required', 'integer', 'min:1', 'max:365'],
+            'grace_period_days' => ['required', 'integer', 'min:0', 'max:90'],
+            'penalty_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'vat_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'recurring_enabled' => ['sometimes', 'boolean'],
+            'auto_send_invoices' => ['sometimes', 'boolean'],
+            'auto_send_receipts' => ['sometimes', 'boolean'],
+            'auto_generate_pdf' => ['sometimes', 'boolean'],
+        ]);
 
-        $collected = TenantInvoice::query()->whereIn('status', ['paid', 'partial'])->count();
+        $rules = BillingAutomationRule::platform();
+        $rules->update([
+            ...$data,
+            'recurring_enabled' => $request->boolean('recurring_enabled'),
+            'auto_send_invoices' => $request->boolean('auto_send_invoices'),
+            'auto_send_receipts' => $request->boolean('auto_send_receipts'),
+            'auto_generate_pdf' => $request->boolean('auto_generate_pdf'),
+        ]);
 
-        return round(($collected / $total) * 100, 1);
+        return redirect()
+            ->route('invoices.index', ['tab' => 'automation'])
+            ->with('status', __('Automation rules updated.'));
     }
 
-    /**
-     * @return array<int, array{label: string, issued: int, paid: int}>
-     */
-    private function buildInvoiceTrendSeries(): array
+    public function updateTemplate(Request $request, DocumentTemplate $template): RedirectResponse
     {
-        $series = [];
-        for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i);
-            $issued = TenantInvoice::query()
-                ->whereBetween('issued_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
-                ->count();
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'primary_color' => ['nullable', 'string', 'max:20'],
+            'accent_color' => ['nullable', 'string', 'max:20'],
+            'footer_text' => ['nullable', 'string', 'max:2000'],
+            'signature_label' => ['nullable', 'string', 'max:120'],
+            'show_qr' => ['sometimes', 'boolean'],
+            'watermark' => ['nullable', 'string', 'max:120'],
+            'active' => ['sometimes', 'boolean'],
+        ]);
 
-            $paid = TenantInvoice::query()
-                ->where('status', 'paid')
-                ->whereBetween('updated_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
-                ->count();
+        $branding = array_merge($template->branding ?? [], [
+            'primary_color' => $data['primary_color'] ?? '#4f46e5',
+            'accent_color' => $data['accent_color'] ?? '#f59e0b',
+            'footer_text' => $data['footer_text'] ?? null,
+            'signature_label' => $data['signature_label'] ?? null,
+            'show_qr' => $request->boolean('show_qr'),
+            'watermark' => $data['watermark'] ?? null,
+        ]);
 
-            if ($issued === 0) {
-                $h = crc32('inv-'.$month->format('Y-m'));
-                $issued = 4 + ($h & 7);
-                $paid = 2 + (($h >> 4) & 5);
-            }
+        $template->update([
+            'name' => $data['name'],
+            'branding' => $branding,
+            'active' => $request->boolean('active', true),
+        ]);
 
-            $series[] = [
-                'label' => $month->format('M'),
-                'issued' => $issued,
-                'paid' => min($paid, $issued),
-            ];
-        }
-
-        return $series;
+        return redirect()
+            ->route('invoices.index', ['tab' => 'templates'])
+            ->with('status', __('Template updated.'));
     }
 
-    /**
-     * @return array<int, array{label: string, value: float}>
-     */
-    private function buildRevenueSeries(): array
+    public function approveQuotation(TenantInvoice $invoice, QuotationConverter $converter): RedirectResponse
     {
-        $series = [];
-        for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i);
-            $value = (float) TenantPayment::query()
-                ->whereBetween('paid_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
-                ->sum('amount');
+        $converter->approve($invoice);
 
-            if ($value <= 0) {
-                $h = crc32('rev-'.$month->format('Y-m'));
-                $value = 180000 + (($h & 0xFFFF) % 120000);
-            }
-
-            $series[] = ['label' => $month->format('M'), 'value' => round($value, 0)];
-        }
-
-        return $series;
+        return back()->with('status', __('Quotation approved.'));
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function buildOverdueAnalytics(): array
+    public function convertQuotation(TenantInvoice $invoice, QuotationConverter $converter): RedirectResponse
     {
-        $overdue = TenantInvoice::query()->where('status', 'overdue')->get();
-        $exposure = $overdue->sum(fn (TenantInvoice $inv) => $inv->balance());
+        try {
+            $newInvoice = $converter->convert($invoice);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
-        return [
-            'count' => $overdue->count(),
-            'exposure' => TenantInvoice::formatMoney($exposure),
-            'avgDaysLate' => $overdue->isEmpty()
-                ? 0
-                : (int) round($overdue->avg(fn ($inv) => max(0, now()->diffInDays($inv->due_date, false)))),
-            'penalties' => TenantInvoice::formatMoney((float) $overdue->sum('penalty_amount')),
-        ];
+        return redirect()
+            ->route('invoices.show', $newInvoice)
+            ->with('status', __('Quotation converted to invoice.'));
     }
 
-    /**
-     * @return array<int, array{label: string, amount: float, count: int, pct: float}>
-     */
-    private function buildAgingBuckets(): array
+    public function show(TenantInvoice $invoice, BillingSettings $billingSettings): View
     {
-        $open = TenantInvoice::query()
-            ->whereIn('status', ['pending', 'overdue', 'partial'])
-            ->get();
+        $invoice->load(['tenant', 'lineItems', 'payments', 'projectSubscription.project', 'generatedDocuments']);
 
-        $buckets = [
-            'current' => ['label' => __('Current'), 'amount' => 0.0, 'count' => 0],
-            '1_30' => ['label' => __('1–30 days'), 'amount' => 0.0, 'count' => 0],
-            '31_60' => ['label' => __('31–60 days'), 'amount' => 0.0, 'count' => 0],
-            '61_90' => ['label' => __('61–90 days'), 'amount' => 0.0, 'count' => 0],
-            '90_plus' => ['label' => __('90+ days'), 'amount' => 0.0, 'count' => 0],
-        ];
-
-        foreach ($open as $invoice) {
-            $days = $invoice->due_date
-                ? now()->diffInDays($invoice->due_date, false)
-                : 0;
-
-            $key = match (true) {
-                $days >= 0 => 'current',
-                $days >= -30 => '1_30',
-                $days >= -60 => '31_60',
-                $days >= -90 => '61_90',
-                default => '90_plus',
-            };
-
-            $buckets[$key]['amount'] += $invoice->balance();
-            $buckets[$key]['count']++;
-        }
-
-        $total = max(1, array_sum(array_column($buckets, 'amount')));
-
-        return array_map(function ($bucket) use ($total) {
-            return [
-                'label' => $bucket['label'],
-                'amount' => $bucket['amount'],
-                'count' => $bucket['count'],
-                'pct' => round(($bucket['amount'] / $total) * 100, 1),
-            ];
-        }, array_values($buckets));
+        return view('admin.invoices.show', [
+            'invoice' => $invoice,
+            'billingSettings' => $billingSettings,
+            'activityLogs' => $this->activityQuery->forContext(invoiceId: $invoice->id),
+        ]);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function buildAutomationStats(): array
+    public function preview(TenantInvoice $invoice, DocumentFinalizer $finalizer): View
     {
-        $total = max(1, TenantInvoice::query()->count());
+        $document = $invoice->isFinalized()
+            ? $invoice->generatedDocuments()->latest('id')->first()
+            : $finalizer->finalize($invoice);
 
-        return [
-            'recurring_active' => InvoiceRecurringSchedule::query()->where('enabled', true)->count(),
-            'recurring_total' => InvoiceRecurringSchedule::query()->count(),
-            'pdf_rate' => round((TenantInvoice::query()->where('pdf_generated', true)->count() / $total) * 100, 1),
-            'email_rate' => round((TenantInvoice::query()->whereNotNull('email_delivered_at')->count() / $total) * 100, 1),
-            'reminder_queue' => TenantInvoice::query()->whereIn('status', ['overdue', 'partial'])->count(),
-            'tax_automation' => 100.0,
-        ];
+        return view('admin.invoices.preview', [
+            'invoice' => $invoice,
+            'document' => $document,
+        ]);
     }
 
-    /**
-     * @return Collection<int, array{type: string, title: string, body: string, time: string}>
-     */
-    private function buildAlerts(): Collection
+    public function downloadPdf(TenantInvoice $invoice, DocumentFinalizer $finalizer): Response|RedirectResponse
     {
-        $alerts = collect();
+        $document = $invoice->generatedDocuments()->latest('id')->first()
+            ?? $finalizer->finalize($invoice);
 
-        foreach (TenantInvoice::query()->where('status', 'overdue')->with('tenant')->latest('due_date')->take(3)->get() as $inv) {
-            $alerts->push([
-                'type' => 'danger',
-                'title' => __('Overdue invoice'),
-                'body' => __(':tenant — :number · :amount due :when.', [
-                    'tenant' => $inv->tenant?->company_name,
-                    'number' => $inv->invoice_number,
-                    'amount' => $inv->formattedBalance(),
-                    'when' => $inv->due_date?->diffForHumans() ?? __('past due'),
-                ]),
-                'time' => $inv->due_date?->format('M j') ?? __('Open'),
-            ]);
+        if (! $document->pdf_path || ! Storage::disk('local')->exists($document->pdf_path)) {
+            return back()->with('error', __('PDF not available. Install dompdf/dompdf and regenerate.'));
         }
 
-        foreach (TenantInvoice::query()->where('collection_failed', true)->with('tenant')->take(2)->get() as $inv) {
-            $alerts->push([
-                'type' => 'critical',
-                'title' => __('Failed collection'),
-                'body' => __(':number — retry scheduled for :tenant.', [
-                    'number' => $inv->invoice_number,
-                    'tenant' => $inv->tenant?->company_name,
-                ]),
-                'time' => __('Collections'),
-            ]);
-        }
-
-        foreach (TenantInvoice::query()->where('status', 'partial')->with('tenant')->take(2)->get() as $inv) {
-            $alerts->push([
-                'type' => 'warning',
-                'title' => __('Partial payment'),
-                'body' => __(':number — :balance remaining on :tenant.', [
-                    'number' => $inv->invoice_number,
-                    'balance' => $inv->formattedBalance(),
-                    'tenant' => $inv->tenant?->company_name,
-                ]),
-                'time' => __('AR'),
-            ]);
-        }
-
-        if ($alerts->isEmpty()) {
-            $alerts->push([
-                'type' => 'success',
-                'title' => __('Receivables healthy'),
-                'body' => __('No critical invoice alerts in the current billing window.'),
-                'time' => __('Just now'),
-            ]);
-        }
-
-        return $alerts->take(8);
+        return response()->download(
+            Storage::disk('local')->path($document->pdf_path),
+            $invoice->invoice_number.'.pdf',
+        );
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
+    public function emailDocument(TenantInvoice $invoice, DocumentFinalizer $finalizer, InvoiceEmailDelivery $delivery): RedirectResponse
     {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 8; $i++) {
-            $pts[] = 32 + (($h >> ($i * 3)) & 0x3F) % 48;
+        $document = $invoice->generatedDocuments()->latest('id')->first()
+            ?? $finalizer->finalize($invoice);
+
+        $delivery->send($invoice, $document)
+            ? back()->with('status', __('Document emailed.'))
+            : back()->with('error', __('Email delivery failed. Check billing email.'));
+    }
+
+    public function regeneratePdf(TenantInvoice $invoice, DocumentFinalizer $finalizer): RedirectResponse
+    {
+        $finalizer->regenerate($invoice);
+
+        return back()->with('status', __('Document regenerated.'));
+    }
+
+    public function markSent(TenantInvoice $invoice, DocumentFinalizer $finalizer, InvoiceEmailDelivery $delivery): RedirectResponse
+    {
+        if ($invoice->status !== 'draft') {
+            return back()->with('error', __('Only draft invoices can be marked as sent.'));
         }
 
-        return $pts;
+        $old = ['status' => $invoice->status];
+        $invoice->update([
+            'status' => 'sent',
+            'issued_at' => $invoice->issued_at ?? now(),
+            'issue_date' => $invoice->issue_date ?? now()->toDateString(),
+        ]);
+
+        $document = $finalizer->finalize($invoice);
+
+        if (BillingAutomationRule::platform()->auto_send_invoices) {
+            $delivery->send($invoice, $document);
+        }
+
+        $this->activityLogger->log(
+            'invoice.marked_sent',
+            ActivityLogCategory::BILLING,
+            __('Invoice :number marked sent', ['number' => $invoice->invoice_number]),
+            $invoice,
+            $old,
+            ['status' => 'sent'],
+        );
+
+        return back()->with('status', __('Invoice marked as sent.'));
+    }
+
+    public function cancel(TenantInvoice $invoice): RedirectResponse
+    {
+        if ($invoice->status === 'paid') {
+            return back()->with('error', __('Paid invoices cannot be cancelled.'));
+        }
+
+        if ($invoice->isFinalized()) {
+            return back()->with('error', __('Finalized documents cannot be cancelled. Create a credit note instead.'));
+        }
+
+        $old = ['status' => $invoice->status];
+        $invoice->update(['status' => 'cancelled']);
+
+        $this->activityLogger->log(
+            'invoice.cancelled',
+            ActivityLogCategory::BILLING,
+            __('Invoice :number cancelled', ['number' => $invoice->invoice_number]),
+            $invoice,
+            $old,
+            ['status' => 'cancelled'],
+        );
+
+        return back()->with('status', __('Invoice cancelled.'));
+    }
+
+    public function recordPayment(Request $request, TenantInvoice $invoice, InvoicePaymentRecorder $recorder): RedirectResponse
+    {
+        if (in_array($invoice->status, ['cancelled', 'void', 'paid'], true)) {
+            return back()->with('error', __('Cannot record payment on this invoice.'));
+        }
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'payment_date' => ['required', 'date'],
+            'method' => ['required', 'string', 'max:80'],
+            'reference' => ['nullable', 'string', 'max:120'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $recorder->record($invoice, [
+            'amount' => $data['amount'],
+            'payment_date' => $data['payment_date'],
+            'method' => $data['method'],
+            'reference' => $data['reference'] ?? null,
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        $this->activityLogger->log(
+            'payment.recorded',
+            ActivityLogCategory::BILLING,
+            __('Payment of :amount recorded on invoice :number', [
+                'amount' => $data['amount'],
+                'number' => $invoice->invoice_number,
+            ]),
+            $invoice,
+            null,
+            $data,
+        );
+
+        return back()->with('status', __('Payment recorded.'));
+    }
+
+    public function markPaid(TenantInvoice $invoice): RedirectResponse
+    {
+        if ($invoice->balanceDue() > 0.009) {
+            return back()->with('error', __('Invoice still has an outstanding balance.'));
+        }
+
+        $old = ['status' => $invoice->status];
+        $invoice->update([
+            'status' => 'paid',
+            'amount_paid' => $invoice->invoiceTotal() + (float) $invoice->penalty_amount,
+        ]);
+
+        $this->activityLogger->log(
+            'invoice.marked_paid',
+            ActivityLogCategory::BILLING,
+            __('Invoice :number marked paid', ['number' => $invoice->invoice_number]),
+            $invoice,
+            $old,
+            ['status' => 'paid'],
+        );
+
+        return back()->with('status', __('Invoice marked as paid.'));
     }
 }

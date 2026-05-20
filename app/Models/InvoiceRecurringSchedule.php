@@ -14,6 +14,8 @@ class InvoiceRecurringSchedule extends Model
         'amount',
         'tax_rate',
         'frequency',
+        'cycle',
+        'custom_interval_days',
         'next_run_at',
         'auto_email',
         'auto_pdf',

@@ -33,7 +33,11 @@
                         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
                         <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
                     </span>
-                    {{ __('Fleet health') }} {{ $healthOverview['avg_health'] }}%
+                    @if (! ($healthOverview['empty'] ?? false) && $healthOverview['avg_health'] !== null)
+                        {{ __('Fleet health') }} {{ $healthOverview['avg_health'] }}%
+                    @else
+                        {{ __('No tenants yet') }}
+                    @endif
                 </span>
                 <a href="{{ route('tenants.create') }}" class="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>

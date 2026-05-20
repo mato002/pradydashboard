@@ -9,6 +9,7 @@ use App\Domain\Servers\Drivers\HetznerMonitorDriver;
 use App\Domain\Servers\Drivers\HttpReachabilityDriver;
 use App\Domain\Servers\Drivers\SslCertificateDriver;
 use App\Domain\Servers\Drivers\WhmCpanelMonitorDriver;
+use App\Domain\Servers\Support\ServerConnectionConfig;
 use App\Models\Server;
 use App\Models\ServerHealthLog;
 use Illuminate\Support\Collection;
@@ -42,6 +43,14 @@ class ServerTelemetrySyncService
             ];
         }
 
+        if ($server->telemetry_mode === 'manual') {
+            return [
+                'ok' => false,
+                'snapshot' => new ServerTelemetrySnapshot,
+                'message' => __('Manual monitoring — automatic sync skipped.'),
+            ];
+        }
+
         $snapshot = $this->poll($server);
         $this->apply($server, $snapshot);
 
@@ -62,6 +71,14 @@ class ServerTelemetrySyncService
     public function syncFleet(): Collection
     {
         return Server::query()->orderBy('name')->get()->map(function (Server $server) {
+            if ($server->telemetry_mode === 'manual') {
+                return [
+                    'server' => $server,
+                    'ok' => false,
+                    'message' => __(':name: manual monitoring.', ['name' => $server->name]),
+                ];
+            }
+
             $result = $this->sync($server);
 
             return [
@@ -94,8 +111,6 @@ class ServerTelemetrySyncService
     }
 
     /**
-     * Probe connection settings before a server is saved.
-     *
      * @param  array<string, mixed>  $input
      */
     public function probe(array $input): array
@@ -117,10 +132,16 @@ class ServerTelemetrySyncService
             'cpu_percent' => $snapshot->cpuPercent,
             'ram_percent' => $snapshot->ramPercent,
             'disk_percent' => $snapshot->diskPercent,
+            'load_average' => $snapshot->loadAverage,
             'ssl_status' => $snapshot->sslStatus,
+            'ssl_days_remaining' => $snapshot->sslDaysRemaining,
             'backup_status' => $snapshot->backupStatus,
+            'account_count' => $snapshot->accountCount,
             'messages' => $snapshot->messages,
             'sources' => $snapshot->sources,
+            'health_checks' => $snapshot->healthChecks,
+            'telemetry_mode' => $this->resolveTelemetryMode($server, $snapshot),
+            'has_whm_credentials' => ServerConnectionConfig::whmCredentials($server) !== null,
         ];
     }
 
@@ -129,19 +150,35 @@ class ServerTelemetrySyncService
         $updates = [];
 
         if ($snapshot->status) {
-            $updates['status'] = $snapshot->status;
+            $updates['status'] = $this->resolveStatus($server, $snapshot);
         }
 
         if ($snapshot->diskPercent !== null) {
             $updates['disk_usage_percent'] = $snapshot->diskPercent;
         }
 
+        if ($snapshot->ramPercent !== null) {
+            $updates['ram_usage_percent'] = $snapshot->ramPercent;
+        }
+
+        if ($snapshot->loadAverage !== null) {
+            $updates['load_average'] = $snapshot->loadAverage;
+        }
+
         if ($snapshot->sslStatus) {
             $updates['ssl_status'] = $snapshot->sslStatus;
         }
 
+        if ($snapshot->sslDaysRemaining !== null) {
+            $updates['ssl_days_remaining'] = $snapshot->sslDaysRemaining;
+        }
+
         if ($snapshot->backupStatus) {
             $updates['backup_status'] = $snapshot->backupStatus;
+        }
+
+        if ($snapshot->accountCount !== null) {
+            $updates['account_count'] = $snapshot->accountCount;
         }
 
         if ($snapshot->certificateExpiry) {
@@ -150,6 +187,14 @@ class ServerTelemetrySyncService
             $updates['provisioning_meta'] = $meta;
         }
 
+        if ($snapshot->healthChecks !== []) {
+            $meta = $updates['provisioning_meta'] ?? (is_array($server->provisioning_meta) ? $server->provisioning_meta : []);
+            $meta['last_health_checks'] = $snapshot->healthChecks;
+            $meta['last_health_checked_at'] = now()->toIso8601String();
+            $updates['provisioning_meta'] = $meta;
+        }
+
+        $updates['telemetry_mode'] = $this->resolveTelemetryMode($server, $snapshot);
         $updates['last_synced_at'] = now();
         $updates['sync_status'] = $snapshot->hasMetrics() || $snapshot->status ? 'ok' : 'partial';
         $updates['telemetry_source'] = $snapshot->sources === [] ? null : implode(',', $snapshot->sources);
@@ -175,5 +220,41 @@ class ServerTelemetrySyncService
                 'checked_at' => now(),
             ]);
         }
+    }
+
+    private function resolveTelemetryMode(Server $server, ServerTelemetrySnapshot $snapshot): string
+    {
+        if ($snapshot->hasWhmMetrics()) {
+            return 'whm';
+        }
+
+        if ($snapshot->sources !== [] && (in_array('reachability', $snapshot->sources, true) || in_array('ssl', $snapshot->sources, true))) {
+            return 'basic';
+        }
+
+        return $server->telemetry_mode ?: 'manual';
+    }
+
+    private function resolveStatus(Server $server, ServerTelemetrySnapshot $snapshot): string
+    {
+        $base = $snapshot->status ?? $server->status ?? 'unknown';
+
+        if ($base === 'offline') {
+            return 'offline';
+        }
+
+        $disk = $snapshot->diskPercent ?? (float) ($server->disk_usage_percent ?? 0);
+        $ram = $snapshot->ramPercent ?? (float) ($server->ram_usage_percent ?? 0);
+        $sslDays = $snapshot->sslDaysRemaining ?? $server->ssl_days_remaining;
+
+        if ($disk >= 90 || $ram >= 90 || ($sslDays !== null && $sslDays <= 7) || $server->renewalRisk() === 'overdue') {
+            return 'warning';
+        }
+
+        if ($disk >= 80 || $ram >= 80 || ($sslDays !== null && $sslDays <= 14) || $server->renewalRisk() === 'soon') {
+            return 'warning';
+        }
+
+        return $base === 'unknown' ? 'online' : $base;
     }
 }

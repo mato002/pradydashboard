@@ -18,6 +18,7 @@ class TenantPayment extends Model
         'method',
         'gateway',
         'reference',
+        'notes',
     ];
 
     protected function casts(): array

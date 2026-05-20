@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStaffAssignments;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -11,6 +12,8 @@ use Illuminate\Support\Str;
 
 class Tenant extends Model
 {
+    use HasStaffAssignments;
+
     protected $fillable = [
         'external_key',
         'tenant_key',
@@ -42,6 +45,23 @@ class Tenant extends Model
         'deployment_version',
         'penalties_total',
         'notes',
+        'tenant_code',
+        'industry',
+        'registration_number',
+        'county_city',
+        'website',
+        'primary_contact_name',
+        'primary_contact_email',
+        'primary_contact_phone',
+        'billing_contact_name',
+        'billing_email',
+        'billing_phone',
+        'billing_address',
+        'billing_tax_pin',
+        'billing_preferred_currency',
+        'billing_payment_terms',
+        'billing_tax_exempt',
+        'billing_notes',
     ];
 
     protected function casts(): array
@@ -51,6 +71,7 @@ class Tenant extends Model
             'renewal_date' => 'date',
             'subscription_amount' => 'decimal:2',
             'penalties_total' => 'decimal:2',
+            'billing_tax_exempt' => 'boolean',
         ];
     }
 
@@ -62,6 +83,9 @@ class Tenant extends Model
             }
             if (empty($tenant->tenant_key) && filled($tenant->company_name)) {
                 $tenant->tenant_key = static::generateTenantKey($tenant->company_name);
+            }
+            if (empty($tenant->tenant_code) && filled($tenant->tenant_key)) {
+                $tenant->tenant_code = strtoupper($tenant->tenant_key);
             }
             if (empty($tenant->license_secret)) {
                 $tenant->license_secret = Str::random(64);
@@ -112,6 +136,16 @@ class Tenant extends Model
         return $this->hasMany(SupportTicket::class);
     }
 
+    public function communications(): HasMany
+    {
+        return $this->hasMany(TenantCommunication::class);
+    }
+
+    public function notices(): HasMany
+    {
+        return $this->hasMany(TenantNotice::class);
+    }
+
     public function licenseModules(): BelongsToMany
     {
         return $this->belongsToMany(LicenseModule::class, 'tenant_modules', 'tenant_id', 'license_module_id')
@@ -142,6 +176,16 @@ class Tenant extends Model
     public function licenseCheckLogs(): HasMany
     {
         return $this->hasMany(LicenseCheckLog::class)->orderByDesc('checked_at');
+    }
+
+    public function projectSubscriptions(): HasMany
+    {
+        return $this->hasMany(TenantProjectSubscription::class);
+    }
+
+    public function operationalDocuments(): HasMany
+    {
+        return $this->hasMany(OperationalDocument::class);
     }
 
     public static function generateTenantKey(string $companyName): string

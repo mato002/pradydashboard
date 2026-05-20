@@ -32,14 +32,16 @@ class WhmCpanelMonitorDriver implements ServerMonitorDriver
 
         $snapshot = new ServerTelemetrySnapshot(status: 'online', sources: [$this->key()]);
         $messages = [];
+        $loadOne = null;
 
         $load = $this->whmGet($creds, 'systemloadavg');
         if ($load && isset($load['data'])) {
-            $one = (float) ($load['data']['one'] ?? $load['data']['load1'] ?? 0);
+            $loadOne = (float) ($load['data']['one'] ?? $load['data']['load1'] ?? 0);
             $cores = max(1, (int) ($server->cpu_cores ?: 2));
             $snapshot = $snapshot->merge(new ServerTelemetrySnapshot(
-                cpuPercent: min(100, round(($one / $cores) * 100, 1)),
-                messages: [__('WHM load average :load', ['load' => $one])],
+                loadAverage: $loadOne,
+                cpuPercent: min(100, round(($loadOne / $cores) * 100, 1)),
+                messages: [__('WHM load average :load', ['load' => $loadOne])],
             ));
         }
 
@@ -72,29 +74,31 @@ class WhmCpanelMonitorDriver implements ServerMonitorDriver
             ));
         }
 
+        $list = $this->whmGet($creds, 'listaccts');
+        if ($list && isset($list['data']['acct'])) {
+            $accounts = (array) $list['data']['acct'];
+            $snapshot = $snapshot->merge(new ServerTelemetrySnapshot(
+                accountCount: count($accounts),
+                messages: [__(':count cPanel accounts.', ['count' => count($accounts)])],
+            ));
+        }
+
         $backup = $this->whmGet($creds, 'backup_configured');
         if ($backup !== null) {
             $configured = (bool) ($backup['data']['configured'] ?? $backup['data']['backup'] ?? false);
             $snapshot = $snapshot->merge(new ServerTelemetrySnapshot(
                 backupStatus: $configured ? 'configured' : 'not_configured',
             ));
-        } else {
-            $list = $this->whmGet($creds, 'listaccts');
-            if ($list && isset($list['data']['acct'])) {
-                $snapshot = $snapshot->merge(new ServerTelemetrySnapshot(
-                    backupStatus: 'accounts:'.count((array) $list['data']['acct']),
-                ));
-            }
         }
 
-        $uptime = $this->whmGet($creds, 'gethostname');
-        if ($uptime) {
+        if ($this->whmGet($creds, 'gethostname')) {
             $messages[] = __('WHM API connected.');
         }
 
         return $snapshot->merge(new ServerTelemetrySnapshot(
             messages: array_merge($messages, $snapshot->messages),
             sources: [$this->key()],
+            healthChecks: ['whm_api' => true],
         ));
     }
 

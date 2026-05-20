@@ -127,6 +127,7 @@ class UsersRolesController extends Controller
             'email' => $data['email'],
             'password' => $data['password'],
             'email_verified_at' => $data['status'] === 'active' ? now() : null,
+            'password_changed_at' => now(),
         ]);
 
         return redirect()
@@ -531,7 +532,7 @@ class UsersRolesController extends Controller
             'sso_enabled' => true,
             'sso_provider' => 'Microsoft Entra ID',
             'password_min_length' => 12,
-            'password_expiry_days' => 90,
+            'password_expiry_days' => config('auth.password_expiry_days', 28),
             'session_timeout_min' => 60,
             'ip_allowlist_enabled' => true,
             'geo_restrict' => false,

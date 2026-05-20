@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Domain\Tenancy\Services\TenantActivityLogger;
+use App\Http\Controllers\Concerns\AuthorizesRbacScope;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use Illuminate\Http\RedirectResponse;
@@ -10,13 +11,15 @@ use Illuminate\Http\Request;
 
 class TenantModuleController extends Controller
 {
+    use AuthorizesRbacScope;
+
     public function __construct(
         private readonly TenantActivityLogger $activityLogger
     ) {}
 
     public function update(Request $request, Tenant $tenant): RedirectResponse
     {
-        $this->authorize('update', $tenant);
+        $this->authorizeTenantRbac($tenant, 'update');
 
         $data = $request->validate([
             'modules' => ['required', 'array'],

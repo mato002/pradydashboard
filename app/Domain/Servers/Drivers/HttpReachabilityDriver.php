@@ -9,14 +9,6 @@ use App\Models\Server;
 
 class HttpReachabilityDriver implements ServerMonitorDriver
 {
-    /** @var list<int> */
-    private array $ports;
-
-    public function __construct()
-    {
-        $this->ports = config('infrastructure.reachability.ports', [443, 80, 22]);
-    }
-
     public function key(): string
     {
         return 'reachability';
@@ -37,26 +29,58 @@ class HttpReachabilityDriver implements ServerMonitorDriver
             );
         }
 
-        $openPort = null;
-        foreach ($this->ports as $port) {
-            if ($this->canConnect($host, $port)) {
-                $openPort = $port;
-                break;
-            }
+        $checks = [];
+        $messages = [];
+
+        $checks['port_443'] = $this->canConnect($host, 443);
+        $checks['port_80'] = $this->canConnect($host, 80);
+        $checks['port_22'] = $this->canConnect($host, 22);
+
+        if ($checks['port_443']) {
+            $messages[] = __('HTTPS (443) reachable.');
+        }
+        if ($checks['port_80']) {
+            $messages[] = __('HTTP (80) reachable.');
         }
 
-        if ($openPort !== null) {
-            return new ServerTelemetrySnapshot(
-                status: 'online',
-                messages: [__('Reachable on port :port.', ['port' => $openPort])],
-                sources: [$this->key()],
-            );
+        $whmPort = (int) ($server->meta('whm_port') ?? config('infrastructure.whm.port', 2087));
+        if (filled($server->whm_cpanel_reference) || filled($server->meta('api_endpoint'))) {
+            $checks['port_2087'] = $this->canConnect($host, $whmPort);
+            $messages[] = $checks['port_2087']
+                ? __('WHM port :port reachable.', ['port' => $whmPort])
+                : __('WHM port :port closed or filtered.', ['port' => $whmPort]);
         }
+
+        $hostname = ServerConnectionConfig::hostname($server);
+        if ($hostname && filled($server->ip_address)) {
+            $resolved = gethostbyname($hostname);
+            $checks['dns_resolves'] = $resolved !== $hostname;
+            $checks['dns_matches_ip'] = $resolved === $server->ip_address;
+            if ($checks['dns_matches_ip']) {
+                $messages[] = __('DNS resolves to configured IP.');
+            } elseif ($checks['dns_resolves']) {
+                $messages[] = __('DNS resolves to :ip (configured: :expected).', [
+                    'ip' => $resolved,
+                    'expected' => $server->ip_address,
+                ]);
+            } else {
+                $messages[] = __('DNS does not resolve for hostname.');
+            }
+        } elseif ($hostname) {
+            $resolved = gethostbyname($hostname);
+            $checks['dns_resolves'] = $resolved !== $hostname;
+            $messages[] = $checks['dns_resolves']
+                ? __('DNS resolves to :ip.', ['ip' => $resolved])
+                : __('DNS does not resolve.');
+        }
+
+        $online = $checks['port_443'] || $checks['port_80'] || ($checks['port_22'] ?? false);
 
         return new ServerTelemetrySnapshot(
-            status: 'offline',
-            messages: [__('No response on ports :ports.', ['ports' => implode(', ', $this->ports)])],
+            status: $online ? 'online' : 'offline',
+            messages: $messages !== [] ? $messages : [__('No response on ports 443, 80, or 22.')],
             sources: [$this->key()],
+            healthChecks: $checks,
         );
     }
 

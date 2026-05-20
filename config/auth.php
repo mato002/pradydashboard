@@ -114,4 +114,16 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Password expiry (days)
+    |--------------------------------------------------------------------------
+    |
+    | Users must set a new password after this many days. When expired, they
+    | are redirected to the forced password change screen before continuing.
+    |
+    */
+
+    'password_expiry_days' => (int) env('AUTH_PASSWORD_EXPIRY_DAYS', 28),
+
 ];

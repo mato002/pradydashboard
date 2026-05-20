@@ -1,0 +1,9 @@
+# Tenant system API — Prady Dashboard outbound access
+PRADY_DASHBOARD_API_TOKEN=generate-a-long-random-secret-here
+PRADY_TENANT_CODE=MATTARE
+PRADY_PRODUCT_NAME="Prady MFI"
+
+# Optional metadata surfaced in GET /api/system/info
+PRADY_BUILD=100
+PRADY_COMMIT=abc123
+PRADY_LAST_DEPLOYED_AT=2026-05-23T10:00:00Z

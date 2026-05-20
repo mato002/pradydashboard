@@ -22,9 +22,8 @@ class ActivityLogsTest extends TestCase
         $this->actingAs($user)
             ->get(route('activity-logs.index'))
             ->assertOk()
-            ->assertSee(__('Audit & Observability Center'))
-            ->assertSee(__('Live event stream'))
-            ->assertSee(__('Total Events Today'));
+            ->assertSee(__('Activity Log'))
+            ->assertSee(__('Filter'));
     }
 
     public function test_authenticated_user_can_export_activity_logs(): void

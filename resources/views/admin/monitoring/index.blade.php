@@ -20,7 +20,7 @@
     $areaChart = function (array $points, string $stroke, string $fill, int $w = 280, int $h = 72): string {
         $pts = collect($points)->values()->map(fn ($v) => is_array($v) ? (float) ($v['pct'] ?? $v['rate'] ?? 0) : (float) $v)->all();
         if (count($pts) < 2) {
-            $pts = [40, 55, 48, 62, 58, 70, 66, 74];
+            return '';
         }
         $min = min($pts);
         $max = max($pts);
@@ -85,21 +85,27 @@
             </div>
         </div>
 
+        @unless ($hasLiveTelemetry ?? false)
+            <div class="rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                {{ __('No live metrics available yet. Run server telemetry sync or configure WHM API tokens for live data.') }}
+            </div>
+        @endunless
+
         {{-- KPI Cards --}}
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-            <x-ui.kpi-card :title="__('System Uptime')" :value="$kpis['system_uptime'].'%'" :trend="'SLA 99.9%'" :sublabel="__('Fleet availability')" :points="$spark('mon-uptime')" tone="emerald">
+            <x-ui.kpi-card :title="__('System Uptime')" :value="$kpis['system_uptime'] !== null ? $kpis['system_uptime'].'%' : __('Pending sync')" :animate="false" :sublabel="__('Synced fleet reachability')" :points="$spark('mon-uptime')" tone="emerald">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg></x-slot>
             </x-ui.kpi-card>
             <x-ui.kpi-card :title="__('Active Alerts')" :value="$kpis['active_alerts']" :trend="$kpis['active_alerts'] > 0 ? '!' : '✓'" :sublabel="__('Open incidents')" :points="$spark('mon-alerts')" tone="rose">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9-.75a9 9 0 1118 0 9 9 0 01-18 0zm-9 3.75h.008v.008H12v-.008z" /></svg></x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Error Rate')" :value="$kpis['error_rate'].'%'" :animate="false" :trend="'−0.04%'" :sublabel="__('5xx + timeouts')" :points="collect($errorRateSeries)->pluck('rate')->map(fn ($r) => $r * 100)->all()" tone="amber">
+            <x-ui.kpi-card :title="__('Error Rate')" :value="$kpis['error_rate'] !== null ? $kpis['error_rate'].'%' : __('Unknown')" :animate="false" :sublabel="__('5xx + timeouts — not instrumented')" :points="[]" tone="amber">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.75c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg></x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Avg Response Time')" :value="$kpis['avg_response_ms'].'ms'" :animate="false" :trend="'P50'" :sublabel="__('Application latency')" :points="$spark('mon-latency')" tone="sky">
+            <x-ui.kpi-card :title="__('Avg Response Time')" :value="$kpis['avg_response_ms'] !== null ? $kpis['avg_response_ms'].'ms' : __('Unknown')" :animate="false" :sublabel="__('From synced server load')" :points="$spark('mon-latency')" tone="sky">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('API Availability')" :value="$kpis['api_availability'].'%'" :animate="false" :trend="'24h'" :sublabel="__('Public endpoints')" :points="$spark('mon-api')" tone="indigo">
+            <x-ui.kpi-card :title="__('API Availability')" :value="$kpis['api_availability'] !== null ? $kpis['api_availability'].'%' : __('Not configured')" :animate="false" :sublabel="__('Public endpoints — not instrumented')" :points="$spark('mon-api')" tone="indigo">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg></x-slot>
             </x-ui.kpi-card>
             <x-ui.kpi-card :title="__('Critical Incidents')" :value="$kpis['critical_incidents']" :trend="$kpis['critical_incidents'] > 0 ? 'P1' : '—'" :sublabel="__('Requires response')" :points="$spark('mon-incidents')" tone="violet">
@@ -329,6 +335,7 @@
                     </div>
                     <div class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card dark:border-slate-800/80 dark:bg-slate-900/60">
                         <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{{ __('Cache analytics') }}</p>
+                        @if ($cacheMetrics)
                         <div class="mt-3 grid grid-cols-2 gap-2">
                             <div class="rounded-xl bg-gradient-to-br from-violet-500/10 to-indigo-500/5 p-3 ring-1 ring-violet-500/15">
                                 <p class="text-[10px] text-slate-500">{{ __('Hit rate') }}</p>
@@ -347,37 +354,44 @@
                                 <p class="text-lg font-bold tabular-nums">{{ $cacheMetrics['evictions'] }}</p>
                             </div>
                         </div>
+                        @else
+                            <p class="mt-3 text-xs text-slate-500">{{ __('Cache metrics are not connected. Enable Redis or Memcached instrumentation to populate this panel.') }}</p>
+                        @endif
                     </div>
                 </div>
 
                 <div class="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card dark:border-slate-800/80 dark:bg-slate-900/60">
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{{ __('Queue monitoring') }}</p>
-                    <div class="mt-3 grid grid-cols-3 gap-2 text-center">
-                        <div class="rounded-lg bg-amber-500/10 p-2 ring-1 ring-amber-500/20">
-                            <p class="text-lg font-bold text-amber-700 dark:text-amber-300">{{ $queueMetrics['pending'] }}</p>
-                            <p class="text-[9px] uppercase text-slate-500">{{ __('Pending') }}</p>
+                    @if ($queueMetrics)
+                        <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+                            <div class="rounded-lg bg-amber-500/10 p-2 ring-1 ring-amber-500/20">
+                                <p class="text-lg font-bold text-amber-700 dark:text-amber-300">{{ $queueMetrics['pending'] }}</p>
+                                <p class="text-[9px] uppercase text-slate-500">{{ __('Pending') }}</p>
+                            </div>
+                            <div class="rounded-lg bg-sky-500/10 p-2 ring-1 ring-sky-500/20">
+                                <p class="text-lg font-bold text-sky-700 dark:text-sky-300">{{ $queueMetrics['processing'] }}</p>
+                                <p class="text-[9px] uppercase text-slate-500">{{ __('Active') }}</p>
+                            </div>
+                            <div class="rounded-lg bg-rose-500/10 p-2 ring-1 ring-rose-500/20">
+                                <p class="text-lg font-bold text-rose-700 dark:text-rose-300">{{ $queueMetrics['failed'] }}</p>
+                                <p class="text-[9px] uppercase text-slate-500">{{ __('Failed') }}</p>
+                            </div>
                         </div>
-                        <div class="rounded-lg bg-sky-500/10 p-2 ring-1 ring-sky-500/20">
-                            <p class="text-lg font-bold text-sky-700 dark:text-sky-300">{{ $queueMetrics['processing'] }}</p>
-                            <p class="text-[9px] uppercase text-slate-500">{{ __('Active') }}</p>
-                        </div>
-                        <div class="rounded-lg bg-rose-500/10 p-2 ring-1 ring-rose-500/20">
-                            <p class="text-lg font-bold text-rose-700 dark:text-rose-300">{{ $queueMetrics['failed'] }}</p>
-                            <p class="text-[9px] uppercase text-slate-500">{{ __('Failed') }}</p>
-                        </div>
-                    </div>
-                    <p class="mt-3 text-center text-xs text-slate-500">{{ __('Throughput') }}: <span class="font-bold tabular-nums text-slate-800 dark:text-white">{{ $queueMetrics['throughput'] }}/min</span></p>
-                    <ul class="mt-3 space-y-1.5">
-                        @foreach ($queueMetrics['workers'] as $w)
-                            <li class="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs ring-1 ring-slate-100 dark:ring-slate-800">
-                                <span class="font-medium">{{ $w['name'] }}</span>
-                                <span class="flex items-center gap-2">
-                                    <span class="tabular-nums text-slate-500">{{ $w['jobs'] }} jobs</span>
-                                    <span class="h-1.5 w-1.5 rounded-full {{ $statusDot($w['status'] === 'healthy' ? 'ok' : ($w['status'] === 'busy' ? 'warning' : 'degraded')) }}"></span>
-                                </span>
-                            </li>
-                        @endforeach
-                    </ul>
+                        <p class="mt-3 text-center text-xs text-slate-500">{{ __('Throughput') }}: <span class="font-bold tabular-nums text-slate-800 dark:text-white">{{ $queueMetrics['throughput'] }}/min</span></p>
+                        <ul class="mt-3 space-y-1.5">
+                            @foreach ($queueMetrics['workers'] as $w)
+                                <li class="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs ring-1 ring-slate-100 dark:ring-slate-800">
+                                    <span class="font-medium">{{ $w['name'] }}</span>
+                                    <span class="flex items-center gap-2">
+                                        <span class="tabular-nums text-slate-500">{{ $w['jobs'] }} jobs</span>
+                                        <span class="h-1.5 w-1.5 rounded-full {{ $statusDot($w['status'] === 'healthy' ? 'ok' : ($w['status'] === 'busy' ? 'warning' : 'degraded')) }}"></span>
+                                    </span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <p class="mt-3 text-xs text-slate-500">{{ __('Queue metrics are not connected. Configure Horizon or your queue driver to populate this panel.') }}</p>
+                    @endif
                 </div>
             </div>
         </div>
@@ -419,7 +433,7 @@
                             <li class="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 dark:border-slate-800">
                                 <div>
                                     <p class="text-sm font-medium text-slate-900 dark:text-white">{{ $t['name'] }}</p>
-                                    <p class="text-[10px] text-slate-500">{{ $t['uptime'] }}% uptime</p>
+                                    <p class="text-[10px] text-slate-500">{{ $t['uptime'] !== null ? $t['uptime'].'% '.__('uptime') : __('Uptime pending sync') }}</p>
                                 </div>
                                 <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase {{ $t['status'] === 'healthy' ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/12 text-amber-800' }}">
                                     @if ($t['alerts'] > 0)

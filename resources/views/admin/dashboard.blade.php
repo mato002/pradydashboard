@@ -90,6 +90,10 @@
         </x-ui.kpi-card>
     </div>
 
+    @include('admin.dashboard.partials.support-ops')
+    @include('admin.dashboard.partials.attention-required')
+    @include('admin.dashboard.partials.recent-activity')
+
     <div class="mt-6 grid gap-5 lg:grid-cols-12">
         <div class="lg:col-span-8">
             <x-ui.table-panel :title="__('Servers snapshot')" :action-href="route('servers.index')" :action-label="__('Manage')">

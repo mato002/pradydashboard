@@ -38,6 +38,7 @@ class ServerTelemetryTest extends TestCase
             'name' => 'probe-test',
             'ip_address' => '1.1.1.1',
             'status' => 'unknown',
+            'telemetry_mode' => 'basic',
             'currency' => 'KES',
         ]);
 
@@ -57,6 +58,7 @@ class ServerTelemetryTest extends TestCase
             'name' => 'health-log-test',
             'ip_address' => '1.1.1.1',
             'status' => 'unknown',
+            'telemetry_mode' => 'basic',
             'currency' => 'KES',
         ]);
 

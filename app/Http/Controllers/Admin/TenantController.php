@@ -2,44 +2,84 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Activity\ActivityLogQuery;
+use App\Domain\Operations\OperationalRiskScanner;
+use App\Domain\Billing\BillingSummary;
+use App\Domain\Hr\HrOverview;
+use App\Domain\Support\SupportOperationsSummary;
+use App\Domain\Billing\DraftInvoiceGenerator;
 use App\Domain\Tenancy\Repositories\TenantRepositoryInterface;
+use App\Domain\Servers\Support\ServerConnectionConfig;
+use App\Domain\Tenancy\OperationalDocumentInsights;
+use App\Domain\Tenancy\ProjectVersionRolloutSummary;
+use App\Domain\Tenancy\TenantCommandCenter;
+use App\Domain\Tenancy\TenantProjectModuleMatrix;
+use App\Domain\Tenancy\TenantProjectProvisioner;
+use App\Domain\Tenancy\TenantSystemApiInsights;
+use App\Support\IntegrationServiceOptions;
+use App\Support\OperationalDocumentOptions;
+use App\Support\ProjectFormOptions;
+use App\Support\SupportOpsOptions;
+use App\Support\TenantOpsFormOptions;
+use App\Models\StaffProfile;
+use App\Models\SupportTicket;
 use App\Http\Controllers\Controller;
 use App\Models\LicenseModule;
 use App\Models\Project;
 use App\Models\SaasPlan;
 use App\Models\Server;
 use App\Models\Tenant;
+use App\Models\TenantProjectSubscription;
 use App\Models\TenantSubscription;
+use App\Support\DemoMode;
 use App\Support\TenantOperationsPresenter;
 use Database\Seeders\SubscriptionDemoSeeder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class TenantController extends Controller
 {
     private const TABS = [
         'overview',
-        'billing',
+        'projects',
         'infrastructure',
+        'billing',
+        'licensing',
         'modules',
+        'integrations',
+        'versions',
+        'documents',
+        'support',
+        'communications',
+        'notices',
         'users',
         'activity',
-        'support',
         'deployments',
         'monitoring',
         'settings',
     ];
 
     public function __construct(
-        private readonly TenantRepositoryInterface $tenants
+        private readonly TenantRepositoryInterface $tenants,
+        private readonly TenantProjectProvisioner $projectProvisioner,
+        private readonly TenantCommandCenter $commandCenter,
+        private readonly TenantProjectModuleMatrix $moduleMatrix,
+        private readonly ProjectVersionRolloutSummary $rolloutSummary,
+        private readonly OperationalDocumentInsights $documentInsights,
+        private readonly HrOverview $hrOverview,
+        private readonly SupportOperationsSummary $supportOps,
+        private readonly ActivityLogQuery $activityQuery,
+        private readonly TenantSystemApiInsights $tenantSystemApiInsights,
     ) {}
 
     public function index(TenantOperationsPresenter $operations): View
     {
         $this->authorize('viewAny', Tenant::class);
 
-        $tenants = Tenant::query()
+        $tenants = app(\App\Domain\Rbac\RbacScopeFilter::class)
+            ->applyTenantScope(Tenant::query())
             ->with(['project', 'server', 'usageMetric'])
             ->withCount(['supportTickets', 'invoices'])
             ->orderBy('company_name')
@@ -52,7 +92,7 @@ class TenantController extends Controller
     {
         $this->authorize('create', Tenant::class);
 
-        if (SaasPlan::query()->doesntExist()) {
+        if (DemoMode::enabled() && SaasPlan::query()->doesntExist()) {
             (new SubscriptionDemoSeeder)->run();
         }
 
@@ -74,6 +114,7 @@ class TenantController extends Controller
 
         $tenant = Tenant::query()->create($data);
         $this->syncSubscription($tenant, $saasPlanId, $data);
+        $this->projectProvisioner->syncPrimarySubscription($tenant);
 
         return redirect()->route('tenants.show', $tenant)->with('status', __('Tenant provisioned successfully.'));
     }
@@ -88,26 +129,162 @@ class TenantController extends Controller
 
         $moduleCatalog = LicenseModule::query()->orderBy('sort_order')->get();
 
-        $billingOutstanding = (float) $tenant->invoices
-            ->whereNotIn('status', ['void', 'paid'])
-            ->sum(fn ($invoice): float => max(0,
-                (float) $invoice->amount_due - (float) $invoice->amount_paid + (float) $invoice->penalty_amount
-            ));
-
+        $billingSummary = app(BillingSummary::class)->forTenant($tenant);
         $lastPayment = $tenant->payments->sortByDesc('paid_at')->first();
 
-        $billingKpi = [
-            'outstanding' => $billingOutstanding,
-            'currency' => $tenant->tenant_currency ?? 'KES',
+        $billingKpi = array_merge($billingSummary, [
             'last_payment' => $lastPayment,
             'subscription_amount' => $tenant->subscription_amount,
-        ];
+        ]);
+
+        $draftGenerator = app(DraftInvoiceGenerator::class);
+        $billableSubscriptions = $tenant->projectSubscriptions->filter(
+            fn ($s) => $draftGenerator->isBillableSubscription($s)
+        );
+
+        $opsSummary = $this->commandCenter->summary($tenant);
+        $projects = Project::query()->orderBy('name')->get();
+
+        $subscriptionTabs = ['modules', 'infrastructure', 'versions', 'integrations', 'documents'];
+        $selectedSubscription = null;
+        $moduleRows = collect();
+        $servers = collect();
+        $hasRegisteredServers = Server::query()->exists();
+        $projectVersionContext = ['current' => null, 'latest' => null];
+        $inferredVersionStatus = 'unknown';
+        $filteredDocuments = $tenant->operationalDocuments;
+        $editingIntegration = null;
+
+        if (in_array($tab, $subscriptionTabs, true) && $tenant->projectSubscriptions->isNotEmpty()) {
+            $selectedSubscription = $this->resolveSelectedSubscription($request, $tenant);
+
+            if ($tab === 'modules') {
+                $moduleRows = $this->moduleMatrix->rows($selectedSubscription);
+            }
+
+            if ($tab === 'infrastructure') {
+                $servers = Server::query()->orderBy('name')->get();
+            }
+
+            if ($tab === 'versions') {
+                $selectedSubscription->loadMissing(['project.versions', 'versionTracking']);
+                $project = $selectedSubscription->project;
+                $projectVersionContext = [
+                    'current' => $this->rolloutSummary->projectCurrentVersion($project),
+                    'latest' => $this->rolloutSummary->projectLatestVersion($project),
+                ];
+                $inferredVersionStatus = $this->rolloutSummary->resolveSubscriptionStatus($selectedSubscription);
+            }
+
+            if ($tab === 'integrations' && $request->filled('integration')) {
+                $editingIntegration = $selectedSubscription->serviceIntegrations
+                    ->firstWhere('id', (int) $request->query('integration'));
+            }
+        }
+
+        if ($tab === 'documents' && $request->filled('subscription')) {
+            $filteredDocuments = $tenant->operationalDocuments
+                ->where('tenant_project_subscription_id', (int) $request->query('subscription'));
+        }
+
+        $missingContractWarnings = $this->documentInsights->missingRequiredContracts($tenant);
+        $expiringDocuments = $this->documentInsights->expiring($tenant->operationalDocuments);
+
+        $moduleBillingOptions = ProjectFormOptions::moduleBillingStatus();
+        $infraFormOptions = TenantOpsFormOptions::sslStatus();
+        $backupPolicyOptions = TenantOpsFormOptions::backupPolicy();
+        $backupStatusOptions = TenantOpsFormOptions::backupStatus();
+        $updateStatusOptions = TenantOpsFormOptions::updateStatus();
+        $documentTypeOptions = OperationalDocumentOptions::documentTypes();
+        $documentStatusOptions = OperationalDocumentOptions::statuses();
+        $providerServiceTypes = IntegrationServiceOptions::providerServiceTypes();
+        $integrationStatusOptions = IntegrationServiceOptions::statuses();
+        $integrationCategories = IntegrationServiceOptions::integrationCategories();
+        $tenantSystemPurposes = IntegrationServiceOptions::tenantSystemPurposes();
+        $authenticationTypes = IntegrationServiceOptions::authenticationTypes();
+        $tenantSystemApiInsights = $selectedSubscription
+            ? $this->tenantSystemApiInsights->forSubscription($selectedSubscription)
+            : null;
+        $secretPlaceholder = ServerConnectionConfig::MASKED_TOKEN_PLACEHOLDER;
+        $staffAssignments = $this->hrOverview->assignmentsFor($tenant);
+        $supportOps = $this->supportOps->forTenant($tenant);
+        $selectedTicket = null;
+        if ($request->filled('ticket')) {
+            $selectedTicket = SupportTicket::query()
+                ->with(['comments.staffProfile', 'comments.user', 'assignedStaff', 'project'])
+                ->where('tenant_id', $tenant->id)
+                ->find($request->query('ticket'));
+        }
+        $staffList = StaffProfile::query()->where('status', 'active')->orderBy('full_name')->pluck('full_name', 'id');
+        $supportCategories = SupportOpsOptions::categories();
+        $supportPriorities = SupportOpsOptions::priorities();
+        $supportStatuses = SupportOpsOptions::ticketStatuses();
+        $supportSources = SupportOpsOptions::sources();
+        $commentTypes = SupportOpsOptions::commentTypes();
+        $visibilities = SupportOpsOptions::visibilities();
+        $commChannels = SupportOpsOptions::channels();
+        $commDirections = SupportOpsOptions::directions();
+        $commStatuses = SupportOpsOptions::communicationStatuses();
+        $noticeTypes = SupportOpsOptions::noticeTypes();
+        $noticeSeverities = SupportOpsOptions::severities();
+        $noticeStatuses = SupportOpsOptions::noticeStatuses();
+        $systemActivityLogs = $tab === 'activity'
+            ? $this->activityQuery->forContext(tenantId: $tenant->id, limit: 50)
+            : collect();
+
+        $operationalRisks = app(OperationalRiskScanner::class)->forTenant($tenant->id);
 
         return view('admin.tenants.show', compact(
             'tenant',
             'tab',
             'moduleCatalog',
-            'billingKpi'
+            'billingKpi',
+            'billableSubscriptions',
+            'draftGenerator',
+            'opsSummary',
+            'projects',
+            'selectedSubscription',
+            'moduleRows',
+            'moduleBillingOptions',
+            'servers',
+            'hasRegisteredServers',
+            'projectVersionContext',
+            'infraFormOptions',
+            'backupPolicyOptions',
+            'backupStatusOptions',
+            'updateStatusOptions',
+            'inferredVersionStatus',
+            'filteredDocuments',
+            'missingContractWarnings',
+            'expiringDocuments',
+            'documentTypeOptions',
+            'documentStatusOptions',
+            'providerServiceTypes',
+            'integrationStatusOptions',
+            'integrationCategories',
+            'tenantSystemPurposes',
+            'authenticationTypes',
+            'tenantSystemApiInsights',
+            'secretPlaceholder',
+            'editingIntegration',
+            'staffAssignments',
+            'supportOps',
+            'selectedTicket',
+            'staffList',
+            'supportCategories',
+            'supportPriorities',
+            'supportStatuses',
+            'supportSources',
+            'commentTypes',
+            'visibilities',
+            'commChannels',
+            'commDirections',
+            'commStatuses',
+            'noticeTypes',
+            'noticeSeverities',
+            'noticeStatuses',
+            'systemActivityLogs',
+            'operationalRisks',
         ));
     }
 
@@ -118,7 +295,7 @@ class TenantController extends Controller
         $projects = Project::query()->orderBy('name')->get();
         $servers = Server::query()->orderBy('name')->get();
 
-        if (SaasPlan::query()->doesntExist()) {
+        if (DemoMode::enabled() && SaasPlan::query()->doesntExist()) {
             (new SubscriptionDemoSeeder)->run();
         }
 
@@ -136,6 +313,7 @@ class TenantController extends Controller
 
         $data = $this->validated($request);
         $tenant->update($data);
+        $this->projectProvisioner->syncPrimarySubscription($tenant->fresh());
 
         $returnTab = $this->normalizeTab((string) $request->input('return_tab', 'overview'));
 
@@ -157,6 +335,14 @@ class TenantController extends Controller
         return in_array($tab, self::TABS, true) ? $tab : 'overview';
     }
 
+    private function resolveSelectedSubscription(Request $request, Tenant $tenant): TenantProjectSubscription
+    {
+        $subscriptionId = (int) $request->query('subscription', $tenant->projectSubscriptions->first()->id);
+
+        return $tenant->projectSubscriptions->firstWhere('id', $subscriptionId)
+            ?? $tenant->projectSubscriptions->first();
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -165,6 +351,14 @@ class TenantController extends Controller
         return $request->validate([
             'project_id' => ['required', 'exists:projects,id'],
             'server_id' => ['nullable', 'exists:servers,id'],
+            'tenant_code' => ['nullable', 'string', 'max:80', Rule::unique('tenants', 'tenant_code')->ignore($request->route('tenant'))],
+            'industry' => ['nullable', 'string', 'max:255'],
+            'registration_number' => ['nullable', 'string', 'max:80'],
+            'county_city' => ['nullable', 'string', 'max:255'],
+            'website' => ['nullable', 'url', 'max:500'],
+            'primary_contact_name' => ['nullable', 'string', 'max:255'],
+            'primary_contact_email' => ['nullable', 'email', 'max:255'],
+            'primary_contact_phone' => ['nullable', 'string', 'max:50'],
             'company_name' => ['required', 'string', 'max:255'],
             'business_type' => ['nullable', 'string', 'max:255'],
             'kra_pin' => ['nullable', 'string', 'max:64'],
@@ -181,7 +375,7 @@ class TenantController extends Controller
             'start_date' => ['nullable', 'date'],
             'renewal_date' => ['nullable', 'date'],
             'grace_days' => ['nullable', 'integer', 'min:0', 'max:365'],
-            'status' => ['required', 'in:active,trial,warning,restricted,suspended,overdue,cancelled,terminated'],
+            'status' => ['required', 'in:prospect,onboarding,active,trial,warning,restricted,suspended,overdue,cancelled,terminated'],
             'cpanel_account_ref' => ['nullable', 'string', 'max:255'],
             'database_ref' => ['nullable', 'string', 'max:255'],
             'login_url' => ['nullable', 'string', 'max:500'],

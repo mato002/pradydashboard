@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Ssl\DomainSslInspector;
 use App\Http\Controllers\Controller;
+use App\Support\DemoMode;
 use App\Models\DnsRecord;
 use App\Models\ManagedDomain;
 use App\Models\Project;
@@ -19,7 +20,7 @@ class SslDomainController extends Controller
 {
     public function index(Request $request): View
     {
-        if (ManagedDomain::query()->doesntExist()) {
+        if (DemoMode::enabled() && ManagedDomain::query()->doesntExist()) {
             (new SslDomainDemoSeeder)->run();
         }
 
@@ -64,7 +65,7 @@ class SslDomainController extends Controller
                 ->count(),
         ];
 
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
+        $spark = fn (string $key) => \App\Support\OperationalMetrics::emptySparkline();
         $alerts = $this->buildAlerts();
         $expiryTimeline = $this->buildExpiryTimeline();
 
@@ -261,19 +262,5 @@ class SslDomainController extends Controller
         }
 
         return $buckets;
-    }
-
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 8; $i++) {
-            $pts[] = 32 + (($h >> ($i * 3)) & 0x3F) % 48;
-        }
-
-        return $pts;
     }
 }

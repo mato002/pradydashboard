@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Backup;
+use App\Support\DemoMode;
+use App\Support\OperationalMetrics;
 use App\Models\ManagedDomain;
 use App\Models\Project;
 use App\Models\Server;
@@ -17,7 +19,7 @@ class MonitoringController extends Controller
 {
     public function index(): View
     {
-        if (ServerHealthLog::query()->doesntExist()) {
+        if (DemoMode::enabled() && ServerHealthLog::query()->doesntExist()) {
             (new ServerHealthDemoSeeder)->run();
         }
 
@@ -25,9 +27,12 @@ class MonitoringController extends Controller
         $tenants = Tenant::query()->count();
         $projects = Project::query()->count();
 
-        $onlineCount = $servers->where('status', 'online')->count();
-        $totalServers = max(1, $servers->count());
-        $systemUptime = round(($onlineCount / $totalServers) * 100, 2);
+        $syncedServers = $servers->filter(fn (Server $s) => $s->last_synced_at !== null);
+        $onlineCount = $syncedServers->where('status', 'online')->count();
+        $totalServers = $servers->count();
+        $systemUptime = $syncedServers->isEmpty()
+            ? null
+            : round(($onlineCount / max(1, $syncedServers->count())) * 100, 2);
 
         $alerts = $this->buildAlertCenter($servers);
         $activeAlerts = $alerts->whereIn('severity', ['critical', 'warning'])->count();
@@ -42,10 +47,12 @@ class MonitoringController extends Controller
             'critical_incidents' => max($criticalIncidents, $alerts->where('severity', 'critical')->count()),
         ];
 
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
+        $spark = fn (string $key) => OperationalMetrics::emptySparkline();
+        $hasLiveTelemetry = $syncedServers->isNotEmpty();
 
         return view('admin.monitoring.index', [
             'kpis' => $kpis,
+            'hasLiveTelemetry' => $hasLiveTelemetry,
             'spark' => $spark,
             'alerts' => $alerts,
             'uptimeSeries' => $this->buildUptimeSeries($servers),
@@ -71,29 +78,35 @@ class MonitoringController extends Controller
         ]);
     }
 
-    private function errorRate(): float
+    private function errorRate(): ?float
     {
-        return round(0.12 + (crc32('err-'.now()->format('H')) % 28) / 100, 2);
+        return null;
     }
 
     /**
      * @param  Collection<int, Server>  $servers
      */
-    private function avgResponseMs(Collection $servers): int
+    private function avgResponseMs(Collection $servers): ?int
     {
-        if ($servers->where('status', 'online')->isEmpty()) {
-            return 0;
+        $synced = $servers->filter(fn (Server $s) => $s->last_synced_at !== null && $s->status === 'online');
+        if ($synced->isEmpty()) {
+            return null;
         }
 
-        $base = 142;
-        $loadFactor = $servers->avg(fn (Server $s) => (float) ($s->latestHealthLog?->cpu_percent ?? 40));
+        $loads = $synced
+            ->map(fn (Server $s) => (float) ($s->latestHealthLog?->cpu_percent ?? $s->load_average))
+            ->filter(fn ($v) => $v > 0);
 
-        return (int) round($base + ($loadFactor * 1.8));
+        if ($loads->isEmpty()) {
+            return null;
+        }
+
+        return (int) round($loads->avg());
     }
 
-    private function apiAvailability(): float
+    private function apiAvailability(): ?float
     {
-        return round(99.2 + (crc32('api-'.now()->format('d')) % 8) / 10, 2);
+        return null;
     }
 
     /**
@@ -227,19 +240,17 @@ class MonitoringController extends Controller
      */
     private function buildUptimeSeries(Collection $servers): array
     {
-        $series = [];
-        for ($i = 23; $i >= 0; $i--) {
-            $online = $servers->where('status', 'online')->count();
-            $total = max(1, $servers->count());
-            $base = ($online / $total) * 100;
-
-            $series[] = [
-                'label' => now()->subHours($i)->format('H:i'),
-                'pct' => round(min(100, max(97.5, $base + (($i % 5) - 2) * 0.15)), 2),
-            ];
+        $synced = $servers->filter(fn (Server $s) => $s->last_synced_at !== null);
+        if ($synced->isEmpty()) {
+            return [];
         }
 
-        return $series;
+        $online = $synced->where('status', 'online')->count();
+        $pct = round(($online / max(1, $synced->count())) * 100, 2);
+
+        return [
+            ['label' => now()->format('H:i'), 'pct' => $pct],
+        ];
     }
 
     /**
@@ -247,18 +258,7 @@ class MonitoringController extends Controller
      */
     private function buildLatencySeries(): array
     {
-        $series = [];
-        for ($i = 23; $i >= 0; $i--) {
-            $wave = sin($i / 4) * 40;
-            $series[] = [
-                'label' => now()->subHours($i)->format('H:i'),
-                'p50' => (int) round(118 + $wave * 0.4),
-                'p95' => (int) round(280 + $wave),
-                'p99' => (int) round(520 + $wave * 1.4),
-            ];
-        }
-
-        return $series;
+        return [];
     }
 
     /**
@@ -266,15 +266,7 @@ class MonitoringController extends Controller
      */
     private function buildErrorRateSeries(): array
     {
-        $series = [];
-        for ($i = 23; $i >= 0; $i--) {
-            $series[] = [
-                'label' => now()->subHours($i)->format('H:i'),
-                'rate' => round(0.08 + abs(sin($i / 3)) * 0.22 + ($i % 4) * 0.02, 2),
-            ];
-        }
-
-        return $series;
+        return [];
     }
 
     /**
@@ -282,23 +274,7 @@ class MonitoringController extends Controller
      */
     private function buildApiEndpoints(): array
     {
-        $endpoints = [
-            ['method' => 'GET', 'path' => '/api/v1/health', 'base' => 12, 'avail' => 99.99],
-            ['method' => 'POST', 'path' => '/api/v1/licenses/validate', 'base' => 89, 'avail' => 99.95],
-            ['method' => 'GET', 'path' => '/api/v1/tenants/{id}', 'base' => 145, 'avail' => 99.92],
-            ['method' => 'POST', 'path' => '/api/v1/webhooks/dispatch', 'base' => 210, 'avail' => 99.88],
-            ['method' => 'GET', 'path' => '/api/v1/deployments/status', 'base' => 178, 'avail' => 99.90],
-            ['method' => 'POST', 'path' => '/api/v1/backups/trigger', 'base' => 340, 'avail' => 99.75],
-        ];
-
-        return collect($endpoints)->map(fn ($ep, $i) => [
-            'method' => $ep['method'],
-            'path' => $ep['path'],
-            'status' => $ep['avail'] >= 99.9 ? 'healthy' : ($ep['avail'] >= 99.5 ? 'degraded' : 'critical'),
-            'latency' => $ep['base'] + ($i * 7) % 45,
-            'availability' => $ep['avail'],
-            'requests' => 1200 + ($i * 431) % 8000,
-        ])->all();
+        return [];
     }
 
     /**
@@ -319,11 +295,6 @@ class MonitoringController extends Controller
             ->values()
             ->all();
 
-        if (count($incidents) < 4) {
-            $incidents[] = ['time' => __('6h ago'), 'title' => __('Scheduled maintenance — edge nodes'), 'severity' => 'info', 'status' => 'resolved'];
-            $incidents[] = ['time' => __('Yesterday'), 'title' => __('Redis failover drill completed'), 'severity' => 'info', 'status' => 'resolved'];
-        }
-
         return $incidents;
     }
 
@@ -332,13 +303,7 @@ class MonitoringController extends Controller
      */
     private function buildSyntheticChecks(): array
     {
-        return [
-            ['name' => 'Login flow (EU)', 'region' => 'Frankfurt', 'status' => 'pass', 'latency' => 412, 'last' => __('1m ago')],
-            ['name' => 'Checkout API (US)', 'region' => 'Virginia', 'status' => 'pass', 'latency' => 298, 'last' => __('1m ago')],
-            ['name' => 'License webhook', 'region' => 'Singapore', 'status' => 'pass', 'latency' => 521, 'last' => __('2m ago')],
-            ['name' => 'Admin dashboard', 'region' => 'London', 'status' => 'degraded', 'latency' => 1840, 'last' => __('3m ago')],
-            ['name' => 'Tenant portal', 'region' => 'Sydney', 'status' => 'pass', 'latency' => 678, 'last' => __('1m ago')],
-        ];
+        return [];
     }
 
     /**
@@ -360,13 +325,7 @@ class MonitoringController extends Controller
      */
     private function buildTraces(): array
     {
-        return [
-            ['trace_id' => 'tr_8f2a9c1e', 'service' => 'api-gateway', 'duration' => 342, 'status' => 'ok', 'endpoint' => 'POST /licenses/validate'],
-            ['trace_id' => 'tr_3b7d4e2f', 'service' => 'tenant-svc', 'duration' => 891, 'status' => 'slow', 'endpoint' => 'GET /tenants/{id}/modules'],
-            ['trace_id' => 'tr_9c1a5b8d', 'service' => 'worker', 'duration' => 1240, 'status' => 'error', 'endpoint' => 'queue:deployments'],
-            ['trace_id' => 'tr_2e6f0a3c', 'service' => 'billing', 'duration' => 156, 'status' => 'ok', 'endpoint' => 'POST /invoices/sync'],
-            ['trace_id' => 'tr_7d4b1e9a', 'service' => 'cache', 'duration' => 12, 'status' => 'ok', 'endpoint' => 'redis:get session'],
-        ];
+        return [];
     }
 
     /**
@@ -374,44 +333,23 @@ class MonitoringController extends Controller
      */
     private function buildDbMetrics(): array
     {
-        return [
-            ['query' => 'SELECT tenants WHERE status = ?', 'avg_ms' => 4.2, 'calls' => 18420, 'status' => 'healthy'],
-            ['query' => 'JOIN projects_deployments', 'avg_ms' => 28.6, 'calls' => 3201, 'status' => 'healthy'],
-            ['query' => 'UPDATE server_health_logs', 'avg_ms' => 12.1, 'calls' => 9600, 'status' => 'healthy'],
-            ['query' => 'AGG usage_metrics BY tenant', 'avg_ms' => 142.8, 'calls' => 890, 'status' => 'slow'],
-        ];
+        return [];
     }
 
     /**
      * @return array{pending: int, processing: int, failed: int, throughput: int, workers: list<array{name: string, jobs: int, status: string}>}
      */
-    private function buildQueueMetrics(): array
+    private function buildQueueMetrics(): ?array
     {
-        return [
-            'pending' => 23,
-            'processing' => 8,
-            'failed' => 2,
-            'throughput' => 184,
-            'workers' => [
-                ['name' => 'deployments', 'jobs' => 5, 'status' => 'busy'],
-                ['name' => 'notifications', 'jobs' => 12, 'status' => 'healthy'],
-                ['name' => 'backups', 'jobs' => 1, 'status' => 'healthy'],
-                ['name' => 'webhooks', 'jobs' => 3, 'status' => 'degraded'],
-            ],
-        ];
+        return null;
     }
 
     /**
      * @return array{hit_rate: float, memory_mb: int, evictions: int, keys: int}
      */
-    private function buildCacheMetrics(): array
+    private function buildCacheMetrics(): ?array
     {
-        return [
-            'hit_rate' => 94.6,
-            'memory_mb' => 512,
-            'evictions' => 128,
-            'keys' => 48291,
-        ];
+        return null;
     }
 
     /**
@@ -419,33 +357,7 @@ class MonitoringController extends Controller
      */
     private function buildEscalationPolicies(): array
     {
-        return [
-            [
-                'name' => 'Platform Critical',
-                'enabled' => true,
-                'levels' => [
-                    ['level' => 1, 'delay' => '0m', 'channel' => 'PagerDuty', 'owner' => 'NOC On-call'],
-                    ['level' => 2, 'delay' => '15m', 'channel' => 'Slack #incidents', 'owner' => 'Engineering Lead'],
-                    ['level' => 3, 'delay' => '30m', 'channel' => 'Email + SMS', 'owner' => 'VP Engineering'],
-                ],
-            ],
-            [
-                'name' => 'Tenant SLA Breach',
-                'enabled' => true,
-                'levels' => [
-                    ['level' => 1, 'delay' => '5m', 'channel' => 'Slack #support-escalation', 'owner' => 'Support Manager'],
-                    ['level' => 2, 'delay' => '20m', 'channel' => 'PagerDuty', 'owner' => 'Customer Success'],
-                ],
-            ],
-            [
-                'name' => 'Security & Compliance',
-                'enabled' => true,
-                'levels' => [
-                    ['level' => 1, 'delay' => '0m', 'channel' => 'Security hotline', 'owner' => 'SecOps'],
-                    ['level' => 2, 'delay' => '10m', 'channel' => 'Email CISO', 'owner' => 'CISO Office'],
-                ],
-            ],
-        ];
+        return [];
     }
 
     /**
@@ -453,22 +365,36 @@ class MonitoringController extends Controller
      */
     private function buildTenantHealth(int $tenantCount): array
     {
-        $samples = Tenant::query()->orderBy('company_name')->limit(6)->pluck('company_name');
-
-        if ($samples->isEmpty()) {
-            return [
-                ['name' => 'Acme Corp', 'uptime' => 99.98, 'alerts' => 0, 'status' => 'healthy'],
-                ['name' => 'Globex SaaS', 'uptime' => 99.91, 'alerts' => 1, 'status' => 'warning'],
-                ['name' => 'Initech', 'uptime' => 99.99, 'alerts' => 0, 'status' => 'healthy'],
-            ];
+        if ($tenantCount === 0) {
+            return [];
         }
 
-        return $samples->map(fn (string $name, int $i) => [
-            'name' => $name,
-            'uptime' => round(99.85 + (($i * 17) % 14) / 100, 2),
-            'alerts' => $i % 3 === 1 ? 1 : 0,
-            'status' => $i % 3 === 1 ? 'warning' : 'healthy',
-        ])->all();
+        return Tenant::query()
+            ->with('server.latestHealthLog')
+            ->orderBy('company_name')
+            ->limit(6)
+            ->get()
+            ->map(function (Tenant $tenant): array {
+                $server = $tenant->server;
+                $uptime = null;
+                if ($server?->last_synced_at && $server->status === 'online') {
+                    $log = $server->latestHealthLog;
+                    if ($log?->uptime_seconds) {
+                        $uptime = min(100, round(($log->uptime_seconds / 86400) * 100, 2));
+                    }
+                }
+
+                return [
+                    'name' => $tenant->company_name,
+                    'uptime' => $uptime,
+                    'alerts' => 0,
+                    'status' => match ($tenant->status) {
+                        'overdue', 'suspended' => 'warning',
+                        default => 'healthy',
+                    },
+                ];
+            })
+            ->all();
     }
 
     /**
@@ -491,17 +417,4 @@ class MonitoringController extends Controller
             ->all();
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 12; $i++) {
-            $pts[] = 28 + (($h >> ($i * 3)) & 0x3F) % 52;
-        }
-
-        return $pts;
-    }
 }

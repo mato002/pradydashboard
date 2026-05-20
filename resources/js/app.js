@@ -340,53 +340,37 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
-    Alpine.data('infrastructureProvisioning', (fleetStats = {}) => ({
-        fleet: fleetStats,
-        provider: '',
-        environment: 'production',
+    Alpine.data('serverForm', (initialForm = {}, initialEnvironment = 'production', isEdit = false, hasStoredToken = false) => ({
+        isEdit,
+        hasStoredToken,
+        provider: initialForm.provider || 'Hostinger',
+        environment: initialEnvironment,
+        activeTab: 'overview',
         testingConnection: false,
         connectionStatus: null,
-        hostnameStatus: null,
-        draftSaved: false,
-        showToken: false,
-        activeSection: 'identity',
+        probeMessages: [],
 
         form: {
             name: '',
             hostname: '',
-            provider: '',
+            provider: 'Hostinger',
             ip_address: '',
-            private_ip: '',
-            region: '',
             cpu_cores: '',
             ram_gb: '',
             storage_gb: '',
             disk_usage_percent: '',
             status: 'unknown',
+            telemetry_mode: 'whm',
             ssl_status: '',
             backup_status: '',
             monthly_cost: '',
             currency: 'KES',
-            monthly_revenue: '',
             renewal_expires_at: '',
+            ...initialForm,
         },
 
         init() {
-            const draft = localStorage.getItem('prady-server-provision-draft');
-            if (draft) {
-                try {
-                    const parsed = JSON.parse(draft);
-                    Object.assign(this.form, parsed.form ?? {});
-                    this.provider = parsed.provider ?? '';
-                    this.environment = parsed.environment ?? 'production';
-                } catch (e) {
-                    /* ignore corrupt draft */
-                }
-            }
-            this.$watch('form', () => this.updateScores(), { deep: true });
-            this.$watch('provider', () => this.updateScores());
-            this.$watch('environment', () => this.updateScores());
-            this.updateScores();
+            this.provider = this.form.provider || this.provider;
         },
 
         selectProvider(name) {
@@ -394,14 +378,32 @@ document.addEventListener('alpine:init', () => {
             this.form.provider = name;
         },
 
-        verifyHostname() {
-            const h = (this.form.hostname || '').trim();
-            if (!h) {
-                this.hostnameStatus = null;
-                return;
+        summaryValue(value) {
+            const v = value === null || value === undefined ? '' : String(value).trim();
+            return v !== '' ? v : 'Not configured';
+        },
+
+        telemetryLabel(mode) {
+            const labels = {
+                manual: 'Manual monitoring',
+                basic: 'Basic checks',
+                whm: 'WHM live metrics',
+            };
+            return labels[mode] || this.summaryValue(mode);
+        },
+
+        fieldValue(name) {
+            const el = document.querySelector(`[name="${name}"]`);
+            return el ? String(el.value || '').trim() : '';
+        },
+
+        hasWhmToken() {
+            const token = this.fieldValue('meta[api_token]');
+            if (token !== '' && token !== '********') {
+                return true;
             }
-            const valid = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(h);
-            this.hostnameStatus = valid ? 'valid' : 'invalid';
+
+            return this.hasStoredToken;
         },
 
         async testConnection() {
@@ -415,11 +417,11 @@ document.addEventListener('alpine:init', () => {
                 body.append('ip_address', this.form.ip_address || '');
                 body.append('provider', this.form.provider || this.provider || '');
                 body.append('name', this.form.name || '');
-                body.append('whm_cpanel_reference', document.getElementById('whm_cpanel_reference')?.value || '');
+                body.append('whm_cpanel_reference', this.fieldValue('whm_cpanel_reference'));
                 body.append('meta[hostname]', this.form.hostname || '');
-                body.append('meta[api_token]', document.querySelector('[name="meta[api_token]"]')?.value || '');
-                body.append('meta[api_endpoint]', document.querySelector('[name="meta[api_endpoint]"]')?.value || '');
-                body.append('meta[cloud_instance_id]', document.querySelector('[name="meta[cloud_instance_id]"]')?.value || '');
+                body.append('meta[api_token]', this.fieldValue('meta[api_token]'));
+                body.append('meta[api_endpoint]', this.fieldValue('meta[api_endpoint]'));
+                body.append('meta[cloud_instance_id]', this.fieldValue('meta[cloud_instance_id]'));
 
                 const response = await fetch('/servers/probe', {
                     method: 'POST',
@@ -445,106 +447,33 @@ document.addEventListener('alpine:init', () => {
                 }
             } catch (e) {
                 this.connectionStatus = 'fail';
-                this.probeMessages = [__('Probe request failed.')];
+                this.probeMessages = ['Probe request failed.'];
             }
 
             this.testingConnection = false;
-            this.updateScores();
         },
 
-        probeMessages: [],
-
-        saveDraft() {
-            localStorage.setItem(
-                'prady-server-provision-draft',
-                JSON.stringify({
-                    form: this.form,
-                    provider: this.provider,
-                    environment: this.environment,
-                }),
-            );
-            this.draftSaved = true;
-            setTimeout(() => {
-                this.draftSaved = false;
-            }, 2500);
-        },
-
-        scores: {
-            health: 0,
-            readiness: 0,
-            security: 0,
-            connectivity: 0,
-        },
-
-        updateScores() {
-            let health = 20;
-            let readiness = 15;
-            let security = 25;
-            let connectivity = 10;
-
-            if (this.form.name?.trim()) {
-                health += 15;
-                readiness += 12;
-            }
-            if (this.form.hostname?.trim() && this.hostnameStatus === 'valid') {
-                health += 10;
-                readiness += 8;
-            }
-            if (this.provider) {
-                readiness += 10;
-            }
-            if (this.form.cpu_cores) {
-                health += 10;
-            }
-            if (this.form.ram_gb) {
-                health += 8;
-            }
-            if (this.form.ip_address?.trim()) {
-                connectivity += 35;
-                readiness += 15;
-            }
-            if (this.form.ssl_status?.trim()) {
-                security += 25;
-            }
-            if (this.form.backup_status?.trim()) {
-                security += 20;
-                health += 12;
-            }
-            if (this.form.monthly_cost) {
-                readiness += 8;
-            }
-
-            this.scores = {
-                health: Math.min(100, health),
-                readiness: Math.min(100, readiness),
-                security: Math.min(100, security),
-                connectivity: Math.min(100, connectivity),
-            };
-        },
-
-        get estimatedCost() {
-            const c = parseFloat(this.form.monthly_cost) || 0;
-            return c.toFixed(2);
-        },
-
-        get checklist() {
-            return [
-                { label: 'Server identity configured', done: !!this.form.name?.trim() },
-                { label: 'Network endpoint defined', done: !!this.form.ip_address?.trim() },
-                { label: 'Capacity profile set', done: !!this.form.cpu_cores && !!this.form.ram_gb },
-                { label: 'SSL posture documented', done: !!this.form.ssl_status?.trim() },
-                { label: 'Backup policy recorded', done: !!this.form.backup_status?.trim() },
-                { label: 'Billing baseline captured', done: !!this.form.monthly_cost },
+        get readinessChecklist() {
+            const whm = this.form.telemetry_mode === 'whm';
+            const items = [
+                { label: 'Public IP provided', done: !!this.form.ip_address?.trim() },
+                { label: 'Hostname provided', done: !!this.form.hostname?.trim() },
+                { label: 'Telemetry mode selected', done: !!this.form.telemetry_mode },
             ];
-        },
 
-        get checklistComplete() {
-            return this.checklist.filter((c) => c.done).length;
-        },
+            if (whm) {
+                items.push(
+                    { label: 'WHM endpoint provided', done: !!this.fieldValue('meta[api_endpoint]') },
+                    { label: 'API token provided', done: this.hasWhmToken() },
+                );
+            }
 
-        scrollToSection(id) {
-            this.activeSection = id;
-            document.getElementById('infra-section-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            items.push(
+                { label: 'Renewal date provided', done: !!this.form.renewal_expires_at?.trim() },
+                { label: 'Monthly cost provided', done: !!String(this.form.monthly_cost ?? '').trim() },
+            );
+
+            return items;
         },
     }));
 

@@ -81,7 +81,7 @@ class PlatformSettingsService
             ['label' => __('Backup status'), 'value' => $backupPct.'%', 'status' => $backupPct >= 85 ? 'healthy' : 'warning', 'tone' => 'indigo'],
             ['label' => __('SSL coverage'), 'value' => $sslPct.'%', 'status' => $sslPct >= 95 ? 'healthy' : 'critical', 'tone' => 'violet'],
             ['label' => __('Payment gateway'), 'value' => __('Connected'), 'status' => 'healthy', 'tone' => 'amber'],
-            ['label' => __('API availability'), 'value' => '99.9%', 'status' => 'healthy', 'tone' => 'sky'],
+            ['label' => __('API availability'), 'value' => __('Not configured'), 'status' => 'unknown', 'tone' => 'sky'],
         ];
     }
 
@@ -91,10 +91,10 @@ class PlatformSettingsService
     public function deliveryStats(): array
     {
         return [
-            'sent_24h' => 1240 + (Tenant::query()->count() * 12),
-            'failed_24h' => 3 + (Server::query()->count() % 4),
-            'queue_depth' => 12,
-            'avg_latency_ms' => 180,
+            'sent_24h' => null,
+            'failed_24h' => null,
+            'queue_depth' => null,
+            'avg_latency_ms' => null,
         ];
     }
 
@@ -189,9 +189,16 @@ class PlatformSettingsService
                 'mpesa_enabled' => true,
             ],
             'billing' => [
-                'default_currency' => 'KES',
+                'company_legal_name' => 'PradytecAI Ltd',
+                'tax_pin' => '',
+                'vat_registered' => false,
                 'tax_rate' => '16',
+                'default_currency' => 'KES',
                 'invoice_prefix' => 'INV',
+                'payment_instructions' => '',
+                'default_payment_terms' => 'Net 30',
+                'invoice_footer_notes' => '',
+                'usage_rate_per_mb' => '0',
                 'grace_period_days' => '7',
                 'auto_suspend' => true,
             ],

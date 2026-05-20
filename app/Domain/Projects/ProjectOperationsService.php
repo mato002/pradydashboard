@@ -25,7 +25,7 @@ class ProjectOperationsService
                 + $enriched->where('deploy_status', 'building')->count(),
             'failed_deployments' => $this->recentDeployments($projects)->where('status', 'failed')->count(),
             'active_tenants' => (int) $projects->sum('tenants_count'),
-            'avg_uptime' => round($enriched->avg('uptime_pct') ?? 99.9, 2),
+            'avg_uptime' => $enriched->pluck('uptime_pct')->filter(fn ($v) => $v !== null)->avg(),
         ];
     }
 
@@ -39,20 +39,21 @@ class ProjectOperationsService
         $uptimePct = $this->uptimePercent($project, $seed);
         $deployStatus = $this->deployStatus($project, $seed);
         $lastDeployment = $this->resolveLastDeployment($project);
+        $server = $project->server;
 
         return [
             'environment' => $environment,
             'uptime_pct' => $uptimePct,
-            'response_ms' => 40 + ($seed % 180),
-            'error_rate' => round(($seed % 50) / 100, 2),
+            'response_ms' => null,
+            'error_rate' => null,
             'deploy_status' => $deployStatus,
             'ci_status' => $this->ciStatus($deployStatus, $seed),
             'last_deployment' => $lastDeployment,
-            'version' => $lastDeployment['version'] ?? $project->version ?? 'v1.0.0',
+            'version' => $lastDeployment['version'] ?? $project->version ?? '—',
             'ssl_health' => $project->server?->ssl_status === 'valid' ? 'healthy' : ($project->server?->ssl_status ? 'warning' : 'unknown'),
-            'bandwidth_gb' => round(5 + ($seed % 120) / 10, 1),
-            'storage_pct' => min(95, 35 + ($seed % 45)),
-            'scaling_score' => 60 + ($seed % 35),
+            'bandwidth_gb' => null,
+            'storage_pct' => $server?->disk_usage_percent !== null ? (float) $server->disk_usage_percent : null,
+            'scaling_score' => null,
         ];
     }
 
@@ -146,13 +147,7 @@ class ProjectOperationsService
      */
     public function sparkline(string $key, int $points = 12): array
     {
-        $hash = crc32($key);
-        $values = [];
-        for ($i = 0; $i < $points; $i++) {
-            $values[] = 20 + (($hash >> ($i % 8)) & 0xFF) % 80;
-        }
-
-        return $values;
+        return [];
     }
 
     /**
@@ -229,37 +224,36 @@ class ProjectOperationsService
         return 'production';
     }
 
-    private function uptimePercent(Project $project, int $seed): float
+    private function uptimePercent(Project $project, int $seed): ?float
     {
         if ($project->status === 'suspended') {
             return 0.0;
         }
-        if ($project->status === 'maintenance') {
-            return 97.5;
-        }
 
         $server = $project->server;
-        if ($server) {
-            $latest = $server->relationLoaded('latestHealthLog')
-                ? $server->latestHealthLog
-                : $server->latestHealthLog()->first();
-
-            if ($latest?->uptime_seconds) {
-                return min(100, round(($latest->uptime_seconds / 86400) * 100, 2));
-            }
-
-            $logs = $server->relationLoaded('healthLogs')
-                ? $server->healthLogs
-                : $server->healthLogs()->where('checked_at', '>=', now()->subDays(7))->get();
-
-            if ($logs->isNotEmpty()) {
-                $online = $logs->filter(fn ($log) => ($log->cpu_percent ?? 0) < 95)->count();
-
-                return round(($online / max($logs->count(), 1)) * 100, 2);
-            }
+        if (! $server || ! $server->last_synced_at) {
+            return null;
         }
 
-        return 99.9;
+        $latest = $server->relationLoaded('latestHealthLog')
+            ? $server->latestHealthLog
+            : $server->latestHealthLog()->first();
+
+        if ($latest?->uptime_seconds) {
+            return min(100, round(($latest->uptime_seconds / 86400) * 100, 2));
+        }
+
+        $logs = $server->relationLoaded('healthLogs')
+            ? $server->healthLogs
+            : $server->healthLogs()->where('checked_at', '>=', now()->subDays(7))->get();
+
+        if ($logs->isNotEmpty()) {
+            $online = $logs->filter(fn ($log) => ($log->cpu_percent ?? 0) < 95)->count();
+
+            return round(($online / max($logs->count(), 1)) * 100, 2);
+        }
+
+        return $server->status === 'online' ? 100.0 : null;
     }
 
     private function deployStatus(Project $project, int $seed): string

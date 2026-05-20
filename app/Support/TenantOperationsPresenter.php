@@ -26,7 +26,7 @@ class TenantOperationsPresenter
             'healthOverview' => $this->buildHealthOverview($directory),
             'growthSeries' => $this->buildGrowthSeries(),
             'kpis' => $this->buildKpis($growthPct),
-            'spark' => fn (string $key) => $this->spark($key),
+            'spark' => fn (string $key) => OperationalMetrics::emptySparkline(),
         ];
     }
 
@@ -43,50 +43,55 @@ class TenantOperationsPresenter
 
         $growthLabel = $growthPct !== null
             ? (($growthPct >= 0 ? '+' : '').number_format($growthPct, 1).'%')
-            : '+8.4%';
+            : null;
+        $overdueExposure = (float) Tenant::query()->where('status', 'overdue')->sum('subscription_amount');
+        $newThisMonth = Tenant::query()->where('created_at', '>=', Carbon::now()->startOfMonth())->count();
+        $trialConversion = $trial > 0 && $active > 0
+            ? round(($active / max(1, $active + $trial)) * 100).'%'
+            : null;
 
         return [
             'total' => [
-                'value' => max($total, count($this->demoDirectory())),
+                'value' => $total,
                 'trend' => $growthLabel,
-                'sublabel' => __('Organizations').': <span class="font-semibold text-slate-800 dark:text-slate-100">'.$total.'</span>',
+                'sublabel' => __('Organizations in directory'),
                 'tone' => 'indigo',
-                'points' => $this->spark('tenants-total'),
+                'points' => OperationalMetrics::emptySparkline(),
             ],
             'active' => [
-                'value' => max($active, 18),
-                'trend' => '+5%',
-                'sublabel' => __('Health').': <span class="font-semibold text-emerald-600 dark:text-emerald-300">94%</span>',
+                'value' => $active,
+                'trend' => null,
+                'sublabel' => __('Active subscriptions'),
                 'tone' => 'emerald',
-                'points' => $this->spark('tenants-active'),
+                'points' => OperationalMetrics::emptySparkline(),
             ],
             'trial' => [
-                'value' => max($trial, 4),
-                'trend' => '+2',
-                'sublabel' => __('Converting').': <span class="font-semibold text-amber-600 dark:text-amber-300">67%</span>',
+                'value' => $trial,
+                'trend' => null,
+                'sublabel' => $trialConversion ? __('Active share').': '.$trialConversion : __('Trial accounts'),
                 'tone' => 'amber',
-                'points' => $this->spark('tenants-trial'),
+                'points' => OperationalMetrics::emptySparkline(),
             ],
             'overdue' => [
-                'value' => max($overdue, 3),
-                'trend' => $overdue > 0 ? '+1' : '-12%',
-                'sublabel' => __('Exposure').': <span class="font-semibold text-rose-600 dark:text-rose-300">KES 142K</span>',
+                'value' => $overdue,
+                'trend' => null,
+                'sublabel' => __('Exposure').': KES '.number_format($overdueExposure, 0),
                 'tone' => 'rose',
-                'points' => $this->spark('tenants-overdue'),
+                'points' => OperationalMetrics::emptySparkline(),
             ],
             'suspended' => [
-                'value' => max($suspended, 2),
-                'trend' => '-1',
-                'sublabel' => __('Restricted').': <span class="font-semibold text-slate-800 dark:text-slate-100">'.($suspended + 1).'</span>',
+                'value' => $suspended,
+                'trend' => null,
+                'sublabel' => __('Restricted or terminated'),
                 'tone' => 'neutral',
-                'points' => $this->spark('tenants-suspended'),
+                'points' => OperationalMetrics::emptySparkline(),
             ],
             'growth' => [
-                'value' => $growthLabel,
+                'value' => $growthLabel ?? '—',
                 'trend' => __('MoM'),
-                'sublabel' => __('New this month').': <span class="font-semibold text-violet-600 dark:text-violet-300">+'.max(3, (int) round($total * 0.08)).'</span>',
+                'sublabel' => __('New this month').': '.$newThisMonth,
                 'tone' => 'violet',
-                'points' => $this->spark('tenants-growth'),
+                'points' => OperationalMetrics::emptySparkline(),
                 'animate' => false,
             ],
         ];
@@ -117,18 +122,15 @@ class TenantOperationsPresenter
      */
     private function buildDirectory(Collection $tenants): array
     {
-        $demo = $this->demoDirectory();
-
         if ($tenants->isEmpty()) {
-            return $demo;
+            return [];
         }
 
-        $mapped = $tenants->map(function (Tenant $tenant, int $i) use ($demo) {
-            $fallback = $demo[$i % count($demo)];
+        $mapped = $tenants->map(function (Tenant $tenant) {
             $metric = $tenant->usageMetric;
-            $storageMb = (float) ($metric?->storage_usage_mb ?? $fallback['storage_mb'] ?? 0);
-            $storageCapMb = (float) ($fallback['storage_cap_mb'] ?? max($storageMb * 2, 5000));
-            $users = (int) ($metric?->active_users ?? $fallback['users'] ?? 0);
+            $storageMb = (float) ($metric?->storage_usage_mb ?? 0);
+            $storageCapMb = max($storageMb * 2, 5000);
+            $users = (int) ($metric?->active_users ?? 0);
 
             return [
                 'id' => $tenant->id,
@@ -145,10 +147,10 @@ class TenantOperationsPresenter
                 'storage_pct' => min(100, (int) round(($storageMb / max($storageCapMb, 1)) * 100)),
                 'last_activity' => $metric?->last_login_at?->diffForHumans()
                     ?? $tenant->updated_at?->diffForHumans()
-                    ?? $fallback['last_activity'],
+                    ?? '—',
                 'health_score' => $this->healthScore($tenant->status, $storageMb),
                 'health_label' => $this->healthLabel($tenant->status),
-                'onboarding_stage' => $fallback['onboarding_stage'],
+                'onboarding_stage' => $tenant->status,
                 'show_url' => route('tenants.show', $tenant),
                 'edit_url' => route('tenants.edit', $tenant),
                 'is_demo' => false,
@@ -157,66 +159,12 @@ class TenantOperationsPresenter
                 'email' => $tenant->email ?? '—',
                 'currency' => $tenant->tenant_currency ?? 'KES',
                 'mrr' => number_format((float) ($tenant->subscription_amount ?? 0), 0),
-                'tickets_count' => $tenant->support_tickets_count ?? $fallback['tickets_count'],
+                'tickets_count' => $tenant->support_tickets_count ?? 0,
                 'invoices_count' => $tenant->invoices_count ?? 0,
             ];
         })->all();
 
-        if (count($mapped) < 8) {
-            $mapped = array_merge($mapped, array_slice($demo, count($mapped), 8 - count($mapped)));
-        }
-
         return $mapped;
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private function demoDirectory(): array
-    {
-        $rows = [
-            ['company' => 'Savanna Retail Group', 'product' => 'MFI Core Banking', 'plan' => 'Enterprise', 'server' => 'eu-prod-01', 'status' => 'active', 'users' => 248, 'storage_mb' => 4200, 'storage_cap_mb' => 10000, 'stage' => 'live'],
-            ['company' => 'Coast Hotels & Resorts', 'product' => 'Property ERP', 'plan' => 'Professional', 'server' => 'eu-prod-02', 'status' => 'active', 'users' => 89, 'storage_mb' => 2100, 'storage_cap_mb' => 5000, 'stage' => 'live'],
-            ['company' => 'UrbanPay Ltd', 'product' => 'Payment Gateway', 'plan' => 'Enterprise', 'server' => 'af-south-01', 'status' => 'trial', 'users' => 12, 'storage_mb' => 180, 'storage_cap_mb' => 2000, 'stage' => 'billing'],
-            ['company' => 'Nairobi Med Group', 'product' => 'Healthcare Suite', 'plan' => 'Professional', 'server' => 'af-south-01', 'status' => 'active', 'users' => 156, 'storage_mb' => 3800, 'storage_cap_mb' => 8000, 'stage' => 'live'],
-            ['company' => 'Acme Logistics', 'product' => 'CRM Suite', 'plan' => 'Starter', 'server' => 'shared-01', 'status' => 'overdue', 'users' => 34, 'storage_mb' => 890, 'storage_cap_mb' => 2000, 'stage' => 'live'],
-            ['company' => 'TechFarm Africa', 'product' => 'Agri Analytics', 'plan' => 'Professional', 'server' => 'af-south-02', 'status' => 'active', 'users' => 67, 'storage_mb' => 1200, 'storage_cap_mb' => 5000, 'stage' => 'live'],
-            ['company' => 'Lakeview Schools', 'product' => 'EdTech Platform', 'plan' => 'Starter', 'server' => 'shared-01', 'status' => 'trial', 'users' => 8, 'storage_mb' => 95, 'storage_cap_mb' => 1000, 'stage' => 'deployment'],
-            ['company' => 'Metro Insurance', 'product' => 'Insurance Core', 'plan' => 'Enterprise', 'server' => 'eu-prod-01', 'status' => 'suspended', 'users' => 0, 'storage_mb' => 5400, 'storage_cap_mb' => 10000, 'stage' => 'live'],
-            ['company' => 'GreenGrid Energy', 'product' => 'IoT Monitoring', 'plan' => 'Professional', 'server' => 'af-south-02', 'status' => 'active', 'users' => 42, 'storage_mb' => 760, 'storage_cap_mb' => 3000, 'stage' => 'live'],
-            ['company' => 'SwiftCourier KE', 'product' => 'Logistics OS', 'plan' => 'Professional', 'server' => 'af-south-01', 'status' => 'warning', 'users' => 112, 'storage_mb' => 1650, 'storage_cap_mb' => 5000, 'stage' => 'live'],
-        ];
-
-        return collect($rows)->map(function (array $row, int $i) {
-            return [
-                'id' => 'demo_'.($i + 1),
-                'company' => $row['company'],
-                'product' => $row['product'],
-                'plan' => $row['plan'],
-                'server' => $row['server'],
-                'status' => $row['status'],
-                'renewal' => Carbon::now()->addDays(15 + $i * 7)->format('M j, Y'),
-                'users' => $row['users'],
-                'storage' => $this->formatStorage($row['storage_mb']),
-                'storage_pct' => min(100, (int) round(($row['storage_mb'] / max($row['storage_cap_mb'], 1)) * 100)),
-                'storage_mb' => $row['storage_mb'],
-                'storage_cap_mb' => $row['storage_cap_mb'],
-                'last_activity' => ['2m ago', '15m ago', '1h ago', '3h ago', 'Yesterday', '5m ago', '2d ago', '—', '45m ago', '20m ago'][$i % 10],
-                'health_score' => $this->healthScore($row['status'], $row['storage_mb']),
-                'health_label' => $this->healthLabel($row['status']),
-                'onboarding_stage' => $row['stage'],
-                'show_url' => route('tenants.index'),
-                'edit_url' => null,
-                'is_demo' => true,
-                'domain' => strtolower(str_replace(' ', '', explode(' ', $row['company'])[0])).'.prady.app',
-                'contact' => 'Admin',
-                'email' => 'ops@example.com',
-                'currency' => 'KES',
-                'mrr' => number_format(15000 + $i * 3500, 0),
-                'tickets_count' => [0, 1, 2, 0, 4, 1, 0, 3, 0, 1][$i % 10],
-                'invoices_count' => 3 + ($i % 4),
-            ];
-        })->all();
     }
 
     private function healthScore(string $status, float $storageMb): int
@@ -263,14 +211,29 @@ class TenantOperationsPresenter
      */
     private function buildOnboardingPipeline(): array
     {
-        return [
-            ['stage' => 'signup', 'label' => __('Signup'), 'count' => 24, 'pct' => 100, 'status' => 'complete'],
-            ['stage' => 'verification', 'label' => __('Verification'), 'count' => 21, 'pct' => 88, 'status' => 'complete'],
-            ['stage' => 'provisioning', 'label' => __('Provisioning'), 'count' => 18, 'pct' => 75, 'status' => 'active'],
-            ['stage' => 'deployment', 'label' => __('Deployment'), 'count' => 14, 'pct' => 58, 'status' => 'active'],
-            ['stage' => 'billing', 'label' => __('Billing activation'), 'count' => 12, 'pct' => 50, 'status' => 'pending'],
-            ['stage' => 'golive', 'label' => __('Go-live'), 'count' => 10, 'pct' => 42, 'status' => 'pending'],
+        $total = Tenant::query()->count();
+        if ($total === 0) {
+            return [];
+        }
+
+        $stages = [
+            ['stage' => 'trial', 'label' => __('Trial'), 'status' => 'active'],
+            ['stage' => 'active', 'label' => __('Active'), 'status' => 'complete'],
+            ['stage' => 'overdue', 'label' => __('Overdue'), 'status' => 'pending'],
+            ['stage' => 'suspended', 'label' => __('Suspended'), 'status' => 'pending'],
         ];
+
+        return collect($stages)->map(function (array $stage) use ($total) {
+            $count = Tenant::query()->where('status', $stage['stage'])->count();
+
+            return [
+                'stage' => $stage['stage'],
+                'label' => $stage['label'],
+                'count' => $count,
+                'pct' => (int) round(($count / max(1, $total)) * 100),
+                'status' => $stage['status'],
+            ];
+        })->all();
     }
 
     /**
@@ -279,26 +242,27 @@ class TenantOperationsPresenter
      */
     private function buildHealthOverview(array $directory): array
     {
-        $avgHealth = count($directory) > 0
-            ? (int) round(collect($directory)->avg('health_score'))
-            : 88;
+        if (count($directory) === 0) {
+            return [
+                'avg_health' => null,
+                'metrics' => [],
+                'empty' => true,
+            ];
+        }
+
+        $avgHealth = (int) round(collect($directory)->avg('health_score'));
+        $active = collect($directory)->where('status', 'active')->count();
+        $billingPct = count($directory) > 0
+            ? round(($active / count($directory)) * 100, 1)
+            : null;
 
         return [
             'avg_health' => $avgHealth,
-            'uptime_pct' => 99.94,
-            'billing_health' => 96.2,
-            'active_sessions' => 1248,
-            'api_requests_24h' => '1.2M',
-            'backup_success' => 98.5,
-            'deployment_success' => 97.1,
+            'empty' => false,
             'metrics' => [
-                ['label' => __('Uptime'), 'value' => '99.94%', 'status' => 'good'],
-                ['label' => __('Billing'), 'value' => '96.2%', 'status' => 'good'],
-                ['label' => __('Sessions'), 'value' => '1,248', 'status' => 'good'],
-                ['label' => __('Storage'), 'value' => '68%', 'status' => 'warn'],
-                ['label' => __('API usage'), 'value' => '1.2M', 'status' => 'good'],
-                ['label' => __('Deployments'), 'value' => '97.1%', 'status' => 'good'],
-                ['label' => __('Backups'), 'value' => '98.5%', 'status' => 'good'],
+                ['label' => __('Avg health score'), 'value' => (string) $avgHealth, 'status' => $avgHealth >= 80 ? 'good' : 'warn'],
+                ['label' => __('Active tenants'), 'value' => (string) $active, 'status' => 'good'],
+                ['label' => __('Billing health'), 'value' => $billingPct !== null ? $billingPct.'%' : '—', 'status' => 'good'],
             ],
         ];
     }
@@ -316,7 +280,7 @@ class TenantOperationsPresenter
                 ->count();
             $series[] = [
                 'label' => $month->format('M'),
-                'value' => max($count, 8 + (5 - $i) * 3),
+                'value' => $count,
             ];
         }
 
@@ -350,7 +314,7 @@ class TenantOperationsPresenter
                 'health' => [
                     'score' => $row['health_score'],
                     'label' => $row['health_label'],
-                    'uptime' => '99.'.(90 + ($row['health_score'] % 10)).'%',
+                    'uptime' => $row['is_demo'] ?? false ? '—' : ($row['health_score'] >= 80 ? __('Healthy') : __('At risk')),
                     'sessions' => $row['users'] * 3,
                     'api_calls' => number_format($row['users'] * 420),
                     'storage' => $row['storage'],
@@ -376,17 +340,4 @@ class TenantOperationsPresenter
         return $details;
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private function spark(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 8; $i++) {
-            $pts[] = 32 + (($h >> ($i * 3)) & 0x3F) % 48;
-        }
-
-        return $pts;
-    }
 }

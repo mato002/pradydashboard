@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\DemoMode;
+use App\Support\OperationalMetrics;
 use App\Models\TenantPayment;
 use Carbon\Carbon;
 use Database\Seeders\PaymentDemoSeeder;
@@ -15,7 +17,7 @@ class PaymentController extends Controller
 {
     public function index(Request $request): View
     {
-        if (TenantPayment::query()->doesntExist()) {
+        if (DemoMode::enabled() && TenantPayment::query()->doesntExist()) {
             (new PaymentDemoSeeder)->run();
         }
 
@@ -53,7 +55,7 @@ class PaymentController extends Controller
             'gatewayHealth' => $this->gatewayHealthScore(),
         ];
 
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
+        $spark = fn (string $key) => OperationalMetrics::emptySparkline();
         $collectionSeries = $this->buildCollectionSeries();
         $gatewayAnalytics = $this->buildGatewayAnalytics();
         $heatmap = $this->buildTransactionHeatmap();
@@ -95,7 +97,7 @@ class PaymentController extends Controller
         $gateways = $this->buildGatewayFleet();
 
         if ($gateways->isEmpty()) {
-            return 99.0;
+            return 0.0;
         }
 
         return round($gateways->avg('uptime'), 1);
@@ -130,14 +132,11 @@ class PaymentController extends Controller
                 ->whereBetween('created_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
                 ->sum('amount');
 
-            $h = crc32('col-'.$month->format('Y-m'));
-            $baseline = 180_000 + (($h & 0xFF) * 2_500);
-
             $series[] = [
                 'label' => $month->format('M'),
-                'value' => $successful > 0 ? $successful : $baseline,
-                'successful' => $successful > 0 ? $successful : $baseline * 0.92,
-                'failed' => $failed > 0 ? $failed : $baseline * 0.04,
+                'value' => $successful,
+                'successful' => $successful,
+                'failed' => $failed,
             ];
         }
 
@@ -189,17 +188,26 @@ class PaymentController extends Controller
      */
     private function buildTransactionHeatmap(): array
     {
-        $days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        $heatmap = [];
+        $payments = TenantPayment::query()
+            ->whereNotNull('paid_at')
+            ->where('paid_at', '>=', now()->subDays(7))
+            ->get(['paid_at']);
 
+        if ($payments->isEmpty()) {
+            return [];
+        }
+
+        $days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        $grid = array_fill(0, 7, array_fill(0, 24, 0));
+
+        foreach ($payments as $payment) {
+            $at = $payment->paid_at;
+            $grid[$at->dayOfWeekIso - 1][$at->hour]++;
+        }
+
+        $heatmap = [];
         foreach ($days as $di => $day) {
-            $hours = [];
-            for ($h = 0; $h < 24; $h++) {
-                $seed = crc32("heat-{$day}-{$h}");
-                $base = ($di < 5 && $h >= 8 && $h <= 18) ? 4 : 1;
-                $hours[] = $base + ($seed & 0x7);
-            }
-            $heatmap[] = ['day' => $day, 'hours' => $hours];
+            $heatmap[] = ['day' => $day, 'hours' => $grid[$di]];
         }
 
         return $heatmap;
@@ -252,18 +260,17 @@ class PaymentController extends Controller
                 ->selectRaw('SUM(amount) as volume')
                 ->first();
 
-            $total = max(1, (int) ($stats->total ?? 0));
-            $success = round(((int) ($stats->ok ?? 0) / $total) * 100, 1);
-            $h = crc32('gw-'.$def['key']);
+            $total = (int) ($stats->total ?? 0);
+            $success = $total > 0 ? round(((int) ($stats->ok ?? 0) / $total) * 100, 1) : null;
 
             return [
                 'key' => $def['key'],
                 'name' => $def['name'],
                 'color' => $def['color'],
-                'uptime' => round(98.2 + (($h & 0x1F) / 10), 1),
-                'success' => $total > 1 ? $success : round(94 + (($h >> 4) & 0xF) / 2, 1),
-                'latency' => 180 + ($h & 0xFF),
-                'status' => ($h & 0x3) === 0 ? 'degraded' : 'operational',
+                'uptime' => $success,
+                'success' => $success,
+                'latency' => null,
+                'status' => $total === 0 ? 'unknown' : ($success >= 95 ? 'operational' : 'degraded'),
                 'volume' => $this->formatKes((float) ($stats->volume ?? 0)),
             ];
         });
@@ -329,29 +336,19 @@ class PaymentController extends Controller
      */
     private function buildRecurringStats(): array
     {
-        $active = TenantPayment::query()->where('status', 'successful')->count();
-        $scheduled = (int) round($active * 0.35);
         $retry = TenantPayment::query()->where('status', 'failed')->count();
+        $totalAttempts = max(1, TenantPayment::query()->count());
+        $successfulCount = TenantPayment::query()->where('status', 'successful')->count();
+        $nextSchedule = \App\Models\InvoiceRecurringSchedule::query()
+            ->where('enabled', true)
+            ->orderBy('next_run_at')
+            ->value('next_run_at');
 
         return [
-            'active_mandates' => $scheduled,
-            'next_run' => Carbon::now()->addDay()->startOfDay()->addHours(6)->format('M j, H:i'),
+            'active_mandates' => \App\Models\InvoiceRecurringSchedule::query()->where('enabled', true)->count(),
+            'next_run' => $nextSchedule?->format('M j, H:i') ?? '—',
             'retry_queue' => $retry,
-            'auto_collect_rate' => 94.2,
+            'auto_collect_rate' => round(($successfulCount / $totalAttempts) * 100, 1),
         ];
-    }
-
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 8; $i++) {
-            $pts[] = 32 + (($h >> ($i * 3)) & 0x3F) % 48;
-        }
-
-        return $pts;
     }
 }

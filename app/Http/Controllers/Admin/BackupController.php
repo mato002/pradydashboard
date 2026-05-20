@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\OperationalMetrics;
+use App\Support\DemoMode;
 use App\Models\Backup;
 use App\Models\BackupSchedule;
 use App\Models\Server;
@@ -17,7 +19,7 @@ class BackupController extends Controller
 {
     public function index(Request $request): View
     {
-        if (Backup::query()->doesntExist()) {
+        if (DemoMode::enabled() && Backup::query()->doesntExist()) {
             (new BackupDemoSeeder)->run();
         }
 
@@ -55,7 +57,7 @@ class BackupController extends Controller
             'successRate' => $totalBackups > 0 ? round(($successfulBackups / $totalBackups) * 100, 1) : 0,
         ];
 
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
+        $spark = fn (string $key) => OperationalMetrics::emptySparkline();
 
         $storageGrowth = $this->buildStorageGrowthSeries();
         $serverStorage = $this->buildServerStorageBreakdown();
@@ -101,16 +103,17 @@ class BackupController extends Controller
     private function buildStorageGrowthSeries(): array
     {
         $series = [];
-        $base = max(1, (int) Backup::query()->whereNotNull('size_bytes')->sum('size_bytes') / 6);
 
         for ($i = 5; $i >= 0; $i--) {
             $month = Carbon::now()->subMonths($i);
-            $h = crc32('storage-'.$month->format('Y-m'));
-            $wave = 0.72 + (($h & 0xFF) / 255) * 0.35;
+            $bytes = (int) Backup::query()
+                ->whereNotNull('size_bytes')
+                ->whereBetween('completed_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+                ->sum('size_bytes');
 
             $series[] = [
                 'label' => $month->format('M'),
-                'value' => round($base * $wave * (1 + (5 - $i) * 0.08), 0),
+                'value' => $bytes,
             ];
         }
 
@@ -290,17 +293,4 @@ class BackupController extends Controller
         return round(($verified / $successful) * 100, 1);
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 8; $i++) {
-            $pts[] = 32 + (($h >> ($i * 3)) & 0x3F) % 48;
-        }
-
-        return $pts;
-    }
 }

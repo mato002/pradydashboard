@@ -123,4 +123,16 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Demo / sample operational data
+    |--------------------------------------------------------------------------
+    |
+    | When false (default), HTTP controllers do not auto-seed demo metrics and
+    | dashboards show only real database / telemetry values or empty states.
+    |
+    */
+
+    'demo_mode' => (bool) env('APP_DEMO_MODE', false),
+
 ];

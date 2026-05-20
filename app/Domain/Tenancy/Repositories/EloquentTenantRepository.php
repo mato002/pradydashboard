@@ -29,7 +29,18 @@ class EloquentTenantRepository implements TenantRepositoryInterface
                 'activityLogs' => fn ($q) => $q->limit(30),
                 'reportedUsers' => fn ($q) => $q->latest('last_seen_at')->limit(50),
                 'alerts' => fn ($q) => $q->whereNull('dismissed_at')->latest()->limit(10),
-                'supportTickets' => fn ($q) => $q->latest()->limit(15),
+                'supportTickets' => fn ($q) => $q->with(['assignedStaff', 'project'])->latest('opened_at')->limit(30),
+                'communications' => fn ($q) => $q->with(['staffProfile', 'relatedTicket'])->latest('communication_date')->limit(30),
+                'notices' => fn ($q) => $q->latest()->limit(20),
+                'projectSubscriptions' => fn ($q) => $q->with([
+                    'project.server',
+                    'project.modules',
+                    'infrastructure.server',
+                    'versionTracking',
+                    'serviceIntegrations',
+                    'moduleSubscriptions.projectModule',
+                ]),
+                'operationalDocuments' => fn ($q) => $q->with(['uploader', 'subscription.project', 'project'])->latest(),
             ])
             ->firstOrFail();
     }

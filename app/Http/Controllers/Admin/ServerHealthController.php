@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\DemoMode;
+use App\Support\OperationalMetrics;
 use App\Models\Backup;
 use App\Models\Project;
 use App\Models\Server;
@@ -15,7 +17,7 @@ class ServerHealthController extends Controller
 {
     public function index(): View
     {
-        if (ServerHealthLog::query()->doesntExist()) {
+        if (DemoMode::enabled() && ServerHealthLog::query()->doesntExist()) {
             (new ServerHealthDemoSeeder)->run();
         }
 
@@ -47,7 +49,7 @@ class ServerHealthController extends Controller
             'activeAlerts' => $activeAlerts,
         ];
 
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
+        $spark = fn (string $key) => OperationalMetrics::emptySparkline();
 
         $fleetCpuSeries = $this->buildFleetAggregateSeries($servers, 'cpu_percent');
         $fleetRamSeries = $this->buildFleetAggregateSeries($servers, 'ram_percent');
@@ -120,9 +122,9 @@ class ServerHealthController extends Controller
             'bandwidth_out' => $this->bandwidthMbps($server, 'out'),
             'tenants' => $server->tenants_count,
             'projects' => $server->projects_count,
-            'cpu_series' => $cpuSeries ?: $this->pseudoSparkline('cpu-'.$server->id),
-            'ram_series' => $ramSeries ?: $this->pseudoSparkline('ram-'.$server->id),
-            'net_series' => $this->buildNetSeriesForServer($server),
+            'cpu_series' => $cpuSeries,
+            'ram_series' => $ramSeries,
+            'net_series' => $cpuSeries ? $this->buildNetSeriesForServer($server) : [],
             'ssl_status' => $server->ssl_status ?? 'unknown',
             'backup_status' => $server->backup_status ?? 'unknown',
             'specs' => [
@@ -181,24 +183,12 @@ class ServerHealthController extends Controller
 
     private function pingMs(Server $server): ?int
     {
-        if ($server->status === 'offline') {
-            return null;
-        }
-
-        return 12 + (crc32((string) $server->id) % 38);
+        return null;
     }
 
-    private function bandwidthMbps(Server $server, string $direction): float
+    private function bandwidthMbps(Server $server, string $direction): ?float
     {
-        if ($server->status === 'offline') {
-            return 0;
-        }
-
-        $base = 40 + (crc32($server->name.$direction) % 120);
-        $log = $server->latestHealthLog;
-        $cpuFactor = $log ? ((float) $log->cpu_percent / 100) : 0.5;
-
-        return round($base * (0.6 + $cpuFactor * 0.8), 1);
+        return null;
     }
 
     /**
@@ -206,12 +196,7 @@ class ServerHealthController extends Controller
      */
     private function buildNetSeriesForServer(Server $server): array
     {
-        $pts = [];
-        for ($i = 0; $i < 12; $i++) {
-            $pts[] = $this->bandwidthMbps($server, 'in') * (0.7 + sin($i / 2) * 0.25);
-        }
-
-        return $pts;
+        return [];
     }
 
     /**
@@ -219,32 +204,19 @@ class ServerHealthController extends Controller
      */
     private function runningServices(Server $server): array
     {
+        if (! $server->last_synced_at) {
+            return [];
+        }
+
         if ($server->status === 'offline') {
             return [
-                ['name' => 'sshd', 'status' => 'stopped'],
-                ['name' => 'nginx', 'status' => 'stopped'],
-                ['name' => 'mysql', 'status' => 'stopped'],
+                ['name' => __('Reachability'), 'status' => 'stopped'],
             ];
         }
 
-        $services = [
-            ['name' => 'sshd', 'status' => 'running'],
-            ['name' => 'nginx', 'status' => 'running'],
-            ['name' => 'php-fpm', 'status' => 'running'],
-            ['name' => 'mysql', 'status' => 'running'],
-            ['name' => 'redis', 'status' => 'running'],
-            ['name' => 'supervisord', 'status' => 'running'],
+        return [
+            ['name' => __('Reachability'), 'status' => 'running'],
         ];
-
-        if ($server->whm_cpanel_reference || str_contains(strtolower($server->name), 'whm')) {
-            $services[] = ['name' => 'cpanel', 'status' => 'running'];
-        }
-
-        if ((float) ($server->latestHealthLog?->cpu_percent ?? 0) > 85) {
-            $services[4]['status'] = 'degraded';
-        }
-
-        return $services;
     }
 
     /**
@@ -423,7 +395,7 @@ class ServerHealthController extends Controller
     {
         $online = $servers->where('status', 'online');
         if ($online->isEmpty()) {
-            return $this->pseudoSparkline($field);
+            return [];
         }
 
         $points = [];
@@ -440,7 +412,7 @@ class ServerHealthController extends Controller
             $points[] = $count > 0 ? round($sum / $count, 1) : 0;
         }
 
-        return $points ?: $this->pseudoSparkline($field);
+        return $points;
     }
 
     /**
@@ -448,17 +420,7 @@ class ServerHealthController extends Controller
      */
     private function buildNetworkSeries(): array
     {
-        $series = [];
-        for ($i = 23; $i >= 0; $i--) {
-            $t = now()->subHours($i);
-            $series[] = [
-                'label' => $t->format('H:i'),
-                'in' => round(180 + sin($i / 3) * 60 + ($i % 5) * 8, 1),
-                'out' => round(120 + cos($i / 4) * 40 + ($i % 7) * 6, 1),
-            ];
-        }
-
-        return $series;
+        return [];
     }
 
     /**
@@ -467,20 +429,16 @@ class ServerHealthController extends Controller
      */
     private function buildUptimeHistory(Collection $servers): array
     {
-        $days = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $online = $servers->where('status', 'online')->count();
-            $total = max(1, $servers->count());
-            $base = ($online / $total) * 100;
-            $variance = (($i * 13) % 7) - 3;
-
-            $days[] = [
-                'label' => now()->subDays($i)->format('D'),
-                'pct' => round(min(100, max(92, $base + $variance)), 2),
-            ];
+        $synced = $servers->filter(fn (Server $s) => $s->last_synced_at !== null);
+        if ($synced->isEmpty()) {
+            return [];
         }
 
-        return $days;
+        $pct = round(($synced->where('status', 'online')->count() / max(1, $synced->count())) * 100, 2);
+
+        return [
+            ['label' => now()->format('D'), 'pct' => $pct],
+        ];
     }
 
     /**
@@ -488,15 +446,7 @@ class ServerHealthController extends Controller
      */
     private function buildIncidentTrends(): array
     {
-        $trends = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $trends[] = [
-                'label' => now()->subDays($i)->format('D'),
-                'count' => max(0, 5 - $i + (($i * 3) % 4)),
-            ];
-        }
-
-        return $trends;
+        return [];
     }
 
     /**
@@ -512,17 +462,4 @@ class ServerHealthController extends Controller
         ];
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 12; $i++) {
-            $pts[] = 28 + (($h >> ($i * 3)) & 0x3F) % 52;
-        }
-
-        return $pts;
-    }
 }

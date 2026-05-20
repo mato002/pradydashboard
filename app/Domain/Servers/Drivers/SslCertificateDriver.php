@@ -17,13 +17,12 @@ class SslCertificateDriver implements ServerMonitorDriver
 
     public function supports(Server $server): bool
     {
-        return filled(ServerConnectionConfig::hostname($server))
-            || filled($server->ip_address);
+        return filled(ServerConnectionConfig::hostname($server));
     }
 
     public function poll(Server $server): ServerTelemetrySnapshot
     {
-        $host = ServerConnectionConfig::hostname($server) ?? $server->ip_address;
+        $host = ServerConnectionConfig::hostname($server);
 
         if (! $host) {
             return new ServerTelemetrySnapshot;
@@ -51,6 +50,7 @@ class SslCertificateDriver implements ServerMonitorDriver
                 sslStatus: 'unreachable',
                 messages: [__('SSL endpoint unreachable: :error', ['error' => $errstr ?: $errno])],
                 sources: [$this->key()],
+                healthChecks: ['ssl_reachable' => false],
             );
         }
 
@@ -64,6 +64,7 @@ class SslCertificateDriver implements ServerMonitorDriver
                 sslStatus: 'unknown',
                 messages: [__('Could not read peer certificate.')],
                 sources: [$this->key()],
+                healthChecks: ['ssl_reachable' => true],
             );
         }
 
@@ -76,10 +77,11 @@ class SslCertificateDriver implements ServerMonitorDriver
             return new ServerTelemetrySnapshot(
                 sslStatus: 'unknown',
                 sources: [$this->key()],
+                healthChecks: ['ssl_reachable' => true],
             );
         }
 
-        $daysLeft = now()->diffInDays($validTo, false);
+        $daysLeft = (int) now()->diffInDays($validTo, false);
         $expiry = $validTo->toDateString();
 
         if ($daysLeft < 0) {
@@ -93,11 +95,13 @@ class SslCertificateDriver implements ServerMonitorDriver
         return new ServerTelemetrySnapshot(
             sslStatus: $status,
             certificateExpiry: $expiry,
+            sslDaysRemaining: max(0, $daysLeft),
             messages: [__('Certificate valid until :date (:days days).', [
                 'date' => $expiry,
                 'days' => max(0, $daysLeft),
             ])],
             sources: [$this->key()],
+            healthChecks: ['ssl_reachable' => true],
         );
     }
 }

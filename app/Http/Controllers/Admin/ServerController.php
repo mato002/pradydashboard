@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Activity\ActivityLogQuery;
+use App\Domain\Activity\ActivityLogger;
+use App\Domain\Hr\HrOverview;
+use App\Support\ActivityLogCategory;
+use App\Domain\Servers\FleetSummaryService;
 use App\Domain\Servers\ServerTelemetrySyncService;
+use App\Domain\Servers\Support\ServerConnectionConfig;
 use App\Http\Controllers\Controller;
-use App\Models\Backup;
 use App\Models\Server;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -15,23 +20,37 @@ class ServerController extends Controller
 {
     public function __construct(
         private readonly ServerTelemetrySyncService $telemetrySync,
+        private readonly FleetSummaryService $fleetSummary,
+        private readonly HrOverview $hrOverview,
+        private readonly ActivityLogger $activityLogger,
+        private readonly ActivityLogQuery $activityQuery,
     ) {}
 
     public function index(): View
     {
-        $servers = Server::query()
-            ->withCount(['projects', 'tenants'])
+        $scopeFilter = app(\App\Domain\Rbac\RbacScopeFilter::class);
+
+        $servers = $scopeFilter
+            ->applyServerScope(Server::query())
+            ->withCount(['projects', 'tenants', 'openProviderNotices'])
             ->orderBy('name')
             ->paginate(15);
 
-        return view('admin.servers.index', compact('servers'));
+        $scopedServers = $scopeFilter->applyServerScope(Server::query());
+        $allManualTelemetry = $scopedServers->exists()
+            && ! (clone $scopedServers)->where('telemetry_mode', '!=', 'manual')->exists();
+
+        return view('admin.servers.index', compact('servers', 'allManualTelemetry'));
     }
 
     public function create(): View
     {
         return view('admin.servers.create', [
-            'server' => new Server,
-            'fleet' => $this->fleetSummary(),
+            'server' => new Server([
+                'telemetry_mode' => 'whm',
+                'currency' => 'KES',
+                'provider' => 'Hostinger',
+            ]),
         ]);
     }
 
@@ -39,21 +58,44 @@ class ServerController extends Controller
     {
         $data = $this->validated($request);
         $data['hosted_domains'] = $this->parseDomains($request->string('hosted_domains_text')->toString());
-        $data['provisioning_meta'] = $this->extractProvisioningMeta($request);
 
         $server = Server::query()->create($data);
-        $sync = $this->telemetrySync->sync($server);
+        $server->mergeProvisioningMeta($this->extractProvisioningMeta($request));
+        $server->save();
+
+        $this->activityLogger->log(
+            'server.created',
+            ActivityLogCategory::SERVER,
+            __('Server :name created', ['name' => $server->name]),
+            $server,
+        );
+
+        $sync = $server->telemetry_mode === 'manual'
+            ? ['ok' => false, 'message' => __('Server created with manual monitoring.')]
+            : $this->telemetrySync->sync($server->fresh());
 
         return redirect()
             ->route('servers.show', $server)
             ->with('status', $sync['ok']
                 ? __('Server created and telemetry synced.')
-                : __('Server created. Configure WHM/cloud credentials to enable live sync.'));
+                : ($sync['message'] ?? __('Server created. Configure WHM API token to enable live metrics.')));
     }
 
     public function syncTelemetry(Server $server): RedirectResponse
     {
         $result = $this->telemetrySync->sync($server);
+        $server->refresh();
+
+        if (! $result['ok'] || in_array($server->status, ['offline', 'degraded', 'warning'], true)) {
+            $this->activityLogger->log(
+                'server.telemetry_warning',
+                ActivityLogCategory::SERVER,
+                $result['message'],
+                $server,
+                null,
+                ['status' => $server->status, 'sync_status' => $server->sync_status],
+            );
+        }
 
         return redirect()
             ->back()
@@ -89,9 +131,27 @@ class ServerController extends Controller
 
     public function show(Server $server): View
     {
-        $server->load(['projects', 'tenants']);
+        $server->load([
+            'projects',
+            'tenants',
+            'latestHealthLog',
+            'providerNotices' => fn ($q) => $q->orderByDesc('notice_date')->orderByDesc('id'),
+            'tenantProjectDeployments' => fn ($q) => $q->with([
+                'subscription.tenant',
+                'subscription.project',
+                'subscription.versionTracking',
+            ]),
+        ]);
 
-        return view('admin.servers.show', compact('server'));
+        $healthChecks = $server->meta('last_health_checks', []);
+
+        return view('admin.servers.show', [
+            'server' => $server,
+            'healthChecks' => $healthChecks,
+            'staffAssignments' => $this->hrOverview->assignmentsFor($server),
+            'activityLogs' => $this->activityQuery->forContext(serverId: $server->id),
+            'operationalRisks' => app(\App\Domain\Operations\OperationalRiskScanner::class)->forServer($server->id),
+        ]);
     }
 
     public function edit(Server $server): View
@@ -105,78 +165,34 @@ class ServerController extends Controller
         $data['hosted_domains'] = $this->parseDomains($request->string('hosted_domains_text')->toString());
 
         $server->update($data);
+        $server->mergeProvisioningMeta($this->extractProvisioningMeta($request));
+        $server->save();
 
-        return redirect()->route('servers.show', $server)->with('status', 'Server updated.');
+        $changes = array_intersect_key($server->getChanges(), $data);
+        unset($changes['updated_at']);
+        if ($changes !== []) {
+            $old = [];
+            foreach (array_keys($changes) as $key) {
+                $old[$key] = $server->getOriginal($key);
+            }
+            $this->activityLogger->log(
+                'server.updated',
+                ActivityLogCategory::SERVER,
+                __('Server :name updated', ['name' => $server->name]),
+                $server,
+                $old,
+                $changes,
+            );
+        }
+
+        return redirect()->route('servers.show', $server)->with('status', __('Server updated.'));
     }
 
     public function destroy(Server $server): RedirectResponse
     {
         $server->delete();
 
-        return redirect()->route('servers.index')->with('status', 'Server removed.');
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function fleetSummary(): array
-    {
-        $servers = Server::query()->get();
-        $online = $servers->where('status', 'online');
-        $sslProtected = $servers->filter(fn (Server $s) => $this->isSslHealthy($s->ssl_status))->count();
-        $withBackup = $servers->filter(fn (Server $s) => filled($s->backup_status) && ! str_contains(strtolower((string) $s->backup_status), 'fail'))->count();
-        $totalCpu = (int) $servers->sum('cpu_cores');
-        $avgDisk = round((float) $servers->avg('disk_usage_percent'), 1);
-        $backupCoverage = $servers->isEmpty() ? 0 : (int) round(($withBackup / $servers->count()) * 100);
-
-        $backupCount = Backup::query()->where('status', 'completed')->count();
-        $uptime = $servers->isEmpty()
-            ? 99.9
-            : round(99.5 + min(0.49, $online->count() / max(1, $servers->count()) * 0.49), 2);
-
-        return [
-            'total' => $servers->count(),
-            'healthy' => $online->count(),
-            'ssl_protected' => $sslProtected,
-            'backup_coverage' => $backupCoverage,
-            'cpu_capacity' => $totalCpu,
-            'avg_disk' => $avgDisk,
-            'fleet_uptime' => $uptime,
-            'backup_jobs' => $backupCount,
-            'spark' => [
-                'total' => $this->sparkSeries($servers->count(), 8),
-                'healthy' => $this->sparkSeries($online->count(), 8),
-                'ssl' => $this->sparkSeries($sslProtected, 8),
-                'backup' => $this->sparkSeries($backupCoverage, 8),
-                'cpu' => $this->sparkSeries($totalCpu, 8),
-                'disk' => $this->sparkSeries((int) $avgDisk, 8),
-                'uptime' => $this->sparkSeries((int) ($uptime * 10), 8),
-            ],
-        ];
-    }
-
-    /**
-     * @return array<int, int>
-     */
-    private function sparkSeries(int $base, int $len): array
-    {
-        $points = [];
-        for ($i = 0; $i < $len; $i++) {
-            $points[] = max(0, $base + random_int(-2, 3) - ($len - $i));
-        }
-
-        return $points;
-    }
-
-    private function isSslHealthy(?string $status): bool
-    {
-        if (! $status) {
-            return false;
-        }
-
-        $s = strtolower($status);
-
-        return str_contains($s, 'valid') || str_contains($s, 'active') || str_contains($s, 'ok');
+        return redirect()->route('servers.index')->with('status', __('Server removed.'));
     }
 
     /**
@@ -193,9 +209,11 @@ class ServerController extends Controller
             'ram_gb' => ['nullable', 'numeric', 'min:0'],
             'storage_gb' => ['nullable', 'numeric', 'min:0'],
             'disk_usage_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'status' => ['required', 'in:online,offline,unknown'],
+            'status' => ['required', 'in:online,offline,warning,unknown'],
+            'telemetry_mode' => ['required', 'in:manual,basic,whm'],
             'ssl_status' => ['nullable', 'string', 'max:255'],
             'backup_status' => ['nullable', 'string', 'max:255'],
+            'billing_status' => ['nullable', 'string', 'max:64'],
             'renewal_expires_at' => ['nullable', 'date'],
             'monthly_cost' => ['nullable', 'numeric', 'min:0'],
             'currency' => ['required', 'string', 'size:3'],
@@ -210,22 +228,32 @@ class ServerController extends Controller
     private function extractProvisioningMeta(Request $request): array
     {
         $keys = [
-            'hostname', 'private_ip', 'region', 'environment',
-            'bandwidth_gbps', 'network_speed', 'operating_system', 'architecture',
+            'hostname', 'private_ip', 'region', 'environment', 'operating_system',
             'ssh_port', 'ssh_username', 'api_endpoint', 'auth_method', 'api_token',
-            'firewall_status', 'access_restrictions',
-            'certificate_expiry', 'waf_enabled', 'security_scan_status', 'monitoring_enabled',
-            'billing_cycle', 'provider_invoice_ref', 'tenant_allocation', 'usage_threshold',
-            'deployment_strategy', 'ci_cd_enabled', 'auto_backups', 'rollback_enabled',
-            'monitoring_stack', 'notification_channels',
-            'cloud_instance_id', 'whm_username', 'whm_port',
+            'firewall_status', 'access_restrictions', 'whm_username', 'whm_port',
+            'certificate_expiry', 'backup_policy', 'last_backup_date', 'monitoring_enabled',
+            'bandwidth_gbps', 'bandwidth_used', 'architecture', 'network_speed',
+            'waf_enabled', 'cloud_instance_id', 'hostinger_api_token', 'provider_api_token',
+            'provider_account_ref', 'billing_cycle', 'provider_invoice_ref', 'billing_notes',
+            'deployment_strategy', 'auto_backups', 'rollback_enabled', 'ci_cd_enabled',
         ];
 
+        $tokenKeys = ['api_token', 'hostinger_api_token', 'provider_api_token'];
         $meta = [];
+
         foreach ($keys as $key) {
-            if ($request->has("meta.$key")) {
-                $meta[$key] = $request->input("meta.$key");
+            if (! $request->has("meta.$key")) {
+                continue;
             }
+
+            $value = $request->input("meta.$key");
+
+            if (in_array($key, $tokenKeys, true)
+                && ($value === ServerConnectionConfig::MASKED_TOKEN_PLACEHOLDER || $value === '')) {
+                continue;
+            }
+
+            $meta[$key] = $value;
         }
 
         return $meta;

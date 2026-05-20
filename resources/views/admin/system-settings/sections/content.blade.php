@@ -79,9 +79,16 @@
     </div>
 @elseif ($activeSection === 'billing')
     <div class="grid gap-4 sm:grid-cols-2">
+        <div class="sm:col-span-2">{!! $input('company_legal_name', __('Company legal name')) !!}</div>
+        {!! $input('tax_pin', __('Tax PIN')) !!}
+        {!! $toggle('vat_registered', __('VAT registered')) !!}
+        {!! $input('tax_rate', __('VAT / tax rate %')) !!}
         {!! $input('default_currency', __('Default currency')) !!}
-        {!! $input('tax_rate', __('Tax rate %')) !!}
         {!! $input('invoice_prefix', __('Invoice prefix')) !!}
+        <div class="sm:col-span-2">{!! $input('payment_instructions', __('Payment instructions')) !!}</div>
+        {!! $input('default_payment_terms', __('Default payment terms')) !!}
+        <div class="sm:col-span-2">{!! $input('invoice_footer_notes', __('Invoice footer notes')) !!}</div>
+        {!! $input('usage_rate_per_mb', __('Usage rate per MB')) !!}
         {!! $input('grace_period_days', __('Grace period (days)')) !!}
         {!! $toggle('auto_suspend', __('Auto-suspend overdue tenants')) !!}
     </div>

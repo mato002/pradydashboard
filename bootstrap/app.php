@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Middleware\AuthenticateProjectApiToken;
+use App\Http\Middleware\EnsurePasswordIsFresh;
+use App\Http\Middleware\EnsurePermission;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,7 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'project.api' => AuthenticateProjectApiToken::class,
+            'permission' => EnsurePermission::class,
+            'password.fresh' => EnsurePasswordIsFresh::class,
         ]);
+
+        $middleware->appendToGroup('web', EnsurePasswordIsFresh::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
@@ -24,5 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule): void {
         $minutes = max(1, (int) config('infrastructure.sync.interval_minutes', 5));
         $schedule->command('servers:sync-telemetry')->cron("*/{$minutes} * * * *");
+        $schedule->command('billing:process-recurring')->dailyAt('06:00');
+        $schedule->command('billing:process-overdue')->dailyAt('07:00');
     })
     ->create();

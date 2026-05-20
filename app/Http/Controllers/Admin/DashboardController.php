@@ -2,8 +2,13 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Activity\ActivityLogQuery;
+use App\Domain\Billing\BillingSummary;
+use App\Domain\Operations\OperationalRiskScanner;
+use App\Domain\Support\SupportOperationsSummary;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Support\OperationalMetrics;
 use App\Models\Server;
 use App\Models\SupportTicket;
 use App\Models\Tenant;
@@ -22,17 +27,19 @@ class DashboardController extends Controller
         $activeTenants = Tenant::query()->where('status', 'active')->count();
         $onlineServers = Server::query()->where('status', 'online')->count();
         $overdueTenants = Tenant::query()->where('status', 'overdue')->count();
-        $openTickets = SupportTicket::query()->where('status', 'open')->count();
-        $highPriorityTickets = SupportTicket::query()
-            ->where('status', 'open')
-            ->whereIn('priority', ['high', 'urgent'])
-            ->count();
+        $supportSummary = app(SupportOperationsSummary::class)->platform();
+        $openTickets = $supportSummary['open_tickets'];
+        $highPriorityTickets = $supportSummary['urgent_tickets'];
 
-        $tenantMrr = (float) Tenant::query()->whereIn('status', ['active', 'trial'])->sum('subscription_amount');
-        $projectMrr = (float) Project::query()->sum('monthly_revenue');
-        $monthlyRevenue = $tenantMrr > 0 ? $tenantMrr : $projectMrr;
+        $billingSummary = app(BillingSummary::class)->platform();
+        $monthlyRevenue = (float) $billingSummary['mrr'];
+        $overdueExposure = (float) $billingSummary['overdue_amount'];
 
-        $overdueExposure = (float) Tenant::query()->where('status', 'overdue')->sum('subscription_amount');
+        if ($monthlyRevenue <= 0) {
+            $tenantMrr = (float) Tenant::query()->whereIn('status', ['active', 'trial'])->sum('subscription_amount');
+            $projectMrr = (float) Project::query()->sum('monthly_revenue');
+            $monthlyRevenue = $tenantMrr > 0 ? $tenantMrr : $projectMrr;
+        }
 
         $revenueGrowthPct = $this->estimateRevenueGrowthPercent();
 
@@ -53,7 +60,9 @@ class DashboardController extends Controller
         $productRevenue = $this->buildProductRevenue();
         $systemAlerts = $this->buildSystemAlerts($servers, $overdueTenants);
 
-        $spark = fn (string $key) => $this->pseudoSparkline($key);
+        $spark = fn (string $key) => OperationalMetrics::emptySparkline();
+        $recentActivity = app(ActivityLogQuery::class)->recent(10);
+        $attentionRisks = app(OperationalRiskScanner::class)->attentionRequired(8);
 
         return view('admin.dashboard', compact(
             'serversCount',
@@ -74,6 +83,10 @@ class DashboardController extends Controller
             'productRevenue',
             'systemAlerts',
             'spark',
+            'billingSummary',
+            'supportSummary',
+            'recentActivity',
+            'attentionRisks',
         ));
     }
 
@@ -114,14 +127,6 @@ class DashboardController extends Controller
                 'label' => $month->format('M'),
                 'value' => $sum,
             ];
-        }
-
-        if (collect($series)->sum('value') <= 0 && $fallbackMrr > 0) {
-            $base = $fallbackMrr / max(1, count($series));
-            foreach ($series as $k => $row) {
-                $wave = 0.82 + ($k * 0.03);
-                $series[$k]['value'] = round($base * $wave, 2);
-            }
         }
 
         return $series;
@@ -214,17 +219,4 @@ class DashboardController extends Controller
         return $alerts->take(8);
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private function pseudoSparkline(string $seed): array
-    {
-        $h = crc32($seed);
-        $pts = [];
-        for ($i = 0; $i < 8; $i++) {
-            $pts[] = 32 + (($h >> ($i * 3)) & 0x3f) % 48;
-        }
-
-        return $pts;
-    }
 }

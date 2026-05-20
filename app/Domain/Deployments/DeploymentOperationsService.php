@@ -453,7 +453,7 @@ class DeploymentOperationsService
                     return min(100, round(($latest->uptime_seconds / 86400) * 100, 2));
                 }
 
-                return $project->status === 'active' ? 99.9 : 0.0;
+                return $project->status === 'active' && $server->last_synced_at ? 100.0 : null;
             }
 
             $online = $logs->filter(fn ($log) => ($log->cpu_percent ?? 0) < 95)->count();

@@ -89,7 +89,7 @@
 
         {{-- KPIs --}}
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-            <x-ui.kpi-card :title="__('Payments Collected')" :value="$kpis['collected']" :animate="false" :trend="'+18.6%'" :sublabel="__('Successful settlements')" :points="$spark('pay-collected')" tone="emerald">
+            <x-ui.kpi-card :title="__('Payments Collected')" :value="$kpis['collected']" :animate="false" :sublabel="__('Successful settlements')" :points="$spark('pay-collected')" tone="emerald">
                 <x-slot name="icon">
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                 </x-slot>
@@ -104,17 +104,17 @@
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                 </x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Refunds')" :value="$kpis['refunds']" :animate="false" :trend="'−1.2%'" :sublabel="__('Processed reversals')" :points="$spark('pay-refund')" tone="violet">
+            <x-ui.kpi-card :title="__('Refunds')" :value="$kpis['refunds']" :animate="false" :sublabel="__('Processed reversals')" :points="$spark('pay-refund')" tone="violet">
                 <x-slot name="icon">
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 010 12h-3" /></svg>
                 </x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Collection Rate')" :value="$kpis['collectionRate'].'%'" :animate="false" :trend="'+2.4%'" :sublabel="__('Success vs attempts')" :points="$spark('pay-rate')" tone="sky">
+            <x-ui.kpi-card :title="__('Collection Rate')" :value="$kpis['collectionRate'].'%'" :animate="false" :sublabel="__('Success vs attempts')" :points="$spark('pay-rate')" tone="sky">
                 <x-slot name="icon">
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
                 </x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Gateway Health')" :value="$kpis['gatewayHealth'].'%'" :animate="false" :trend="'+0.3%'" :sublabel="__('Fleet uptime avg')" :points="$spark('pay-gw')" tone="indigo">
+            <x-ui.kpi-card :title="__('Gateway Health')" :value="$kpis['gatewayHealth'].'%'" :animate="false" :sublabel="__('Fleet uptime avg')" :points="$spark('pay-gw')" tone="indigo">
                 <x-slot name="icon">
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.374 3.374 0 001.22 3.68 3.375 3.375 0 003.68-1.22A3.375 3.375 0 0018 12.75a3.375 3.375 0 00-3.68-1.22 3.374 3.374 0 00-1.22-3.68A3.375 3.375 0 0012 8.25c1.268 0 2.39.63 3.068 1.593a3.374 3.374 0 003.68 1.22 3.375 3.375 0 001.22 3.68A3.375 3.375 0 0015.75 21a3.375 3.375 0 003.68-1.22 3.374 3.374 0 001.22-3.68A3.375 3.375 0 0021 12.75a3.375 3.375 0 00-3.68-1.22 3.374 3.374 0 00-1.22-3.68A3.375 3.375 0 0012 8.25z" /></svg>
                 </x-slot>

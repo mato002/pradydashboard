@@ -6,6 +6,7 @@ use App\Domain\Deployments\DeploymentOpsRecorder;
 use App\Domain\Deployments\DeploymentOperationsService;
 use App\Domain\Deployments\DeploymentPipelineBuilder;
 use App\Http\Controllers\Controller;
+use App\Support\DemoMode;
 use App\Models\Project;
 use App\Models\ProjectDeployment;
 use Database\Seeders\DeploymentDemoSeeder;
@@ -21,7 +22,7 @@ class DeploymentController extends Controller
 
     public function index(): View
     {
-        if (ProjectDeployment::query()->count() < 8) {
+        if (DemoMode::enabled() && ProjectDeployment::query()->count() < 8) {
             (new DeploymentDemoSeeder)->run();
         }
 

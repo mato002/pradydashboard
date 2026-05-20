@@ -24,6 +24,6 @@ class SubscriptionCenterTest extends TestCase
             ->assertOk()
             ->assertSee(__('Subscription & Billing Center'))
             ->assertSee(__('MRR'))
-            ->assertSee(__('Starter'));
+            ->assertSee(__('Add Subscription'));
     }
 }

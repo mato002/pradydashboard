@@ -73,19 +73,19 @@
 
         {{-- KPIs --}}
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-            <x-ui.kpi-card :title="__('Total Servers')" :value="$kpis['total']" :trend="'+2'" :sublabel="__('Registered VPS nodes')" :points="$spark('sh-total')" tone="indigo">
+            <x-ui.kpi-card :title="__('Total Servers')" :value="$kpis['total']" :sublabel="__('Registered VPS nodes')" :points="$spark('sh-total')" tone="indigo">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0A2.25 2.25 0 013.75 12V5.25a2.25 2.25 0 012.25-2.25h13.5a2.25 2.25 0 012.25 2.25V12a2.25 2.25 0 01-2.25 2.25m-13.5 0h13.5" /></svg></x-slot>
             </x-ui.kpi-card>
             <x-ui.kpi-card :title="__('Online Servers')" :value="$kpis['online']" :trend="round(($kpis['online'] / max(1, $kpis['total'])) * 100).'%'" :sublabel="__('Heartbeat OK')" :points="$spark('sh-online')" tone="emerald">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg></x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Avg CPU')" :value="$kpis['avgCpu'].'%'" :animate="false" :trend="'+4.2%'" :sublabel="__('Fleet aggregate')" :points="$fleetCpuSeries" tone="sky">
+            <x-ui.kpi-card :title="__('Avg CPU')" :value="$kpis['avgCpu'].'%'" :animate="false" :sublabel="__('Fleet aggregate')" :points="$fleetCpuSeries" tone="sky">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5" /></svg></x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Avg RAM')" :value="$kpis['avgRam'].'%'" :animate="false" :trend="'+1.8%'" :sublabel="__('Memory pressure')" :points="$fleetRamSeries" tone="violet">
+            <x-ui.kpi-card :title="__('Avg RAM')" :value="$kpis['avgRam'].'%'" :animate="false" :sublabel="__('Memory pressure')" :points="$fleetRamSeries" tone="violet">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21" /></svg></x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Avg Disk')" :value="$kpis['avgDisk'].'%'" :animate="false" :trend="'−0.6%'" :sublabel="__('Block storage')" :points="$utilizationTrends['disk']" tone="amber">
+            <x-ui.kpi-card :title="__('Avg Disk')" :value="$kpis['avgDisk'].'%'" :animate="false" :sublabel="__('Block storage')" :points="$utilizationTrends['disk']" tone="amber">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" /></svg></x-slot>
             </x-ui.kpi-card>
             <x-ui.kpi-card :title="__('Active Alerts')" :value="$kpis['activeAlerts']" :trend="$kpis['activeAlerts'] > 0 ? '!' : '✓'" :sublabel="__('WARNING + CRITICAL')" :points="$spark('sh-alerts')" tone="rose">

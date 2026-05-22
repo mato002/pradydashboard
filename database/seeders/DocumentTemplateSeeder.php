@@ -43,5 +43,7 @@ class DocumentTemplateSeeder extends Seeder
                 ],
             );
         }
+
+        $this->call(PradyClassicA5TemplateSeeder::class);
     }
 }

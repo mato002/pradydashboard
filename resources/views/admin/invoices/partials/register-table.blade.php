@@ -53,15 +53,35 @@
                     <td>
                         <a href="{{ route('invoices.show', $invoice) }}" class="font-mono text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400">{{ $invoice->invoice_number }}</a>
                     </td>
-                    <td class="text-sm">{{ $invoice->tenant?->company_name ?? '—' }}</td>
+                    <td class="text-sm">
+                        @if ($invoice->tenant)
+                            {{ $invoice->tenant->company_name }}
+                        @else
+                            <span class="font-medium">{{ $invoice->manual_client_name ?? '—' }}</span>
+                            <span class="mt-0.5 block text-[10px] font-medium text-amber-600 dark:text-amber-400">{{ __('Manual') }}</span>
+                        @endif
+                    </td>
                     <td class="max-w-[100px] truncate text-xs">{{ $invoice->projectSubscription?->project?->name ?? $invoice->product_name ?? '—' }}</td>
-                    <td class="text-xs">{{ $invoice->documentTypeLabel() }}</td>
+                    <td>
+                        @php
+                            $docVariant = match ($invoice->document_type) {
+                                'quotation' => 'purple',
+                                'proforma' => 'warning',
+                                'receipt' => 'success',
+                                'invoice' => 'info',
+                                default => 'neutral',
+                            };
+                        @endphp
+                        <x-ui.status-badge :variant="$docVariant">{{ $invoice->documentTypeLabel() }}</x-ui.status-badge>
+                    </td>
                     <td><x-ui.status-badge :variant="$invoice->statusVariant()">{{ $invoice->statusLabel() }}</x-ui.status-badge></td>
                     <td class="text-right font-mono text-xs tabular-nums">{{ $invoice->formattedAmount() }}</td>
                     <td class="text-right font-mono text-xs tabular-nums">{{ \App\Models\TenantInvoice::formatMoney((float) $invoice->amount_paid, $invoice->currency) }}</td>
                     <td class="text-right font-mono text-xs tabular-nums">{{ $invoice->formattedBalance() }}</td>
                     <td class="text-xs">{{ $invoice->due_date?->format('M j, Y') ?? '—' }}</td>
-                    <td class="text-xs">{{ $invoice->deliveryStatusLabel() }}</td>
+                    <td>
+                        <x-ui.status-badge :variant="$invoice->deliveryStatusVariant()">{{ $invoice->deliveryStatusLabel() }}</x-ui.status-badge>
+                    </td>
                     <td class="max-w-[80px] truncate text-xs text-slate-500" title="{{ $invoice->generated_by }}">{{ $invoice->generated_by ?? '—' }}</td>
                     <td class="text-xs font-medium {{ $invoice->agingColor() }}">{{ $invoice->agingLabel() }}</td>
                     <td class="text-right">

@@ -32,5 +32,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('servers:sync-telemetry')->cron("*/{$minutes} * * * *");
         $schedule->command('billing:process-recurring')->dailyAt('06:00');
         $schedule->command('billing:process-overdue')->dailyAt('07:00');
+        $schedule->command('billing:send-reminders')->dailyAt('08:00');
     })
     ->create();

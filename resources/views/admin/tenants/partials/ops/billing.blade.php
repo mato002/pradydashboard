@@ -21,6 +21,21 @@
     </div>
 </div>
 
+<div class="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
+    <h3 class="text-sm font-semibold text-emerald-900 dark:text-emerald-100">{{ __('Record payment') }}</h3>
+    <p class="mt-1 text-xs text-slate-600">{{ __('Record against a specific invoice from the invoice page, or save an unreconciled payment to the Payment Inbox.') }}</p>
+    <div class="mt-3">
+        @include('admin.invoices.partials.record-payment-form', [
+            'formAction' => route('invoices.payments.record'),
+            'defaultTenantId' => $tenant->id,
+            'filterTenants' => collect([$tenant]),
+            'paymentSources' => \App\Support\Billing\PaymentSource::all(),
+            'compact' => true,
+        ])
+    </div>
+    <a href="{{ route('invoices.index', ['tab' => 'payments', 'tenant_id' => $tenant->id]) }}" class="mt-2 inline-block text-xs font-semibold text-indigo-600">{{ __('Open Payment Inbox for this tenant →') }}</a>
+</div>
+
 <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
     <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('Centralized billing from project subscriptions, modules, integrations, and usage.') }}</p>
     @if ($billableSubscriptions->isNotEmpty())
@@ -135,6 +150,76 @@
         </div>
     </div>
 </div>
+
+@if (! empty($tenantCollections))
+    <div class="mb-6 grid gap-4 lg:grid-cols-2">
+        <div class="rounded-xl border border-rose-200 bg-rose-50/40 p-4 dark:border-rose-900 dark:bg-rose-950/30">
+            <h3 class="text-sm font-semibold text-rose-900 dark:text-rose-100">{{ __('Collections overview') }}</h3>
+            <dl class="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div><dt class="text-xs text-slate-500">{{ __('Unpaid invoices') }}</dt><dd class="font-semibold">{{ $tenantCollections['unpaid_invoices']->count() }}</dd></div>
+                <div><dt class="text-xs text-slate-500">{{ __('Overdue') }}</dt><dd class="font-semibold text-rose-700">{{ $tenantCollections['overdue_invoices']->count() }}</dd></div>
+                <div><dt class="text-xs text-slate-500">{{ __('Open promises') }}</dt><dd class="font-semibold">{{ $tenantCollections['promises']->count() }}</dd></div>
+                <div><dt class="text-xs text-slate-500">{{ __('Next follow-up') }}</dt><dd class="font-semibold">{{ optional($tenantCollections['next_follow_up'])->format('M j, Y') ?? '—' }}</dd></div>
+            </dl>
+        </div>
+        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <h3 class="text-sm font-semibold">{{ __('Open collection notes') }}</h3>
+            <ul class="mt-2 max-h-40 space-y-2 overflow-y-auto text-xs">
+                @forelse ($tenantCollections['open_collection_notes'] ?? $tenantCollections['collection_notes'] as $note)
+                    <li>
+                        <a href="{{ route('invoices.show', $note->invoice) }}" class="font-semibold text-indigo-600">{{ $note->invoice?->invoice_number }}</a>
+                        <span class="text-slate-500 capitalize"> · {{ str_replace('_', ' ', $note->outcome ?? $note->note_type) }}</span>
+                        <p>{{ Str::limit($note->displayText(), 70) }}</p>
+                    </li>
+                @empty
+                    <li class="text-slate-500">{{ __('No collection notes.') }}</li>
+                @endforelse
+            </ul>
+        </div>
+    </div>
+    @if ($tenantCollections['unpaid_invoices']->isNotEmpty())
+        <div class="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-gray-900">
+            <h3 class="text-sm font-semibold">{{ __('Unpaid invoices') }}</h3>
+            <ul class="mt-2 space-y-1 text-sm">
+                @foreach ($tenantCollections['unpaid_invoices'] as $inv)
+                    <li class="flex justify-between gap-2">
+                        <a href="{{ route('invoices.show', $inv) }}#collections" class="font-mono text-indigo-600">{{ $inv->invoice_number }}</a>
+                        <span class="font-mono text-xs">{{ $inv->formattedBalance() }} · {{ $inv->due_date?->format('M j') ?? '—' }}</span>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+    @if ($tenantCollections['overdue_invoices']->isNotEmpty())
+        <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50/30 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+            <h3 class="text-sm font-semibold">{{ __('Overdue invoices') }}</h3>
+            <ul class="mt-2 space-y-1 text-sm">
+                @foreach ($tenantCollections['overdue_invoices'] as $inv)
+                    <li class="flex justify-between">
+                        <a href="{{ route('invoices.show', $inv) }}" class="font-mono text-indigo-600">{{ $inv->invoice_number }}</a>
+                        <span class="font-mono">{{ $inv->formattedBalance() }} · {{ $inv->due_date?->format('M j') }}</span>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+    @if ($tenantCollections['promises']->isNotEmpty())
+        <div class="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 dark:border-emerald-900">
+            <h3 class="text-sm font-semibold">{{ __('Promise to pay') }}</h3>
+            <ul class="mt-2 space-y-1 text-sm">
+                @foreach ($tenantCollections['promises'] as $note)
+                    <li>
+                        <a href="{{ route('invoices.show', $note->invoice) }}" class="text-indigo-600">{{ $note->invoice?->invoice_number }}</a>
+                        — {{ $note->promise_to_pay_date?->format('M j, Y') }}
+                        @if ($note->promised_amount)
+                            ({{ \App\Models\TenantInvoice::formatMoney((float) $note->promised_amount, $note->invoice?->currency) }})
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+@endif
 
 <div class="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
     <div class="border-b border-gray-200 px-4 py-3 dark:border-gray-800">

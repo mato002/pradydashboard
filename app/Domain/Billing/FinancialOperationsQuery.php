@@ -14,6 +14,8 @@ use App\Models\TenantInvoice;
 use App\Models\TenantPayment;
 use App\Models\TenantProjectSubscription;
 use App\Support\Billing\BillingDocumentType;
+use App\Support\Billing\CollectionNoteOutcome;
+use App\Support\Billing\CollectionNoteStatus;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -271,21 +273,162 @@ class FinancialOperationsQuery
      */
     public function collectionsData(RbacScopeFilter $scopeFilter): Collection
     {
-        return $this->overdueProcessor->overdueInvoices()
-            ->when(! $scopeFilter->isGlobalScope(), function (Collection $items) use ($scopeFilter) {
-                $tenantIds = $this->scopedTenants($scopeFilter)->pluck('id');
+        return $this->collectionsOverview($scopeFilter)['overdue'];
+    }
 
-                return $items->whereIn('tenant_id', $tenantIds);
-            });
+    /**
+     * @return array<string, mixed>
+     */
+    public function collectionsOverview(RbacScopeFilter $scopeFilter): array
+    {
+        $open = $this->scopedOpenInvoices($scopeFilter);
+        $rules = BillingAutomationRule::platform();
+        $suspensionThreshold = (int) $rules->suspension_after_days + (int) $rules->grace_period_days;
+
+        $withBalance = $open->filter(fn (TenantInvoice $i) => $i->balanceDue() > 0.009);
+
+        $overdue = $withBalance->filter(fn (TenantInvoice $i) => $i->due_date && $i->due_date->isPast())->values();
+
+        $dueSoon = $withBalance->filter(function (TenantInvoice $i): bool {
+            if (! $i->due_date || $i->due_date->isPast()) {
+                return false;
+            }
+
+            return $i->due_date->lte(now()->addDays(7)->endOfDay());
+        })->values();
+
+        $unpaidSent = $withBalance->where('status', 'sent')->values();
+
+        $partiallyPaid = $withBalance->whereIn('status', ['partial', 'partially_paid'])->values();
+
+        $suspensionCandidates = $overdue
+            ->filter(fn (TenantInvoice $i) => $i->due_date && $i->due_date->diffInDays(now()->startOfDay()) >= $suspensionThreshold)
+            ->groupBy('tenant_id')
+            ->map(fn (Collection $group) => [
+                'tenant' => $group->first()?->tenant?->company_name ?? __('Unknown'),
+                'tenant_id' => $group->first()?->tenant_id,
+                'balance' => $group->sum(fn (TenantInvoice $inv) => $inv->balanceDue()),
+                'invoice_count' => $group->count(),
+                'max_days_overdue' => $group->max(fn (TenantInvoice $inv) => $inv->due_date?->diffInDays(now()->startOfDay()) ?? 0),
+            ])
+            ->sortByDesc('balance')
+            ->values();
+
+        $tenantIds = $withBalance->pluck('tenant_id')->filter()->unique()->values();
+        $noteQuery = CollectionNote::query()
+            ->with(['invoice.tenant', 'user'])
+            ->when(
+                ! $scopeFilter->isGlobalScope(),
+                fn ($q) => $q->where(function ($inner) use ($tenantIds): void {
+                    $inner->whereIn('tenant_id', $tenantIds)
+                        ->orWhereHas('invoice', fn ($iq) => $iq->whereIn('tenant_id', $tenantIds));
+                }),
+            );
+
+        $promisedPayments = (clone $noteQuery)
+            ->open()
+            ->where('outcome', CollectionNoteOutcome::PROMISED_PAYMENT)
+            ->orderBy('promise_to_pay_date')
+            ->limit(25)
+            ->get();
+
+        $overdueFollowUps = (clone $noteQuery)
+            ->open()
+            ->whereNotNull('follow_up_date')
+            ->whereDate('follow_up_date', '<', now()->toDateString())
+            ->orderBy('follow_up_date')
+            ->limit(25)
+            ->get();
+
+        return [
+            'overdue' => $overdue,
+            'due_soon' => $dueSoon,
+            'unpaid_sent' => $unpaidSent,
+            'partially_paid' => $partiallyPaid,
+            'top_debtors' => $this->topDebtors($scopeFilter, 8),
+            'aging_buckets' => $this->collectionsAgingBuckets($scopeFilter),
+            'promised_payments' => $promisedPayments,
+            'overdue_follow_ups' => $overdueFollowUps,
+            'suspension_candidates' => $suspensionCandidates,
+        ];
+    }
+
+    /**
+     * Collections aging: days overdue.
+     *
+     * @return array<int, array{label: string, key: string, amount: float, count: int, pct: float}>
+     */
+    public function collectionsAgingBuckets(RbacScopeFilter $scopeFilter): array
+    {
+        $open = $this->scopedOpenInvoices($scopeFilter)
+            ->filter(fn (TenantInvoice $i) => $i->due_date && $i->due_date->isPast() && $i->balanceDue() > 0.009);
+
+        $buckets = [
+            '0_7' => ['label' => __('0–7 days'), 'key' => '0_7', 'amount' => 0.0, 'count' => 0],
+            '8_14' => ['label' => __('8–14 days'), 'key' => '8_14', 'amount' => 0.0, 'count' => 0],
+            '15_30' => ['label' => __('15–30 days'), 'key' => '15_30', 'amount' => 0.0, 'count' => 0],
+            '31_60' => ['label' => __('31–60 days'), 'key' => '31_60', 'amount' => 0.0, 'count' => 0],
+            '60_plus' => ['label' => __('60+ days'), 'key' => '60_plus', 'amount' => 0.0, 'count' => 0],
+        ];
+
+        foreach ($open as $invoice) {
+            $days = (int) $invoice->due_date->diffInDays(now()->startOfDay());
+            $key = match (true) {
+                $days <= 7 => '0_7',
+                $days <= 14 => '8_14',
+                $days <= 30 => '15_30',
+                $days <= 60 => '31_60',
+                default => '60_plus',
+            };
+            $buckets[$key]['amount'] += $invoice->balanceDue();
+            $buckets[$key]['count']++;
+        }
+
+        $total = max(1, array_sum(array_column($buckets, 'amount')));
+
+        return array_map(function (array $bucket) use ($total): array {
+            return [
+                'label' => $bucket['label'],
+                'key' => $bucket['key'],
+                'amount' => round($bucket['amount'], 2),
+                'count' => $bucket['count'],
+                'pct' => round(($bucket['amount'] / $total) * 100, 1),
+            ];
+        }, array_values($buckets));
+    }
+
+    /** @return Collection<int, TenantInvoice> */
+    private function scopedOpenInvoices(RbacScopeFilter $scopeFilter): Collection
+    {
+        $query = (clone $this->scopedInvoices($scopeFilter))
+            ->where('document_type', BillingDocumentType::INVOICE)
+            ->whereNotIn('status', ['paid', 'cancelled', 'void', 'draft'])
+            ->with(['tenant', 'projectSubscription.project']);
+
+        if (! $scopeFilter->isGlobalScope()) {
+            $query->whereIn('tenant_id', $this->scopedTenants($scopeFilter)->pluck('id'));
+        }
+
+        return $query->get();
     }
 
     /**
      * @return Collection<int, CollectionNote>
      */
-    public function recentCollectionNotes(int $limit = 15): Collection
+    public function recentCollectionNotes(RbacScopeFilter $scopeFilter, int $limit = 15): Collection
     {
+        $tenantIds = $this->scopedTenants($scopeFilter)->pluck('id');
+
         return CollectionNote::query()
             ->with(['invoice.tenant', 'user'])
+            ->when(
+                ! $scopeFilter->isGlobalScope(),
+                fn ($q) => $q->where(function ($inner) use ($tenantIds): void {
+                    $inner->whereIn('tenant_id', $tenantIds)
+                        ->orWhereHas('invoice', fn ($iq) => $iq->whereIn('tenant_id', $tenantIds));
+                }),
+            )
+            ->whereIn('status', [CollectionNoteStatus::OPEN, CollectionNoteStatus::COMPLETED])
             ->latest()
             ->limit($limit)
             ->get();

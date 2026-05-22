@@ -16,12 +16,14 @@
                 <p class="mt-1 max-w-2xl text-sm text-slate-500">{{ __('Subscriptions, invoicing, collections, documents, and automation — real data only.') }}</p>
             </div>
             <div class="flex flex-wrap gap-2">
+                <a href="{{ route('invoices.create', ['type' => 'invoice']) }}" class="rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow">{{ __('Create Invoice') }}</a>
+                <a href="{{ route('invoices.create', ['type' => 'proforma']) }}" class="rounded-xl border border-teal-600 px-3 py-2.5 text-sm font-semibold text-teal-700 dark:text-teal-300">{{ __('Create Proforma') }}</a>
+                <a href="{{ route('invoices.create', ['type' => 'quotation']) }}" class="rounded-xl border border-violet-600 px-3 py-2.5 text-sm font-semibold text-violet-700 dark:text-violet-300">{{ __('Create Quotation') }}</a>
+                <a href="{{ route('invoices.create', ['type' => 'receipt']) }}" class="rounded-xl border border-emerald-600 px-3 py-2.5 text-sm font-semibold text-emerald-700 dark:text-emerald-300">{{ __('Create Receipt') }}</a>
                 <form method="POST" action="{{ route('invoices.generate') }}">@csrf
                     <button type="submit" class="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg">{{ __('Run billing cycle') }}</button>
                 </form>
-                <form method="POST" action="{{ route('invoices.reminders') }}">@csrf
-                    <button type="submit" class="rounded-xl border px-4 py-2.5 text-sm font-semibold">{{ __('Collections run') }}</button>
-                </form>
+                <a href="{{ route('invoices.index', ['tab' => 'collections']) }}" class="rounded-xl border border-amber-600 px-4 py-2.5 text-sm font-semibold text-amber-800 dark:text-amber-200">{{ __('Collections') }}</a>
             </div>
         </div>
 
@@ -151,51 +153,51 @@
                 </table>
             </div>
         @elseif ($tab === 'collections')
-            <div class="grid gap-5 lg:grid-cols-12">
-                <div class="lg:col-span-7">@include('admin.invoices.partials.register-table')</div>
-                <div class="lg:col-span-5 space-y-4">
-                    <div class="rounded-2xl border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                        <h3 class="text-sm font-semibold">{{ __('Aging buckets') }}</h3>
-                        <ul class="mt-3 space-y-2">
-                            @foreach ($agingBuckets as $bucket)
-                                <li>
-                                    <div class="flex justify-between text-xs"><span>{{ $bucket['label'] }} ({{ $bucket['count'] }})</span><span>{{ \App\Models\TenantInvoice::formatMoney($bucket['amount']) }}</span></div>
-                                    <div class="mt-1 h-1.5 rounded-full bg-slate-100"><div class="h-full rounded-full bg-amber-500" style="width:{{ max(2,$bucket['pct']) }}%"></div></div>
-                                </li>
-                            @endforeach
-                        </ul>
-                    </div>
-                    <div class="rounded-2xl border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                        <h3 class="text-sm font-semibold">{{ __('Collection notes') }}</h3>
-                        <ul class="mt-2 max-h-64 space-y-2 overflow-y-auto text-xs">
-                            @forelse ($collectionNotes as $note)
-                                <li class="border-b border-slate-100 pb-2 dark:border-slate-800">
-                                    <span class="font-semibold capitalize">{{ str_replace('_',' ',$note->note_type) }}</span>
-                                    — {{ $note->invoice?->invoice_number }}
-                                    <p class="text-slate-500">{{ $note->body }}</p>
-                                </li>
-                            @empty
-                                <li class="text-slate-500">{{ __('No collection activity yet.') }}</li>
-                            @endforelse
-                        </ul>
-                    </div>
-                </div>
-            </div>
+            @include('admin.invoices.partials.collections-dashboard', ['collections' => $collections])
         @elseif ($tab === 'templates')
             <div class="grid gap-4 md:grid-cols-2">
                 @foreach ($templates as $template)
-                    <form method="POST" action="{{ route('invoices.templates.update', $template) }}" class="rounded-2xl border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <div class="rounded-2xl border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                        <div class="mb-2 flex flex-wrap items-center gap-2">
+                            <p class="text-xs uppercase text-slate-500">{{ $template->type }} · {{ $template->style }}</p>
+                            <span class="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{{ $template->paper_size }} · {{ $template->orientation }}</span>
+                            @if ($template->is_default)
+                                <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">{{ __('Default') }}</span>
+                            @endif
+                        </div>
+                        <a href="{{ route('invoices.templates.sample-preview', $template) }}" target="_blank" class="mb-2 inline-block text-xs font-semibold text-indigo-600 hover:underline">{{ __('Template preview') }} →</a>
+                        <form method="POST" action="{{ route('invoices.templates.update', $template) }}">
                         @csrf @method('PATCH')
-                        <p class="text-xs uppercase text-slate-500">{{ $template->type }} · {{ $template->style }}</p>
                         <input name="name" value="{{ $template->name }}" class="mt-1 w-full rounded border-slate-300 text-sm dark:bg-slate-950">
+                        <div class="mt-2 grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] text-slate-500">{{ __('Paper') }}</label>
+                                <select name="paper_size" class="mt-0.5 w-full rounded text-xs dark:bg-slate-950">
+                                    @foreach (['A4' => 'A4', 'A5' => 'A5'] as $val => $lab)
+                                        <option value="{{ $val }}" @selected(strtoupper($template->paper_size) === $val)>{{ $lab }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">{{ __('Orientation') }}</label>
+                                <select name="orientation" class="mt-0.5 w-full rounded text-xs dark:bg-slate-950">
+                                    <option value="portrait" @selected($template->orientation === 'portrait')>{{ __('Portrait') }}</option>
+                                    <option value="landscape" @selected($template->orientation === 'landscape')>{{ __('Landscape') }}</option>
+                                </select>
+                            </div>
+                        </div>
                         <div class="mt-2 grid grid-cols-2 gap-2">
                             <input name="primary_color" value="{{ $template->brandingValue('primary_color', '#4f46e5') }}" placeholder="{{ __('Primary') }}" class="rounded text-xs">
                             <input name="accent_color" value="{{ $template->brandingValue('accent_color', '#f59e0b') }}" placeholder="{{ __('Accent') }}" class="rounded text-xs">
                         </div>
                         <textarea name="footer_text" rows="2" class="mt-2 w-full rounded text-xs" placeholder="{{ __('Footer') }}">{{ $template->brandingValue('footer_text') }}</textarea>
                         <label class="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" name="show_qr" value="1" @checked($template->brandingValue('show_qr'))> {{ __('QR code') }}</label>
+                        <label class="mt-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                            <input type="checkbox" name="is_default" value="1" @checked($template->is_default)> {{ __('Default for this document type') }}
+                        </label>
                         <button type="submit" class="mt-3 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white">{{ __('Save template') }}</button>
-                    </form>
+                        </form>
+                    </div>
                 @endforeach
             </div>
         @elseif ($tab === 'automation')
@@ -224,6 +226,8 @@
                 </div>
                 <button type="submit" class="mt-4 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white">{{ __('Save rules') }}</button>
             </form>
+        @elseif ($tab === 'payments')
+            @include('admin.invoices.partials.payments-inbox')
         @elseif ($tab === 'activity')
             <x-admin.activity-feed :logs="$activityLogs" />
         @else

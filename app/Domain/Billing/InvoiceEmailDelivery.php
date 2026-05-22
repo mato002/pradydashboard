@@ -3,6 +3,7 @@
 namespace App\Domain\Billing;
 
 use App\Domain\Activity\ActivityLogger;
+use App\Mail\FinancialDocumentMail;
 use App\Models\GeneratedDocument;
 use App\Models\TenantInvoice;
 use App\Support\ActivityLogCategory;
@@ -15,72 +16,101 @@ class InvoiceEmailDelivery
         private readonly ActivityLogger $activityLogger,
     ) {}
 
-    public function send(TenantInvoice $invoice, GeneratedDocument $document): bool
-    {
-        $email = $invoice->tenant?->billing_email;
+    /**
+     * @return array{success: bool, message: string}
+     */
+    public function send(
+        TenantInvoice $invoice,
+        GeneratedDocument $document,
+        string $recipientEmail,
+        bool $isResend = false,
+    ): array {
+        if (! $document->pdf_path || ! \Illuminate\Support\Facades\Storage::disk('local')->exists($document->pdf_path)) {
+            $error = __('PDF attachment is missing. Finalize the document and try again.');
+            $this->recordFailure($invoice, $document, $error);
 
-        if (! $email) {
-            $invoice->update(['delivery_status' => 'failed']);
-            $document->update(['delivery_status' => 'failed']);
-
-            return false;
+            return ['success' => false, 'message' => $error];
         }
 
         try {
-            Mail::raw(
-                __('Please find your :type :number attached.', [
-                    'type' => $invoice->document_type ?? 'invoice',
-                    'number' => $invoice->invoice_number,
-                ]),
-                function ($message) use ($email, $invoice, $document): void {
-                    $message->to($email)
-                        ->subject(__(':app — :type :number', [
-                            'app' => config('app.name'),
-                            'type' => ucfirst((string) ($invoice->document_type ?? 'invoice')),
-                            'number' => $invoice->invoice_number,
-                        ]));
-
-                    if ($document->pdf_path && \Illuminate\Support\Facades\Storage::disk('local')->exists($document->pdf_path)) {
-                        $message->attach(
-                            \Illuminate\Support\Facades\Storage::disk('local')->path($document->pdf_path),
-                            ['as' => $invoice->invoice_number.'.pdf']
-                        );
-                    }
-                }
-            );
+            Mail::to($recipientEmail)->send(new FinancialDocumentMail($invoice, $document->pdf_path, $isResend));
 
             $now = now();
+            $status = $isResend ? 'resent' : 'sent';
+
             $invoice->update([
                 'email_delivered_at' => $now,
-                'delivery_status' => 'sent',
+                'email_sent_at' => $now,
+                'delivery_status' => $status,
+                'last_delivery_error' => null,
             ]);
             $document->update([
                 'email_sent_at' => $now,
-                'delivery_status' => 'sent',
+                'delivery_status' => $status,
+                'last_delivery_error' => null,
             ]);
 
+            $action = $isResend ? 'document.resent' : 'document.emailed';
             $this->activityLogger->log(
-                'invoice.emailed',
+                $action,
                 ActivityLogCategory::BILLING,
-                __(':type :number emailed to :email', [
-                    'type' => $invoice->document_type ?? 'invoice',
-                    'number' => $invoice->invoice_number,
-                    'email' => $email,
-                ]),
+                $isResend
+                    ? __(':type :number resent to :email', [
+                        'type' => $invoice->document_type ?? 'invoice',
+                        'number' => $invoice->invoice_number,
+                        'email' => $recipientEmail,
+                    ])
+                    : __(':type :number emailed to :email', [
+                        'type' => $invoice->document_type ?? 'invoice',
+                        'number' => $invoice->invoice_number,
+                        'email' => $recipientEmail,
+                    ]),
                 $invoice,
+                null,
+                ['email' => $recipientEmail, 'generated_document_id' => $document->id],
             );
 
-            return true;
+            return [
+                'success' => true,
+                'message' => $isResend
+                    ? __('Document resent to :email.', ['email' => $recipientEmail])
+                    : __('Document emailed to :email.', ['email' => $recipientEmail]),
+            ];
         } catch (\Throwable $e) {
-            Log::warning('Invoice email delivery failed', [
+            Log::warning('Financial document email delivery failed', [
                 'invoice_id' => $invoice->id,
                 'error' => $e->getMessage(),
             ]);
 
-            $invoice->update(['delivery_status' => 'failed']);
-            $document->update(['delivery_status' => 'failed']);
+            $error = $e->getMessage() ?: __('Mail transport error.');
+            $this->recordFailure($invoice, $document, $error);
 
-            return false;
+            return ['success' => false, 'message' => __('Email delivery failed: :error', ['error' => $error])];
         }
+    }
+
+    private function recordFailure(TenantInvoice $invoice, GeneratedDocument $document, string $error): void
+    {
+        $invoice->update([
+            'delivery_status' => 'failed',
+            'last_delivery_error' => $error,
+        ]);
+        $document->update([
+            'delivery_status' => 'failed',
+            'last_delivery_error' => $error,
+        ]);
+
+        $this->activityLogger->log(
+            'document.email_failed',
+            ActivityLogCategory::BILLING,
+            __(':type :number email failed: :error', [
+                'type' => $invoice->document_type ?? 'invoice',
+                'number' => $invoice->invoice_number,
+                'error' => $error,
+            ]),
+            $invoice,
+            null,
+            ['error' => $error],
+        );
     }
 }

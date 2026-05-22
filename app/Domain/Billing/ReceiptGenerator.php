@@ -25,6 +25,7 @@ class ReceiptGenerator
             $receipt = TenantInvoice::query()->create([
                 'tenant_id' => $invoice->tenant_id,
                 'tenant_project_subscription_id' => $invoice->tenant_project_subscription_id,
+                'linked_invoice_id' => $invoice->id,
                 'invoice_number' => $this->numberGenerator->next(BillingDocumentType::RECEIPT),
                 'document_type' => BillingDocumentType::RECEIPT,
                 'currency' => $invoice->currency,
@@ -61,7 +62,10 @@ class ReceiptGenerator
             $document = $this->documentFinalizer->finalize($receipt);
 
             if (BillingAutomationRule::platform()->auto_send_receipts) {
-                $this->emailDelivery->send($receipt, $document);
+                $recipient = trim((string) ($receipt->tenant?->billing_email ?? $receipt->manual_client_email ?? ''));
+                if ($recipient !== '') {
+                    $this->emailDelivery->send($receipt, $document, $recipient, false);
+                }
             }
 
             $this->activityLogger->log(

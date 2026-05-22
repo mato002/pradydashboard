@@ -6,6 +6,10 @@ use App\Models\TenantInvoice;
 
 class DocumentSnapshotBuilder
 {
+    public function __construct(
+        private readonly BillingSettings $billingSettings,
+    ) {}
+
     /**
      * Immutable payload captured at document finalization.
      *
@@ -14,6 +18,14 @@ class DocumentSnapshotBuilder
     public function build(TenantInvoice $invoice): array
     {
         $invoice->loadMissing(['tenant', 'lineItems', 'projectSubscription.project', 'payments']);
+
+        $clientName = $invoice->tenant?->company_name
+            ?? $invoice->manual_client_name
+            ?? __('Client');
+        $clientEmail = $invoice->tenant?->billing_email ?? $invoice->manual_client_email;
+        $clientPhone = $invoice->tenant?->billing_phone ?? $invoice->manual_client_phone;
+        $clientAddress = $invoice->tenant?->billing_address ?? $invoice->manual_client_address;
+        $contactName = $invoice->tenant?->billing_contact_name ?? $invoice->manual_client_name;
 
         return [
             'document_type' => $invoice->document_type ?? 'invoice',
@@ -32,11 +44,11 @@ class DocumentSnapshotBuilder
             'notes' => $invoice->notes,
             'product_name' => $invoice->product_name,
             'tenant' => [
-                'company_name' => $invoice->tenant?->company_name,
-                'billing_contact_name' => $invoice->tenant?->billing_contact_name,
-                'billing_email' => $invoice->tenant?->billing_email,
-                'billing_phone' => $invoice->tenant?->billing_phone,
-                'billing_address' => $invoice->tenant?->billing_address,
+                'company_name' => $clientName,
+                'billing_contact_name' => $contactName,
+                'billing_email' => $clientEmail,
+                'billing_phone' => $clientPhone,
+                'billing_address' => $clientAddress,
                 'billing_tax_pin' => $invoice->tenant?->billing_tax_pin,
             ],
             'project' => [
@@ -58,6 +70,13 @@ class DocumentSnapshotBuilder
                 'method' => $p->method,
                 'reference' => $p->reference,
             ])->values()->all(),
+            'payment_options' => [
+                'bank_name' => $this->billingSettings->bankName(),
+                'bank_account_number' => $this->billingSettings->bankAccountNumber(),
+                'bank_branch' => $this->billingSettings->bankBranch(),
+                'mpesa_paybill' => $this->billingSettings->mpesaPaybill(),
+                'paybill_account_number' => $this->billingSettings->paybillAccountNumber(),
+            ],
             'captured_at' => now()->toIso8601String(),
         ];
     }

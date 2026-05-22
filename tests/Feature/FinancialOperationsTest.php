@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Domain\Billing\DocumentFinalizer;
+use App\Domain\Billing\DocumentRenderer;
 use App\Domain\Billing\DocumentSnapshotBuilder;
 use App\Domain\Billing\OverdueBillingProcessor;
+use App\Domain\Billing\PdfGenerator;
 use App\Domain\Billing\QuotationConverter;
-use App\Domain\Billing\ReceiptGenerator;
 use App\Domain\Billing\RecurringBillingProcessor;
+use App\Domain\Billing\SampleFinancialDocumentSnapshot;
 use App\Domain\Tenancy\TenantProjectProvisioner;
 use App\Models\BillingAutomationRule;
 use App\Models\DocumentTemplate;
@@ -22,6 +24,7 @@ use App\Models\TenantProjectSubscription;
 use App\Models\User;
 use Database\Seeders\DocumentTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class FinancialOperationsTest extends TestCase
@@ -228,5 +231,32 @@ class FinancialOperationsTest extends TestCase
             ->get(route('invoices.index', ['tab' => 'overview']))
             ->assertOk()
             ->assertSee(__('Financial Operations Command Center'));
+    }
+
+    public function test_prady_a5_template_html_has_no_citation_artifacts(): void
+    {
+        $template = DocumentTemplate::query()->where('style', 'prady_classic_a5')->where('type', 'proforma')->firstOrFail();
+        $html = app(DocumentRenderer::class)->render($template, SampleFinancialDocumentSnapshot::proforma());
+
+        $this->assertStringNotContainsString('[cite:', $html);
+        $this->assertStringContainsString('Prady Technologies', $html);
+    }
+
+    public function test_proforma_pdf_generation_uses_a5_paper_template(): void
+    {
+        $template = DocumentTemplate::query()->where('style', 'prady_classic_a5')->where('type', 'proforma')->firstOrFail();
+        $this->assertSame('A5', strtoupper($template->paper_size));
+
+        $pdf = app(PdfGenerator::class);
+        if (! $pdf->isAvailable()) {
+            $this->markTestSkipped('dompdf not installed');
+        }
+
+        $html = app(DocumentRenderer::class)->render($template, SampleFinancialDocumentSnapshot::proforma());
+        $path = $pdf->store($html, 'test/proforma-a5-'.uniqid('', true).'.pdf', 'A5', 'portrait');
+
+        $this->assertNotNull($path);
+        $this->assertTrue(Storage::disk('local')->exists($path));
+        $this->assertGreaterThan(400, Storage::disk('local')->size($path));
     }
 }

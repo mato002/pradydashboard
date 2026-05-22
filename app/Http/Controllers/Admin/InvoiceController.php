@@ -5,16 +5,30 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Activity\ActivityLogger;
 use App\Domain\Activity\ActivityLogQuery;
 use App\Domain\Billing\BillingSettings;
+use App\Domain\Billing\CollectionReminderService;
+use App\Domain\Billing\CollectionWorkflowService;
+use App\Domain\Billing\DocumentDeliveryService;
 use App\Domain\Billing\DocumentFinalizer;
+use App\Domain\Billing\DocumentRenderer;
+use App\Domain\Billing\DocumentSnapshotBuilder;
 use App\Domain\Billing\DraftInvoiceGenerator;
 use App\Domain\Billing\FinancialOperationsQuery;
-use App\Domain\Billing\InvoiceEmailDelivery;
-use App\Domain\Billing\InvoicePaymentRecorder;
+use App\Domain\Billing\ManualDocumentCreator;
 use App\Domain\Billing\OverdueBillingProcessor;
+use App\Domain\Billing\PaymentInboxPresenter;
+use App\Domain\Billing\PaymentReconciliationQuery;
+use App\Domain\Billing\PaymentRecorderService;
+use App\Domain\Billing\ProformaConverter;
 use App\Domain\Billing\QuotationConverter;
 use App\Domain\Billing\RecurringBillingProcessor;
+use App\Domain\Billing\SampleFinancialDocumentSnapshot;
 use App\Domain\Rbac\RbacScopeFilter;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ManualFinancialDocumentRequest;
+use App\Http\Requests\PromiseToPayRequest;
+use App\Http\Requests\SendFinancialDocumentRequest;
+use App\Http\Requests\StoreCollectionNoteRequest;
+use App\Models\CollectionNote;
 use App\Models\BillingAutomationRule;
 use App\Models\DocumentTemplate;
 use App\Models\GeneratedDocument;
@@ -23,6 +37,8 @@ use App\Models\Tenant;
 use App\Models\TenantInvoice;
 use App\Support\ActivityLogCategory;
 use App\Support\Billing\BillingDocumentType;
+use App\Support\Billing\PaymentSource;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -43,6 +59,7 @@ class InvoiceController extends Controller
         'statements',
         'automation',
         'activity',
+        'payments',
     ];
 
     public function __construct(
@@ -76,7 +93,7 @@ class InvoiceController extends Controller
             'schedules' => $this->operations->schedules($scopeFilter),
             'templates' => $this->operations->templates(),
             'automationRules' => $this->operations->automationRules(),
-            'collectionNotes' => $this->operations->recentCollectionNotes(),
+            'collectionNotes' => $this->operations->recentCollectionNotes($scopeFilter),
             'activityLogs' => $this->operations->activityLogs($scopeFilter),
             'documentTypes' => BillingDocumentType::all(),
         ];
@@ -95,10 +112,130 @@ class InvoiceController extends Controller
         };
 
         if ($tab === 'collections') {
-            $data['overdueInvoices'] = $this->operations->collectionsData($scopeFilter);
+            $data['collections'] = $this->operations->collectionsOverview($scopeFilter);
+            $data['overdueInvoices'] = $data['collections']['overdue'];
+        }
+
+        if ($tab === 'payments') {
+            $paymentQuery = app(PaymentReconciliationQuery::class);
+            $data['paymentInbox'] = $paymentQuery->inbox($request, $scopeFilter);
+            $data['paymentInboxMeta'] = app(PaymentInboxPresenter::class)
+                ->metaForPayments($data['paymentInbox']->getCollection());
+            $data['paymentKpis'] = $paymentQuery->inboxKpis($scopeFilter);
+            $data['paymentSources'] = PaymentSource::all();
         }
 
         return view('admin.invoices.index', $data);
+    }
+
+    public function create(Request $request): View
+    {
+        $documentType = $request->query('type', BillingDocumentType::INVOICE);
+        if (! in_array($documentType, [
+            BillingDocumentType::INVOICE,
+            BillingDocumentType::PROFORMA,
+            BillingDocumentType::QUOTATION,
+            BillingDocumentType::RECEIPT,
+        ], true)) {
+            $documentType = BillingDocumentType::INVOICE;
+        }
+
+        $scopeFilter = app(RbacScopeFilter::class);
+        $tenants = $this->operations->filterTenants($scopeFilter);
+        $templates = DocumentTemplate::query()
+            ->where('type', $documentType)
+            ->where('active', true)
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get();
+
+        $openInvoices = TenantInvoice::query()
+            ->whereIn('document_type', [BillingDocumentType::INVOICE, BillingDocumentType::PROFORMA])
+            ->whereNotIn('status', ['paid', 'cancelled', 'void'])
+            ->when(! $scopeFilter->isGlobalScope(), function ($q) use ($scopeFilter) {
+                $q->whereIn('tenant_id', $scopeFilter->applyTenantScope(Tenant::query())->pluck('id'));
+            })
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get(['id', 'invoice_number', 'tenant_id', 'total', 'currency']);
+
+        $billing = app(BillingSettings::class);
+
+        return view('admin.invoices.create', [
+            'documentType' => $documentType,
+            'tenants' => $tenants,
+            'templates' => $templates,
+            'templatesMeta' => $templates->map(fn (DocumentTemplate $t) => [
+                'id' => $t->id,
+                'name' => $t->name,
+                'style' => $t->style,
+                'paper_size' => $t->paper_size,
+                'is_default' => $t->is_default,
+                'branding' => $t->branding ?? [],
+            ])->values()->all(),
+            'openInvoices' => $openInvoices,
+            'lineItemTypes' => ManualDocumentCreator::LINE_ITEM_TYPES,
+            'defaultCurrency' => $billing->defaultCurrency(),
+            'previewCompany' => [
+                'display_name' => $billing->companyLegalName() ?: config('app.name'),
+                'tax_pin' => $billing->taxPin(),
+                'footer_text' => $billing->invoiceFooterNotes(),
+                'payment_instructions' => $billing->paymentInstructions(),
+            ],
+            'paymentOptions' => [
+                'bank_name' => $billing->bankName(),
+                'bank_account_number' => $billing->bankAccountNumber(),
+                'mpesa_paybill' => $billing->mpesaPaybill(),
+                'paybill_account_number' => $billing->paybillAccountNumber(),
+            ],
+        ]);
+    }
+
+    public function store(ManualFinancialDocumentRequest $request, ManualDocumentCreator $creator): RedirectResponse
+    {
+        try {
+            $invoice = $creator->create($request->validated());
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()
+                ->route('invoices.create', ['type' => $request->input('document_type')])
+                ->withErrors($e->errors())
+                ->withInput();
+        }
+
+        return redirect()
+            ->route('invoices.preview', $invoice)
+            ->with('status', __('Document :number created. Review the preview below.', ['number' => $invoice->invoice_number]));
+    }
+
+    public function tenantBillingProfile(Tenant $tenant): JsonResponse
+    {
+        $tenant->load(['projectSubscriptions.project']);
+
+        return response()->json([
+            'company_name' => $tenant->company_name,
+            'billing_contact_name' => $tenant->billing_contact_name,
+            'billing_email' => $tenant->billing_email,
+            'billing_phone' => $tenant->billing_phone,
+            'billing_address' => $tenant->billing_address,
+            'currency' => $tenant->billing_preferred_currency ?? $tenant->tenant_currency ?? 'KES',
+            'subscriptions' => $tenant->projectSubscriptions->map(fn ($s) => [
+                'id' => $s->id,
+                'label' => ($s->project?->name ?? __('Project')).' — '.($s->package_name ?? ''),
+            ])->values(),
+        ]);
+    }
+
+    public function convertProforma(TenantInvoice $invoice, ProformaConverter $converter): RedirectResponse
+    {
+        try {
+            $newInvoice = $converter->convert($invoice);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('invoices.show', $newInvoice)
+            ->with('status', __('Proforma converted to invoice.'));
     }
 
     public function generate(Request $request, RecurringBillingProcessor $recurring, DraftInvoiceGenerator $drafts): RedirectResponse
@@ -126,13 +263,94 @@ class InvoiceController extends Controller
             ]));
     }
 
-    public function sendReminders(OverdueBillingProcessor $processor): RedirectResponse
+    public function sendReminders(CollectionReminderService $reminders): RedirectResponse
     {
-        $counts = $processor->process();
+        $counts = $reminders->processAutomatedReminders();
 
         return redirect()
             ->route('invoices.index', ['tab' => 'collections'])
-            ->with('status', __('Dispatched :count reminder(s).', ['count' => $counts['reminders']]));
+            ->with('status', __('Dispatched :count reminder(s). (:skipped skipped)', [
+                'count' => $counts['reminders'],
+                'skipped' => $counts['skipped'],
+            ]));
+    }
+
+    public function sendInvoiceReminder(
+        Request $request,
+        TenantInvoice $invoice,
+        CollectionReminderService $reminders,
+    ): RedirectResponse {
+        $request->validate(['recipient_email' => ['nullable', 'email', 'max:255']]);
+
+        $result = $reminders->sendReminder($invoice, $request->input('recipient_email'));
+
+        return $result['success']
+            ? back()->with('status', $result['message'])
+            : back()->with('error', $result['message']);
+    }
+
+    public function storeCollectionNote(
+        StoreCollectionNoteRequest $request,
+        TenantInvoice $invoice,
+        CollectionWorkflowService $workflow,
+    ): RedirectResponse {
+        $workflow->addNote($invoice, $request->validated());
+
+        return back()->with('status', __('Collection note added.'));
+    }
+
+    public function completeCollectionFollowUp(
+        TenantInvoice $invoice,
+        CollectionNote $note,
+        CollectionWorkflowService $workflow,
+    ): RedirectResponse {
+        if ((int) $note->tenant_invoice_id !== (int) $invoice->id) {
+            abort(404);
+        }
+
+        $workflow->completeFollowUp($note);
+
+        return back()->with('status', __('Follow-up marked complete.'));
+    }
+
+    public function markInvoiceDisputed(
+        Request $request,
+        TenantInvoice $invoice,
+        CollectionWorkflowService $workflow,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'note' => ['nullable', 'string', 'max:5000'],
+            'follow_up_date' => ['nullable', 'date'],
+        ]);
+
+        $workflow->markDisputed($invoice, $data);
+
+        return back()->with('status', __('Invoice marked as disputed.'));
+    }
+
+    public function recordPromiseToPay(
+        PromiseToPayRequest $request,
+        TenantInvoice $invoice,
+        CollectionWorkflowService $workflow,
+    ): RedirectResponse {
+        $workflow->recordPromiseToPay($invoice, $request->validated());
+
+        return back()->with('status', __('Promise to pay recorded.'));
+    }
+
+    public function escalateInvoice(
+        Request $request,
+        TenantInvoice $invoice,
+        CollectionWorkflowService $workflow,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'note' => ['nullable', 'string', 'max:5000'],
+            'follow_up_date' => ['nullable', 'date'],
+        ]);
+
+        $workflow->escalate($invoice, $data);
+
+        return back()->with('status', __('Invoice escalated for follow-up.'));
     }
 
     public function toggleSchedule(InvoiceRecurringSchedule $schedule): RedirectResponse
@@ -186,6 +404,9 @@ class InvoiceController extends Controller
             'show_qr' => ['sometimes', 'boolean'],
             'watermark' => ['nullable', 'string', 'max:120'],
             'active' => ['sometimes', 'boolean'],
+            'paper_size' => ['nullable', 'string', 'max:16'],
+            'orientation' => ['nullable', 'string', 'max:16'],
+            'is_default' => ['sometimes', 'boolean'],
         ]);
 
         $branding = array_merge($template->branding ?? [], [
@@ -197,15 +418,43 @@ class InvoiceController extends Controller
             'watermark' => $data['watermark'] ?? null,
         ]);
 
-        $template->update([
+        $updates = [
             'name' => $data['name'],
             'branding' => $branding,
             'active' => $request->boolean('active', true),
-        ]);
+        ];
+
+        if (! empty($data['paper_size'])) {
+            $updates['paper_size'] = strtoupper($data['paper_size']);
+        }
+        if (! empty($data['orientation'])) {
+            $updates['orientation'] = strtolower($data['orientation']);
+        }
+
+        if ($request->boolean('is_default')) {
+            DocumentTemplate::query()
+                ->where('type', $template->type)
+                ->whereKeyNot($template->id)
+                ->update(['is_default' => false]);
+            $updates['is_default'] = true;
+        }
+
+        $template->update($updates);
 
         return redirect()
             ->route('invoices.index', ['tab' => 'templates'])
             ->with('status', __('Template updated.'));
+    }
+
+    public function previewDocumentTemplate(DocumentTemplate $documentTemplate, DocumentRenderer $renderer): View
+    {
+        abort_unless($documentTemplate->active, 404);
+        $html = $renderer->render($documentTemplate, SampleFinancialDocumentSnapshot::proforma());
+
+        return view('admin.invoices.template-sample-preview', [
+            'documentTemplate' => $documentTemplate,
+            'previewHtml' => $html,
+        ]);
     }
 
     public function approveQuotation(TenantInvoice $invoice, QuotationConverter $converter): RedirectResponse
@@ -230,88 +479,111 @@ class InvoiceController extends Controller
 
     public function show(TenantInvoice $invoice, BillingSettings $billingSettings): View
     {
-        $invoice->load(['tenant', 'lineItems', 'payments', 'projectSubscription.project', 'generatedDocuments']);
+        $invoice->load(['tenant', 'lineItems', 'payments', 'projectSubscription.project', 'generatedDocuments', 'collectionNotes']);
 
         return view('admin.invoices.show', [
             'invoice' => $invoice,
             'billingSettings' => $billingSettings,
             'activityLogs' => $this->activityQuery->forContext(invoiceId: $invoice->id),
+            'defaultRecipient' => $invoice->defaultRecipientEmail(),
+            'persistedDocument' => $invoice->generatedDocuments()->latest('id')->first(),
         ]);
     }
 
-    public function preview(TenantInvoice $invoice, DocumentFinalizer $finalizer): View
-    {
-        $document = $invoice->isFinalized()
-            ? $invoice->generatedDocuments()->latest('id')->first()
-            : $finalizer->finalize($invoice);
+    public function preview(
+        Request $request,
+        TenantInvoice $invoice,
+        DocumentRenderer $renderer,
+        DocumentSnapshotBuilder $builder,
+        DocumentFinalizer $finalizer,
+    ): View {
+        $invoice->load(['tenant', 'lineItems', 'projectSubscription.project', 'payments', 'generatedDocuments']);
+
+        $template = $this->resolvePreviewTemplate($request, $invoice, $finalizer);
+        $previewHtml = $renderer->render($template, $builder->build($invoice));
+
+        $templates = DocumentTemplate::query()
+            ->where('type', $invoice->document_type ?? 'invoice')
+            ->where('active', true)
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get();
+
+        $persistedDocument = $invoice->generatedDocuments()->latest('id')->first();
 
         return view('admin.invoices.preview', [
             'invoice' => $invoice,
-            'document' => $document,
+            'previewHtml' => $previewHtml,
+            'selectedTemplate' => $template,
+            'templates' => $templates,
+            'persistedDocument' => $persistedDocument,
+            'defaultRecipient' => $invoice->defaultRecipientEmail(),
         ]);
     }
 
-    public function downloadPdf(TenantInvoice $invoice, DocumentFinalizer $finalizer): Response|RedirectResponse
+    public function downloadPdf(Request $request, TenantInvoice $invoice, DocumentDeliveryService $delivery): Response|RedirectResponse|\Symfony\Component\HttpFoundation\StreamedResponse
     {
-        $document = $invoice->generatedDocuments()->latest('id')->first()
-            ?? $finalizer->finalize($invoice);
+        $templateId = $request->filled('template_id') ? $request->integer('template_id') : null;
 
-        if (! $document->pdf_path || ! Storage::disk('local')->exists($document->pdf_path)) {
-            return back()->with('error', __('PDF not available. Install dompdf/dompdf and regenerate.'));
+        return $delivery->downloadPdfResponse($invoice, $templateId);
+    }
+
+    public function emailDocument(
+        SendFinancialDocumentRequest $request,
+        TenantInvoice $invoice,
+        DocumentDeliveryService $delivery,
+    ): RedirectResponse {
+        $result = $delivery->sendEmail(
+            $invoice,
+            $request->validated('recipient_email'),
+            $request->boolean('resend'),
+        );
+
+        return $result['success']
+            ? back()->with('status', $result['message'])
+            : back()->with('error', $result['message']);
+    }
+
+    public function finalizeDocument(TenantInvoice $invoice, DocumentDeliveryService $delivery): RedirectResponse
+    {
+        $delivery->ensurePdf($invoice->fresh(['lineItems', 'tenant', 'projectSubscription.project']));
+
+        return back()->with('status', __('Document finalized and PDF prepared.'));
+    }
+
+    public function regeneratePdf(Request $request, TenantInvoice $invoice, DocumentFinalizer $finalizer): RedirectResponse
+    {
+        $request->validate([
+            'document_template_id' => ['nullable', 'integer', 'exists:document_templates,id'],
+        ]);
+
+        $template = null;
+        if ($request->filled('document_template_id')) {
+            $template = DocumentTemplate::query()
+                ->whereKey($request->integer('document_template_id'))
+                ->where('active', true)
+                ->where('type', $invoice->document_type ?? 'invoice')
+                ->firstOrFail();
         }
 
-        return response()->download(
-            Storage::disk('local')->path($document->pdf_path),
-            $invoice->invoice_number.'.pdf',
-        );
-    }
-
-    public function emailDocument(TenantInvoice $invoice, DocumentFinalizer $finalizer, InvoiceEmailDelivery $delivery): RedirectResponse
-    {
-        $document = $invoice->generatedDocuments()->latest('id')->first()
-            ?? $finalizer->finalize($invoice);
-
-        $delivery->send($invoice, $document)
-            ? back()->with('status', __('Document emailed.'))
-            : back()->with('error', __('Email delivery failed. Check billing email.'));
-    }
-
-    public function regeneratePdf(TenantInvoice $invoice, DocumentFinalizer $finalizer): RedirectResponse
-    {
-        $finalizer->regenerate($invoice);
+        $finalizer->regenerate($invoice->fresh(), $template);
 
         return back()->with('status', __('Document regenerated.'));
     }
 
-    public function markSent(TenantInvoice $invoice, DocumentFinalizer $finalizer, InvoiceEmailDelivery $delivery): RedirectResponse
+    public function markSent(TenantInvoice $invoice, DocumentDeliveryService $delivery): RedirectResponse
     {
-        if ($invoice->status !== 'draft') {
-            return back()->with('error', __('Only draft invoices can be marked as sent.'));
+        try {
+            $delivery->markSent(
+                $invoice,
+                BillingAutomationRule::platform()->auto_send_invoices
+                    && ($invoice->document_type ?? 'invoice') === BillingDocumentType::INVOICE,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        $old = ['status' => $invoice->status];
-        $invoice->update([
-            'status' => 'sent',
-            'issued_at' => $invoice->issued_at ?? now(),
-            'issue_date' => $invoice->issue_date ?? now()->toDateString(),
-        ]);
-
-        $document = $finalizer->finalize($invoice);
-
-        if (BillingAutomationRule::platform()->auto_send_invoices) {
-            $delivery->send($invoice, $document);
-        }
-
-        $this->activityLogger->log(
-            'invoice.marked_sent',
-            ActivityLogCategory::BILLING,
-            __('Invoice :number marked sent', ['number' => $invoice->invoice_number]),
-            $invoice,
-            $old,
-            ['status' => 'sent'],
-        );
-
-        return back()->with('status', __('Invoice marked as sent.'));
+        return back()->with('status', __('Document marked as sent and finalized.'));
     }
 
     public function cancel(TenantInvoice $invoice): RedirectResponse
@@ -339,41 +611,18 @@ class InvoiceController extends Controller
         return back()->with('status', __('Invoice cancelled.'));
     }
 
-    public function recordPayment(Request $request, TenantInvoice $invoice, InvoicePaymentRecorder $recorder): RedirectResponse
+    public function recordPayment(RecordPaymentRequest $request, TenantInvoice $invoice, PaymentRecorderService $recorder): RedirectResponse
     {
         if (in_array($invoice->status, ['cancelled', 'void', 'paid'], true)) {
             return back()->with('error', __('Cannot record payment on this invoice.'));
         }
 
-        $data = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'payment_date' => ['required', 'date'],
-            'method' => ['required', 'string', 'max:80'],
-            'reference' => ['nullable', 'string', 'max:120'],
-            'notes' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $data = $request->validated();
+        $data['tenant_invoice_id'] = $invoice->id;
 
-        $recorder->record($invoice, [
-            'amount' => $data['amount'],
-            'payment_date' => $data['payment_date'],
-            'method' => $data['method'],
-            'reference' => $data['reference'] ?? null,
-            'notes' => $data['notes'] ?? null,
-        ]);
+        $payment = $recorder->recordForInvoice($invoice, $data);
 
-        $this->activityLogger->log(
-            'payment.recorded',
-            ActivityLogCategory::BILLING,
-            __('Payment of :amount recorded on invoice :number', [
-                'amount' => $data['amount'],
-                'number' => $invoice->invoice_number,
-            ]),
-            $invoice,
-            null,
-            $data,
-        );
-
-        return back()->with('status', __('Payment recorded.'));
+        return back()->with('status', __('Payment recorded. Balance updated.'));
     }
 
     public function markPaid(TenantInvoice $invoice): RedirectResponse
@@ -398,5 +647,21 @@ class InvoiceController extends Controller
         );
 
         return back()->with('status', __('Invoice marked as paid.'));
+    }
+
+    private function resolvePreviewTemplate(Request $request, TenantInvoice $invoice, DocumentFinalizer $finalizer): DocumentTemplate
+    {
+        if ($request->filled('template_id')) {
+            $t = DocumentTemplate::query()
+                ->whereKey($request->integer('template_id'))
+                ->where('active', true)
+                ->where('type', $invoice->document_type ?? 'invoice')
+                ->first();
+            if ($t) {
+                return $t;
+            }
+        }
+
+        return $finalizer->resolveTemplate($invoice);
     }
 }

@@ -21,6 +21,7 @@ class GeneratedDocument extends Model
         'email_sent_at',
         'whatsapp_sent_at',
         'delivery_status',
+        'last_delivery_error',
     ];
 
     protected function casts(): array

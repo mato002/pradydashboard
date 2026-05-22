@@ -35,9 +35,11 @@
             <div
                 x-show="sidebarOpen"
                 x-transition.opacity
-                class="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
                 x-cloak
+                class="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:!hidden"
                 @click="sidebarOpen = false"
+                @keydown.escape.window="sidebarOpen = false"
+                aria-hidden="true"
             ></div>
 
             <aside
@@ -203,7 +205,6 @@
                 </header>
 
                 <div class="relative bg-mesh-light dark:bg-mesh-dark">
-                    <div class="pointer-events-none absolute inset-0 bg-slate-100/90 dark:bg-slate-950/80"></div>
                     <main class="relative mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                         @if (session('status'))
                             <div class="mb-5 rounded-2xl border border-emerald-200/80 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">

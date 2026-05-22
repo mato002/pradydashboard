@@ -52,6 +52,11 @@ class QuotationConverter
                 'due_date' => $quotation->due_date,
                 'product_name' => $quotation->product_name,
                 'notes' => $quotation->notes,
+                'manual_client_name' => $quotation->manual_client_name,
+                'manual_client_email' => $quotation->manual_client_email,
+                'manual_client_phone' => $quotation->manual_client_phone,
+                'manual_client_address' => $quotation->manual_client_address,
+                'document_template_id' => $quotation->document_template_id,
                 'source_quotation_id' => $quotation->id,
                 'generated_by' => auth()->user()?->email,
             ]);

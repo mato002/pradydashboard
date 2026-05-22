@@ -36,6 +36,7 @@ class DocumentRenderer
     {
         return [
             'company_name' => $this->billingSettings->companyLegalName() ?: config('app.name'),
+            'display_name' => $this->billingSettings->companyLegalName() ?: config('app.name'),
             'tax_pin' => $this->billingSettings->taxPin(),
             'primary_color' => '#4f46e5',
             'accent_color' => '#f59e0b',

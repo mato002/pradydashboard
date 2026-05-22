@@ -12,6 +12,10 @@ class TenantInvoice extends Model
 
     protected $fillable = [
         'tenant_id',
+        'manual_client_name',
+        'manual_client_email',
+        'manual_client_phone',
+        'manual_client_address',
         'tenant_project_subscription_id',
         'invoice_number',
         'document_type',
@@ -40,9 +44,14 @@ class TenantInvoice extends Model
         'notes',
         'payment_method',
         'generated_by',
+        'created_source',
+        'document_template_id',
+        'linked_invoice_id',
         'is_recurring',
         'pdf_generated',
         'email_delivered_at',
+        'email_sent_at',
+        'last_delivery_error',
         'collection_failed',
     ];
 
@@ -62,6 +71,7 @@ class TenantInvoice extends Model
             'is_recurring' => 'boolean',
             'pdf_generated' => 'boolean',
             'email_delivered_at' => 'datetime',
+            'email_sent_at' => 'datetime',
             'collection_failed' => 'boolean',
             'converted_at' => 'datetime',
             'finalized_at' => 'datetime',
@@ -109,6 +119,28 @@ class TenantInvoice extends Model
     public function sourceQuotation(): BelongsTo
     {
         return $this->belongsTo(self::class, 'source_quotation_id');
+    }
+
+    public function linkedInvoice(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'linked_invoice_id');
+    }
+
+    public function documentTemplate(): BelongsTo
+    {
+        return $this->belongsTo(DocumentTemplate::class);
+    }
+
+    public function clientDisplayName(): string
+    {
+        return $this->tenant?->company_name
+            ?? $this->manual_client_name
+            ?? __('Unknown client');
+    }
+
+    public function isManual(): bool
+    {
+        return $this->created_source === 'manual';
     }
 
     public function isFinalized(): bool
@@ -160,11 +192,29 @@ class TenantInvoice extends Model
     public function deliveryStatusLabel(): string
     {
         return match ($this->delivery_status) {
-            'sent' => __('Delivered'),
+            'sent' => __('Sent'),
+            'resent' => __('Resent'),
             'failed' => __('Failed'),
-            'pending' => __('Pending'),
+            'pending' => __('Not sent'),
+            'not_sent' => __('Not sent'),
             default => __('Not sent'),
         };
+    }
+
+    public function deliveryStatusVariant(): string
+    {
+        return match ($this->delivery_status) {
+            'sent', 'resent' => 'success',
+            'failed' => 'danger',
+            default => 'neutral',
+        };
+    }
+
+    public function defaultRecipientEmail(): ?string
+    {
+        $email = trim((string) ($this->tenant?->billing_email ?? $this->manual_client_email ?? ''));
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
     }
 
     public function invoiceTotal(): float

@@ -67,4 +67,40 @@ class BillingSettings
     {
         return (float) ($this->all()['usage_rate_per_mb'] ?? 0);
     }
+
+    public function bankName(): string
+    {
+        return (string) ($this->all()['bank_name'] ?? '');
+    }
+
+    public function bankAccountNumber(): string
+    {
+        return (string) ($this->all()['bank_account_number'] ?? '');
+    }
+
+    public function bankBranch(): string
+    {
+        return (string) ($this->all()['bank_branch'] ?? '');
+    }
+
+    public function mpesaPaybill(): string
+    {
+        return (string) ($this->all()['mpesa_paybill'] ?? '');
+    }
+
+    public function paybillAccountNumber(): string
+    {
+        return (string) ($this->all()['paybill_account_number'] ?? '');
+    }
+
+    public function billingFromEmail(): string
+    {
+        $configured = (string) ($this->all()['billing_from_email'] ?? '');
+
+        if ($configured !== '' && filter_var($configured, FILTER_VALIDATE_EMAIL)) {
+            return $configured;
+        }
+
+        return (string) config('mail.from.address', 'billing@example.com');
+    }
 }

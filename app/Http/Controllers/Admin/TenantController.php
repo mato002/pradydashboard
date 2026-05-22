@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Activity\ActivityLogQuery;
 use App\Domain\Operations\OperationalRiskScanner;
 use App\Domain\Billing\BillingSummary;
+use App\Domain\Billing\TenantCollectionsQuery;
 use App\Domain\Hr\HrOverview;
 use App\Domain\Support\SupportOperationsSummary;
 use App\Domain\Billing\DraftInvoiceGenerator;
@@ -234,6 +235,10 @@ class TenantController extends Controller
 
         $operationalRisks = app(OperationalRiskScanner::class)->forTenant($tenant->id);
 
+        $tenantCollections = $tab === 'billing'
+            ? app(TenantCollectionsQuery::class)->forTenant($tenant)
+            : null;
+
         return view('admin.tenants.show', compact(
             'tenant',
             'tab',
@@ -285,6 +290,7 @@ class TenantController extends Controller
             'noticeStatuses',
             'systemActivityLogs',
             'operationalRisks',
+            'tenantCollections',
         ));
     }
 

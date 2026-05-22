@@ -10,6 +10,7 @@ use App\Models\TenantInvoice;
 use App\Support\ActivityLogCategory;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class DocumentFinalizer
 {
@@ -24,8 +25,9 @@ class DocumentFinalizer
         TenantInvoice $invoice,
         ?DocumentTemplate $template = null,
         ?string $renderedBy = null,
+        bool $forceNew = false,
     ): GeneratedDocument {
-        if ($invoice->finalized_at) {
+        if (! $forceNew && $invoice->finalized_at) {
             $existing = GeneratedDocument::query()
                 ->where('tenant_invoice_id', $invoice->id)
                 ->where('type', $invoice->document_type ?? 'invoice')
@@ -44,18 +46,7 @@ class DocumentFinalizer
 
             $pdfPath = null;
             if (BillingAutomationRule::platform()->auto_generate_pdf) {
-                $filename = sprintf(
-                    'billing/%d/%s-%s.pdf',
-                    $invoice->tenant_id,
-                    $invoice->document_type ?? 'invoice',
-                    $invoice->invoice_number,
-                );
-                $pdfPath = $this->pdfGenerator->store(
-                    $html,
-                    $filename,
-                    $template->paper_size,
-                    $template->orientation,
-                );
+                $pdfPath = $this->storePdf($invoice, $html, $template);
             }
 
             $actor = $renderedBy ?? Auth::user()?->email ?? 'system';
@@ -70,13 +61,16 @@ class DocumentFinalizer
                 'pdf_path' => $pdfPath,
                 'rendered_at' => now(),
                 'rendered_by' => $actor,
-                'delivery_status' => 'pending',
+                'delivery_status' => 'not_sent',
             ]);
 
             $invoice->update([
                 'finalized_at' => now(),
                 'pdf_generated' => $pdfPath !== null,
                 'revision_number' => (int) $invoice->revision_number,
+                'delivery_status' => $invoice->delivery_status && $invoice->delivery_status !== 'pending'
+                    ? $invoice->delivery_status
+                    : 'not_sent',
             ]);
 
             $this->activityLogger->log(
@@ -99,11 +93,64 @@ class DocumentFinalizer
     {
         $invoice->increment('revision_number');
 
-        return $this->finalize($invoice, $template);
+        return $this->finalize($invoice, $template, null, true);
     }
 
-    private function resolveTemplate(TenantInvoice $invoice): DocumentTemplate
+    public function ensurePdf(GeneratedDocument $document, TenantInvoice $invoice): GeneratedDocument
     {
+        if ($document->pdf_path && Storage::disk('local')->exists($document->pdf_path)) {
+            return $document;
+        }
+
+        $template = $document->document_template_id
+            ? DocumentTemplate::query()->find($document->document_template_id)
+            : null;
+        $template ??= $this->resolveTemplate($invoice);
+
+        $html = $document->html_snapshot ?: $this->renderer->render(
+            $template,
+            $this->snapshotBuilder->build($invoice),
+        );
+
+        $pdfPath = $this->storePdf($invoice, $html, $template);
+        $document->update([
+            'pdf_path' => $pdfPath,
+            'html_snapshot' => $html,
+        ]);
+        $invoice->update(['pdf_generated' => $pdfPath !== null]);
+
+        return $document->fresh();
+    }
+
+    private function storePdf(TenantInvoice $invoice, string $html, DocumentTemplate $template): ?string
+    {
+        $folder = $invoice->tenant_id ? (string) $invoice->tenant_id : 'manual';
+
+        return $this->pdfGenerator->store(
+            $html,
+            sprintf(
+                'billing/%s/%s-%s.pdf',
+                $folder,
+                $invoice->document_type ?? 'invoice',
+                $invoice->invoice_number,
+            ),
+            $template->paper_size,
+            $template->orientation,
+        );
+    }
+
+    public function resolveTemplate(TenantInvoice $invoice): DocumentTemplate
+    {
+        if ($invoice->document_template_id) {
+            $selected = DocumentTemplate::query()
+                ->whereKey($invoice->document_template_id)
+                ->where('active', true)
+                ->first();
+            if ($selected) {
+                return $selected;
+            }
+        }
+
         $type = $invoice->document_type ?? 'invoice';
 
         return DocumentTemplate::query()

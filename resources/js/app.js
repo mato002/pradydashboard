@@ -34,6 +34,13 @@ document.addEventListener('alpine:init', () => {
                     applyThemeClass('system');
                 }
             });
+            this.syncSidebarForViewport();
+            window.addEventListener('resize', () => this.syncSidebarForViewport());
+        },
+        syncSidebarForViewport() {
+            if (window.innerWidth >= 1024) {
+                this.sidebarOpen = false;
+            }
         },
         setTheme(mode) {
             this.theme = mode;

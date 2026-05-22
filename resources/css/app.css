@@ -129,4 +129,61 @@
     .infra-provider-chip-active {
         @apply border-indigo-500/50 bg-indigo-500/10 text-indigo-700 ring-2 ring-indigo-500/20 dark:text-indigo-300;
     }
+
+    /* Invoice create + preview — two-column layout (not reliant on arbitrary Tailwind JIT) */
+    .invoice-document-split-layout,
+    .manual-document-create-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1.5rem;
+        align-items: start;
+        overflow-x: hidden;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 1024px) {
+        .invoice-document-split-layout,
+        .manual-document-create-layout {
+            grid-template-columns: minmax(0, 1fr) 420px;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .invoice-document-split-layout,
+        .manual-document-create-layout {
+            grid-template-columns: minmax(0, 1fr) 480px;
+        }
+    }
+
+    .invoice-document-split-main,
+    .manual-document-create-form {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .invoice-document-split-preview,
+    .manual-document-create-preview {
+        display: none;
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 1024px) {
+        .invoice-document-split-preview,
+        .manual-document-create-preview {
+            display: block;
+        }
+    }
+
+    .invoice-document-split-preview-inner {
+        position: sticky;
+        top: 6rem;
+        max-height: calc(100vh - 7rem);
+        overflow-x: hidden;
+        overflow-y: auto;
+        width: 100%;
+        max-width: 100%;
+    }
 }

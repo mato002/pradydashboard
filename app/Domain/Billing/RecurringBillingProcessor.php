@@ -99,7 +99,10 @@ class RecurringBillingProcessor
             $document = $this->documentFinalizer->finalize($invoice);
 
             if ($schedule->auto_email || BillingAutomationRule::platform()->auto_send_invoices) {
-                $this->emailDelivery->send($invoice, $document);
+                $recipient = trim((string) ($tenant->billing_email ?? ''));
+                if ($recipient !== '') {
+                    $this->emailDelivery->send($invoice, $document, $recipient, false);
+                }
             }
 
             $schedule->update(['next_run_at' => $this->nextRunAt($schedule)]);

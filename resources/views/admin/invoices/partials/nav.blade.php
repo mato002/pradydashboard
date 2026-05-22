@@ -13,6 +13,7 @@
         'receipts' => __('Receipts'),
         'recurring' => __('Recurring Billing'),
         'collections' => __('Collections'),
+        'payments' => __('Payment Inbox'),
         'templates' => __('Templates'),
         'statements' => __('Statements'),
         'automation' => __('Automation Rules'),

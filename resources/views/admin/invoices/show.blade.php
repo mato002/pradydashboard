@@ -17,20 +17,23 @@
 
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <a href="{{ route('tenants.show', ['tenant' => $invoice->tenant, 'tab' => 'billing']) }}" class="text-sm text-indigo-600 hover:underline">
-                    {{ $invoice->tenant?->company_name }}
-                </a>
+                @if ($invoice->tenant)
+                    <a href="{{ route('tenants.show', ['tenant' => $invoice->tenant, 'tab' => 'billing']) }}" class="text-sm text-indigo-600 hover:underline">
+                        {{ $invoice->tenant->company_name }}
+                    </a>
+                @else
+                    <span class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ $invoice->clientDisplayName() }}</span>
+                    @if ($invoice->manual_client_email)
+                        <span class="text-xs text-slate-500"> · {{ $invoice->manual_client_email }}</span>
+                    @endif
+                @endif
                 <p class="mt-1 text-xs text-gray-500">
                     {{ __('Status') }}: <span class="font-semibold capitalize">{{ $invoice->statusLabel() }}</span>
                     · {{ __('Due') }} {{ optional($invoice->due_date)->toFormattedDateString() ?? '—' }}
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
-                <a href="{{ route('invoices.preview', $invoice) }}" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">{{ __('Preview') }}</a>
-                <a href="{{ route('invoices.pdf', $invoice) }}" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">{{ __('PDF') }}</a>
-                <form method="post" action="{{ route('invoices.email', $invoice) }}" class="inline">@csrf
-                    <button type="submit" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">{{ __('Email') }}</button>
-                </form>
+                <a href="{{ route('invoices.preview', $invoice) }}" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">{{ __('Preview document') }}</a>
                 @if ($invoice->document_type === 'quotation' && $invoice->approval_status !== 'approved')
                     <form method="post" action="{{ route('invoices.quotations.approve', $invoice) }}">@csrf
                         <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">{{ __('Approve') }}</button>
@@ -41,9 +44,9 @@
                         <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white">{{ __('Convert to invoice') }}</button>
                     </form>
                 @endif
-                @if ($invoice->status === 'draft')
-                    <form method="post" action="{{ route('invoices.mark-sent', $invoice) }}">@csrf
-                        <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white">{{ __('Mark as sent') }}</button>
+                @if ($invoice->document_type === 'proforma' && ! $invoice->converted_invoice_id)
+                    <form method="post" action="{{ route('invoices.proforma.convert', $invoice) }}">@csrf
+                        <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white">{{ __('Convert to invoice') }}</button>
                     </form>
                 @endif
                 @if (! in_array($invoice->status, ['cancelled', 'void', 'paid']))
@@ -58,6 +61,18 @@
                 @endif
             </div>
         </div>
+
+        @include('admin.invoices.partials.delivery-actions', [
+            'invoice' => $invoice,
+            'defaultRecipient' => $defaultRecipient ?? $invoice->defaultRecipientEmail(),
+        ])
+
+        @if ($invoice->balanceDue() > 0.009 && ! in_array($invoice->status, ['paid', 'cancelled', 'void', 'draft']))
+            @include('admin.invoices.partials.collection-actions', [
+                'invoice' => $invoice->loadMissing('collectionNotes'),
+                'defaultRecipient' => $defaultRecipient ?? $invoice->defaultRecipientEmail(),
+            ])
+        @endif
 
         <div class="grid gap-6 lg:grid-cols-3">
             <div class="lg:col-span-2 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -124,18 +139,13 @@
                 @endif
 
                 @if (! in_array($invoice->status, ['cancelled', 'void', 'paid']))
-                    <form method="post" action="{{ route('invoices.payments.store', $invoice) }}" class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
-                        @csrf
-                        <p class="text-sm font-semibold">{{ __('Record payment') }}</p>
-                        <div class="mt-3 space-y-2 text-sm">
-                            <input type="number" step="0.01" name="amount" required placeholder="{{ __('Amount') }}" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900" />
-                            <input type="date" name="payment_date" value="{{ now()->toDateString() }}" required class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900" />
-                            <input name="method" required placeholder="{{ __('Method') }}" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900" />
-                            <input name="reference" placeholder="{{ __('Reference') }}" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900" />
-                            <textarea name="notes" rows="2" placeholder="{{ __('Notes') }}" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900"></textarea>
-                            <button type="submit" class="w-full rounded-lg bg-emerald-600 py-2 text-xs font-semibold text-white">{{ __('Record payment') }}</button>
-                        </div>
-                    </form>
+                    @include('admin.invoices.partials.record-payment-form', [
+                        'formAction' => route('invoices.payments.store', $invoice),
+                        'defaultInvoiceId' => $invoice->id,
+                        'defaultTenantId' => $invoice->tenant_id,
+                        'paymentSources' => \App\Support\Billing\PaymentSource::all(),
+                        'compact' => true,
+                    ])
                 @endif
 
                 @if ($invoice->payments->isNotEmpty())

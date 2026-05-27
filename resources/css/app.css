@@ -186,4 +186,99 @@
         width: 100%;
         max-width: 100%;
     }
+
+    .tenant-tab-scroll {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tenant-tab-scroll::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tenant-tab-scroll-wrap::before,
+    .tenant-tab-scroll-wrap::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        z-index: 1;
+        width: 2rem;
+        pointer-events: none;
+    }
+
+    .tenant-tab-scroll-wrap::before {
+        left: 0;
+        background: linear-gradient(to right, rgb(255 255 255 / 0.95), transparent);
+    }
+
+    .tenant-tab-scroll-wrap::after {
+        right: 0;
+        background: linear-gradient(to left, rgb(255 255 255 / 0.95), transparent);
+    }
+
+    .dark .tenant-tab-scroll-wrap::before {
+        background: linear-gradient(to right, rgb(2 6 23 / 0.95), transparent);
+    }
+
+    .dark .tenant-tab-scroll-wrap::after {
+        background: linear-gradient(to left, rgb(2 6 23 / 0.95), transparent);
+    }
+
+    .tenant-workspace-panel :is(form, a, button, input, select, textarea) {
+        scroll-margin-top: 7rem;
+    }
+
+    @keyframes tenant-shimmer {
+        0% {
+            background-position: 200% 0;
+        }
+        100% {
+            background-position: -200% 0;
+        }
+    }
+
+    .tenant-workspace-skeleton > div {
+        background: linear-gradient(
+            90deg,
+            rgb(226 232 240 / 0.9) 0%,
+            rgb(241 245 249 / 0.95) 50%,
+            rgb(226 232 240 / 0.9) 100%
+        );
+        background-size: 200% 100%;
+        animation: tenant-shimmer 1.4s ease-in-out infinite;
+    }
+
+    .dark .tenant-workspace-skeleton > div {
+        background: linear-gradient(
+            90deg,
+            rgb(30 41 59 / 0.9) 0%,
+            rgb(51 65 85 / 0.95) 50%,
+            rgb(30 41 59 / 0.9) 100%
+        );
+        background-size: 200% 100%;
+    }
+
+    .prady-workspace-skeleton > div {
+        background: linear-gradient(
+            90deg,
+            rgb(226 232 240 / 0.9) 0%,
+            rgb(241 245 249 / 0.95) 50%,
+            rgb(226 232 240 / 0.9) 100%
+        );
+        background-size: 200% 100%;
+        animation: tenant-shimmer 1.4s ease-in-out infinite;
+    }
+
+    .dark .prady-workspace-skeleton > div {
+        background: linear-gradient(
+            90deg,
+            rgb(30 41 59 / 0.9) 0%,
+            rgb(51 65 85 / 0.95) 50%,
+            rgb(30 41 59 / 0.9) 100%
+        );
+        background-size: 200% 100%;
+    }
 }

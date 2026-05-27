@@ -31,7 +31,7 @@ class TenantUsageHeartbeatController extends Controller
 
         $tenant = Tenant::query()
             ->where('external_key', $data['tenant_key'])
-            ->where('project_id', $project->id)
+            ->where('hosted_project_id', $project->id)
             ->first();
 
         if (! $tenant) {

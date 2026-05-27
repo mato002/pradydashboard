@@ -145,7 +145,7 @@ class OperationalDocumentController extends Controller
                 'nullable',
                 Rule::in($subscriptionIds->all()),
             ],
-            'project_id' => ['nullable', 'exists:projects,id'],
+            'product_id' => ['nullable', 'exists:products,id'],
             'status' => ['required', Rule::in(array_keys(OperationalDocumentOptions::statuses()))],
             'signed_date' => ['nullable', 'date'],
             'expiry_date' => ['nullable', 'date', 'after_or_equal:signed_date'],
@@ -155,9 +155,9 @@ class OperationalDocumentController extends Controller
 
         $data = $request->validate($rules);
 
-        if (empty($data['project_id']) && ! empty($data['tenant_project_subscription_id'])) {
+        if (empty($data['product_id']) && ! empty($data['tenant_project_subscription_id'])) {
             $sub = $tenant->projectSubscriptions->firstWhere('id', (int) $data['tenant_project_subscription_id']);
-            $data['project_id'] = $sub?->project_id;
+            $data['product_id'] = $sub?->product_id;
         }
 
         unset($data['file']);

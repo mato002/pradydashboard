@@ -6,6 +6,8 @@ use App\Models\Tenant;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use App\Support\Rbac\Rbac;
+use Illuminate\Support\Facades\Gate;
 
 class TenantOperationsPresenter
 {
@@ -131,6 +133,8 @@ class TenantOperationsPresenter
             $storageMb = (float) ($metric?->storage_usage_mb ?? 0);
             $storageCapMb = max($storageMb * 2, 5000);
             $users = (int) ($metric?->active_users ?? 0);
+            $tabUrl = fn (string $tab): string => route('tenants.show', $tenant).'?tab='.urlencode($tab);
+            $primarySubscription = $tenant->projectSubscriptions->first();
 
             return [
                 'id' => $tenant->id,
@@ -153,6 +157,27 @@ class TenantOperationsPresenter
                 'onboarding_stage' => $tenant->status,
                 'show_url' => route('tenants.show', $tenant),
                 'edit_url' => route('tenants.edit', $tenant),
+                'status_url' => route('tenants.status.update', $tenant),
+                'destroy_url' => route('tenants.destroy', $tenant),
+                'billing_url' => $tabUrl('billing'),
+                'licensing_url' => $tabUrl('licensing'),
+                'infrastructure_url' => $tabUrl('infrastructure'),
+                'modules_url' => $tabUrl('modules'),
+                'integrations_url' => $tabUrl('integrations'),
+                'support_url' => $tabUrl('support'),
+                'documents_url' => $tabUrl('documents'),
+                'projects_url' => $tabUrl('projects'),
+                'monitoring_url' => $tabUrl('monitoring'),
+                'can_update' => Gate::allows('update', $tenant),
+                'can_delete' => Gate::allows('delete', $tenant),
+                'can_suspend' => Gate::allows('suspend', $tenant),
+                'can_backup' => Gate::allows('update', $tenant) && Rbac::can('backups.create'),
+                'primary_subscription_id' => $primarySubscription?->id,
+                'impersonate_url' => route('tenants.quick-actions.open-app', $tenant),
+                'suspend_url' => route('tenants.quick-actions.suspend', $tenant),
+                'backup_url' => route('tenants.quick-actions.backup', $tenant),
+                'reset_license_url' => route('tenants.quick-actions.reset-license', $tenant),
+                'restart_services_url' => route('tenants.quick-actions.restart-services', $tenant),
                 'is_demo' => false,
                 'domain' => $tenant->tenant_domain ?? $tenant->project?->domain ?? '—',
                 'contact' => $tenant->contact_person ?? '—',

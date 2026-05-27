@@ -3,6 +3,15 @@
     $heading = $isEdit ? __('Edit tenant') : __('Provision tenant');
     $selectClass = 'mt-1 block w-full rounded-xl border-slate-200/80 bg-white text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
     $textareaClass = $selectClass.' min-h-[80px]';
+
+    $initialStep = 'organization';
+    if ($errors->has('project_id') || $errors->has('tenant_domain') || $errors->has('tenant_key') || $errors->has('server_id')) {
+        $initialStep = 'product';
+    } elseif ($errors->hasAny(['tenant_currency', 'billing_cycle', 'status', 'subscription_amount', 'saas_plan_id'])) {
+        $initialStep = 'billing';
+    } elseif ($errors->hasAny(['cpanel_account_ref', 'database_ref', 'deployment_version', 'notes'])) {
+        $initialStep = 'infrastructure';
+    }
 @endphp
 
 <x-dashboard-layout :heading="$heading" :subheading="__('Onboard a new organization onto the platform')">
@@ -21,11 +30,46 @@
                     </a>
                 </div>
 
+                @if ($errors->any())
+                    <div class="rounded-xl border border-rose-200/80 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">
+                        <p class="font-semibold">{{ __('Please fix the following before provisioning:') }}</p>
+                        <ul class="mt-2 list-inside list-disc text-xs">
+                            @foreach ($errors->all() as $message)
+                                <li>{{ $message }}</li>
+                            @endforeach
+                        </ul>
+                        <p class="mt-2 text-xs opacity-90">{{ __('Use the tabs above to complete Product & hosting and Billing — all sections are required.') }}</p>
+                    </div>
+                @endif
+
                 <form
                     method="post"
                     action="{{ $isEdit ? route('tenants.update', $tenant) : route('tenants.store') }}"
                     class="space-y-6"
-                    x-data="{ step: 'organization' }"
+                    novalidate
+                    x-data="{
+                        step: @js($initialStep),
+                        goToFirstInvalid() {
+                            const fields = [
+                                { step: 'organization', ids: ['company_name', 'email'] },
+                                { step: 'product', ids: ['project_id', 'tenant_domain'] },
+                                { step: 'billing', ids: ['tenant_currency', 'billing_cycle', 'status'] },
+                            ];
+                            for (const group of fields) {
+                                for (const id of group.ids) {
+                                    const el = document.getElementById(id);
+                                    if (el && !el.checkValidity()) {
+                                        this.step = group.step;
+                                        el.reportValidity();
+                                        el.focus();
+                                        return false;
+                                    }
+                                }
+                            }
+                            return true;
+                        },
+                    }"
+                    @submit.prevent="if (goToFirstInvalid()) { $el.submit() }"
                 >
                     @csrf
                     @if ($isEdit)
@@ -41,18 +85,22 @@
                                 @click="step = '{{ $key }}'"
                             >
                                 {{ $label }}
+                                @if (in_array($key, ['product', 'billing'], true))
+                                    <span class="text-rose-500" title="{{ __('Required for provisioning') }}">*</span>
+                                @endif
                             </button>
                         @endforeach
                     </div>
 
                     <div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card dark:border-slate-800/80 dark:bg-slate-900/60">
-                        <div x-show="step === 'organization'" x-cloak class="space-y-6 p-6 sm:p-8">
+                        <div x-show="step === 'organization'" class="space-y-6 p-6 sm:p-8">
                             <div>
                                 <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Organization profile') }}</h3>
                                 <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ __('Legal entity, contacts, and regional settings') }}</p>
                             </div>
                             @include('admin.tenants._form', [
                                 'tenant' => $tenant,
+                                'preselectedProjectId' => $preselectedProjectId ?? null,
                                 'projects' => $projects,
                                 'servers' => $servers,
                                 'plans' => $plans ?? collect(),
@@ -62,13 +110,14 @@
                             ])
                         </div>
 
-                        <div x-show="step === 'product'" x-cloak class="space-y-6 p-6 sm:p-8">
+                        <div x-show="step === 'product'" x-cloak class="space-y-6 p-6 sm:p-8" style="display: none;">
                             <div>
                                 <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Product allocation') }}</h3>
                                 <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ __('Hosted SaaS product, server placement, and tenant domain') }}</p>
                             </div>
                             @include('admin.tenants._form', [
                                 'tenant' => $tenant,
+                                'preselectedProjectId' => $preselectedProjectId ?? null,
                                 'projects' => $projects,
                                 'servers' => $servers,
                                 'plans' => $plans ?? collect(),
@@ -78,13 +127,14 @@
                             ])
                         </div>
 
-                        <div x-show="step === 'billing'" x-cloak class="space-y-6 p-6 sm:p-8">
+                        <div x-show="step === 'billing'" x-cloak class="space-y-6 p-6 sm:p-8" style="display: none;">
                             <div>
                                 <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Subscription & billing') }}</h3>
                                 <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ __('Plan, MRR, billing cycle, grace period, and lifecycle status') }}</p>
                             </div>
                             @include('admin.tenants._form', [
                                 'tenant' => $tenant,
+                                'preselectedProjectId' => $preselectedProjectId ?? null,
                                 'projects' => $projects,
                                 'servers' => $servers,
                                 'plans' => $plans ?? collect(),
@@ -94,13 +144,14 @@
                             ])
                         </div>
 
-                        <div x-show="step === 'infrastructure'" x-cloak class="space-y-6 p-6 sm:p-8">
+                        <div x-show="step === 'infrastructure'" x-cloak class="space-y-6 p-6 sm:p-8" style="display: none;">
                             <div>
                                 <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Infrastructure references') }}</h3>
                                 <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ __('cPanel, database, deployment version, and internal notes') }}</p>
                             </div>
                             @include('admin.tenants._form', [
                                 'tenant' => $tenant,
+                                'preselectedProjectId' => $preselectedProjectId ?? null,
                                 'projects' => $projects,
                                 'servers' => $servers,
                                 'plans' => $plans ?? collect(),

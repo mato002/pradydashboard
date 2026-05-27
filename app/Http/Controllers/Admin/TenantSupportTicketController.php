@@ -28,7 +28,8 @@ class TenantSupportTicketController extends Controller
 
         $data = $this->validatedTicket($request, $tenant);
         $data['tenant_id'] = $tenant->id;
-        $data['project_id'] = $data['project_id'] ?? $tenant->project_id;
+        $data['hosted_project_id'] = $data['project_id'] ?? $tenant->hosted_project_id;
+        unset($data['project_id']);
         $data['opened_at'] = now();
         $data['status'] = $data['status'] ?? 'open';
 
@@ -121,7 +122,7 @@ class TenantSupportTicketController extends Controller
 
         return $request->validate([
             'tenant_project_subscription_id' => ['nullable', Rule::in($subscriptionIds->all())],
-            'project_id' => ['nullable', 'exists:projects,id'],
+            'project_id' => ['nullable', 'exists:hosted_projects,id'],
             'assigned_staff_id' => ['nullable', 'exists:staff_profiles,id'],
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:20000'],

@@ -12,7 +12,6 @@ use App\Support\Rbac\RoleScopeType;
 use App\Support\Rbac\RoleStatus;
 use App\Support\Rbac\UserRoleAssignmentStatus;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Log;
 
 class RbacBootstrapSeeder extends Seeder
 {
@@ -46,34 +45,36 @@ class RbacBootstrapSeeder extends Seeder
 
         $superAdmin->permissions()->sync(Permission::query()->pluck('id'));
 
-        $emails = config('rbac.bootstrap_admin_emails', ['admin@pradytecai.test']);
+        $this->grantSuperAdminToExistingUsers($superAdmin);
+    }
 
-        $adminUsers = User::query()->whereIn('email', $emails)->get();
-
-        if ($adminUsers->isEmpty()) {
-            Log::warning('RbacBootstrapSeeder: no bootstrap admin users found for emails: '.implode(', ', $emails));
-
-            return;
-        }
-
+    private function grantSuperAdminToExistingUsers(Role $superAdmin): void
+    {
         $activeRoleService = app(ActiveRoleService::class);
         $grantElevation = (bool) config('rbac.bootstrap_grant_elevation', true);
 
-        foreach ($adminUsers as $user) {
-            $assignment = UserRoleAssignment::query()->firstOrCreate(
-                [
-                    'user_id' => $user->id,
-                    'role_id' => $superAdmin->id,
-                    'scope_type' => RoleScopeType::Global,
-                    'tenant_id' => null,
-                    'project_id' => null,
-                    'server_id' => null,
-                ],
-                [
-                    'status' => UserRoleAssignmentStatus::Active,
-                    'assignment_reason' => 'Bootstrap Super Admin assignment',
-                ]
-            );
+        foreach (User::query()->orderBy('id')->get() as $user) {
+            $hasAssignment = UserRoleAssignment::query()
+                ->where('user_id', $user->id)
+                ->where('role_id', $superAdmin->id)
+                ->where('scope_type', RoleScopeType::Global)
+                ->where('status', UserRoleAssignmentStatus::Active)
+                ->exists();
+
+            if ($hasAssignment) {
+                continue;
+            }
+
+            $assignment = UserRoleAssignment::query()->create([
+                'user_id' => $user->id,
+                'role_id' => $superAdmin->id,
+                'scope_type' => RoleScopeType::Global,
+                'tenant_id' => null,
+                'project_id' => null,
+                'server_id' => null,
+                'status' => UserRoleAssignmentStatus::Active,
+                'assignment_reason' => 'Bootstrap Super Admin assignment',
+            ]);
 
             if (! $activeRoleService->getActiveRecord($user)) {
                 $activeRoleService->setActive(

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Product;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -11,85 +12,57 @@ class ProjectFormFieldsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_project_store_persists_unified_operations_fields(): void
+    public function test_hosted_project_store_persists_core_fields(): void
     {
         $user = User::factory()->create();
+        $product = Product::query()->create([
+            'name' => 'Unified Product',
+            'slug' => 'unified-product',
+            'status' => 'active',
+        ]);
 
         $payload = [
-            'name' => 'Unified Product',
+            'product_id' => $product->id,
+            'name' => 'Unified Instance',
             'domain' => 'unified.example.com',
-            'product_slug' => 'unified_product',
-            'system_code' => 'unified-product',
-            'description' => 'Full ops product',
-            'status' => 'development',
-            'version' => '2.0.0',
-            'min_supported_version' => '1.5.0',
-            'latest_release_date' => '2026-05-01',
-            'owner_department' => 'Product Engineering',
-            'internal_notes' => 'Internal only',
-            'business_model' => 'saas',
-            'deployment_type' => 'cloud',
-            'billing_model' => 'monthly',
-            'default_setup_fee' => 5000,
-            'default_monthly_fee' => 12000,
-            'currency' => 'KES',
-            'trial_days' => 14,
-            'minimum_contract_term' => 12,
-            'license_validation_mode' => 'api',
-            'grace_period_days' => 10,
-            'kill_switch_allowed' => '1',
-            'offline_mode_allowed' => '0',
-            'contract_document_required' => '1',
-            'requires_server' => '1',
-            'requires_domain' => '1',
-            'requires_ssl' => '1',
-            'requires_whm' => '0',
-            'default_disk_quota_mb' => 5120,
-            'default_database_required' => '1',
-            'backup_required' => '1',
+            'environment' => 'production',
+            'status' => 'active',
+            'description' => 'Hosted instance',
             'notes' => 'General notes',
         ];
 
         $this->actingAs($user)
-            ->post(route('projects.store'), $payload)
-            ->assertRedirect(route('projects.index'));
+            ->post(route('hosted-projects.store'), $payload)
+            ->assertRedirect(route('hosted-projects.index'));
 
-        $this->assertDatabaseHas('projects', [
-            'name' => 'Unified Product',
-            'system_code' => 'unified-product',
-            'business_model' => 'saas',
-            'deployment_type' => 'cloud',
-            'billing_model' => 'monthly',
-            'license_validation_mode' => 'api',
-            'currency' => 'KES',
-            'contract_document_required' => 1,
-            'requires_whm' => 0,
+        $this->assertDatabaseHas('hosted_projects', [
+            'name' => 'Unified Instance',
+            'domain' => 'unified.example.com',
+            'product_id' => $product->id,
+            'environment' => 'production',
+            'status' => 'active',
         ]);
-
-        $project = Project::query()->where('name', 'Unified Product')->first();
-        $this->assertNotNull($project);
-        $this->assertSame('2.0.0', $project->version);
-        $this->assertSame(14, $project->trial_days);
-        $this->assertSame(5120, $project->default_disk_quota_mb);
     }
 
-    public function test_project_edit_form_shows_new_field_sections(): void
+    public function test_hosted_project_edit_form_is_accessible(): void
     {
         $user = User::factory()->create();
-        $project = Project::query()->create([
+        $product = Product::query()->create([
             'name' => 'Form Product',
-            'domain' => 'form.example.com',
+            'slug' => 'form-product',
             'status' => 'active',
-            'currency' => 'KES',
-            'license_validation_mode' => 'api',
-            'grace_period_days' => 7,
+        ]);
+        $project = Project::query()->create([
+            'product_id' => $product->id,
+            'name' => 'Form Instance',
+            'domain' => 'form.example.com',
+            'environment' => 'production',
+            'status' => 'active',
         ]);
 
         $this->actingAs($user)
-            ->get(route('projects.edit', $project))
+            ->get(route('hosted-projects.edit', $project))
             ->assertOk()
-            ->assertSee(__('Business model'))
-            ->assertSee(__('License validation mode'))
-            ->assertSee(__('Infrastructure requirements'));
+            ->assertSee(__('Form Instance'));
     }
 }

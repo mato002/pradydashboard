@@ -123,7 +123,7 @@ class FinancialOperationsQuery
         }
 
         if ($request->filled('project_id')) {
-            $query->whereHas('projectSubscription', fn ($q) => $q->where('project_id', $request->integer('project_id')));
+            $query->whereHas('projectSubscription', fn ($q) => $q->where('product_id', $request->integer('project_id')));
         }
 
         if ($request->boolean('overdue')) {

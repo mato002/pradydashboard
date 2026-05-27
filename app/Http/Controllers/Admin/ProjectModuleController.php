@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Activity\ActivityLogger;
 use App\Http\Controllers\Controller;
-use App\Models\Project;
-use App\Support\ActivityLogCategory;
+use App\Models\Product;
 use App\Models\ProjectModule;
+use App\Support\ActivityLogCategory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -16,7 +16,7 @@ class ProjectModuleController extends Controller
         private readonly ActivityLogger $activityLogger,
     ) {}
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Product $product): RedirectResponse
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -29,7 +29,7 @@ class ProjectModuleController extends Controller
             'setup_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        $module = $project->modules()->create([
+        $module = $product->modules()->create([
             ...$data,
             'code' => strtolower(preg_replace('/[^a-z0-9_]/', '', str_replace('-', '_', $data['code']))),
             'is_billable' => $request->boolean('is_billable'),
@@ -39,7 +39,7 @@ class ProjectModuleController extends Controller
         $this->activityLogger->log(
             'project.module_created',
             ActivityLogCategory::PROJECT,
-            __('Module created: :name on :project', ['name' => $module->name, 'project' => $project->name]),
+            __('Module created: :name on :product', ['name' => $module->name, 'product' => $product->name]),
             $module,
             null,
             $module->only(['name', 'code', 'status', 'is_billable']),
@@ -48,9 +48,9 @@ class ProjectModuleController extends Controller
         return back()->with('status', __('Module added.'));
     }
 
-    public function destroy(Project $project, ProjectModule $module): RedirectResponse
+    public function destroy(Product $product, ProjectModule $module): RedirectResponse
     {
-        abort_unless($module->project_id === $project->id, 404);
+        abort_unless((int) $module->product_id === (int) $product->id, 404);
 
         $name = $module->name;
         $module->delete();
@@ -58,8 +58,8 @@ class ProjectModuleController extends Controller
         $this->activityLogger->log(
             'project.module_deleted',
             ActivityLogCategory::PROJECT,
-            __('Module removed: :name from :project', ['name' => $name, 'project' => $project->name]),
-            $project,
+            __('Module removed: :name from :product', ['name' => $name, 'product' => $product->name]),
+            $product,
             ['module' => $name],
             null,
         );

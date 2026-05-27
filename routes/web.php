@@ -16,7 +16,8 @@ use App\Http\Controllers\Admin\MonitoringController;
 use App\Http\Controllers\Admin\OperationalDocumentController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PaymentReconciliationController;
-use App\Http\Controllers\Admin\ProjectController;
+use App\Http\Controllers\Admin\HostedProjectController;
+use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProjectModuleController;
 use App\Http\Controllers\Admin\ProjectVersionController;
 use App\Http\Controllers\Admin\Rbac\PermissionController as RbacPermissionController;
@@ -40,6 +41,7 @@ use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\TenantBillingController;
 use App\Http\Controllers\Admin\TenantCommunicationController;
 use App\Http\Controllers\Admin\TenantController;
+use App\Http\Controllers\Admin\TenantQuickActionsController;
 use App\Http\Controllers\Admin\TenantModuleController;
 use App\Http\Controllers\Admin\TenantNoticeController;
 use App\Http\Controllers\Admin\TenantProjectInfrastructureController;
@@ -66,9 +68,14 @@ use App\Http\Controllers\Settings\Integrations\PaymentsGateway\PaymentProfilesCo
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\PaymentsGatewayOverviewController;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\TenantProfilesController;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\WebhookEndpointsController;
+use App\Http\Controllers\PublicTenantBillingController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'landing')->name('home');
+
+Route::get('/billing/pay/{tenant}', [PublicTenantBillingController::class, 'show'])
+    ->middleware('signed')
+    ->name('billing.pay');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->middleware('permission:dashboard.view')->name('dashboard');
@@ -95,13 +102,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('permission:provider_notices.resolve')
         ->name('servers.notices.destroy');
 
-    Route::post('projects/{project}/regenerate-token', [ProjectController::class, 'regenerateToken'])
+    Route::get('hosted-projects/export', [HostedProjectController::class, 'export'])
+        ->middleware('permission:projects.view')
+        ->name('hosted-projects.export');
+    Route::post('hosted-projects/{hostedProject}/regenerate-token', [HostedProjectController::class, 'regenerateToken'])
         ->middleware('permission:projects.update')
-        ->name('projects.regenerate-token');
-    Route::resource('projects', ProjectController::class)
+        ->name('hosted-projects.regenerate-token');
+    Route::resource('hosted-projects', HostedProjectController::class)
         ->middlewareFor(['index', 'show'], 'permission:projects.view')
         ->middlewareFor(['create', 'store'], 'permission:projects.update')
         ->middlewareFor(['edit', 'update', 'destroy'], 'permission:projects.update');
+
+    Route::get('products/export', [ProductController::class, 'export'])
+        ->middleware('permission:projects.view')
+        ->name('products.export');
+    Route::resource('products', ProductController::class)
+        ->middlewareFor(['index', 'show'], 'permission:projects.view')
+        ->middlewareFor(['create', 'store'], 'permission:projects.update')
+        ->middlewareFor(['edit', 'update', 'destroy'], 'permission:projects.update');
+
+    Route::redirect('projects', '/hosted-projects')->name('projects.index');
+    Route::redirect('projects/create', '/hosted-projects/create')->name('projects.create');
+    Route::get('projects/{project}', fn (int $project) => redirect()->route('hosted-projects.show', $project))->name('projects.show');
+    Route::get('projects/{project}/edit', fn (int $project) => redirect()->route('hosted-projects.edit', $project))->name('projects.edit');
 
     Route::post('tenants/{tenant}/modules', [TenantModuleController::class, 'update'])
         ->name('tenants.modules.update');
@@ -167,16 +190,34 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('tenants.billing-profile.update');
     Route::post('tenants/{tenant}/billing/generate-draft', [TenantBillingController::class, 'generateDraft'])
         ->name('tenants.billing.generate-draft');
+    Route::patch('tenants/{tenant}/status', [TenantController::class, 'updateStatus'])
+        ->name('tenants.status.update')
+        ->middleware('permission:tenants.update');
+    Route::post('tenants/{tenant}/quick-actions/suspend', [TenantQuickActionsController::class, 'suspend'])
+        ->name('tenants.quick-actions.suspend')
+        ->middleware('permission:tenants.suspend');
+    Route::get('tenants/{tenant}/quick-actions/open-app', [TenantQuickActionsController::class, 'openApp'])
+        ->name('tenants.quick-actions.open-app')
+        ->middleware('permission:tenants.view');
+    Route::post('tenants/{tenant}/quick-actions/backup', [TenantQuickActionsController::class, 'forceBackup'])
+        ->name('tenants.quick-actions.backup')
+        ->middleware('permission:backups.create');
+    Route::post('tenants/{tenant}/quick-actions/reset-license', [TenantQuickActionsController::class, 'resetLicense'])
+        ->name('tenants.quick-actions.reset-license')
+        ->middleware('permission:tenants.update');
+    Route::post('tenants/{tenant}/quick-actions/restart-services', [TenantQuickActionsController::class, 'restartServices'])
+        ->name('tenants.quick-actions.restart-services')
+        ->middleware('permission:tenants.update');
     Route::resource('tenants', TenantController::class)
         ->middlewareFor(['index', 'show'], 'permission:tenants.view')
         ->middlewareFor(['create', 'store'], 'permission:tenants.create')
         ->middlewareFor(['edit', 'update', 'destroy'], 'permission:tenants.update');
 
     Route::middleware('permission:projects.update')->group(function () {
-        Route::post('projects/{project}/modules', [ProjectModuleController::class, 'store'])->name('projects.modules.store');
-        Route::delete('projects/{project}/modules/{module}', [ProjectModuleController::class, 'destroy'])->name('projects.modules.destroy');
-        Route::post('projects/{project}/versions', [ProjectVersionController::class, 'store'])->name('projects.versions.store');
-        Route::delete('projects/{project}/versions/{version}', [ProjectVersionController::class, 'destroy'])->name('projects.versions.destroy');
+        Route::post('products/{product}/modules', [ProjectModuleController::class, 'store'])->name('products.modules.store');
+        Route::delete('products/{product}/modules/{module}', [ProjectModuleController::class, 'destroy'])->name('products.modules.destroy');
+        Route::post('products/{product}/versions', [ProjectVersionController::class, 'store'])->name('products.versions.store');
+        Route::delete('products/{product}/versions/{version}', [ProjectVersionController::class, 'destroy'])->name('products.versions.destroy');
     });
 
     Route::get('support-tickets', [SupportTicketsController::class, 'index'])->middleware('permission:support.tickets.view')->name('support-tickets.index');

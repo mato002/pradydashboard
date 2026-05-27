@@ -255,7 +255,7 @@ class SupportTicketsController extends Controller
     {
         return $request->validate([
             'tenant_id' => ['nullable', 'exists:tenants,id'],
-            'project_id' => ['nullable', 'exists:projects,id'],
+            'project_id' => ['nullable', 'exists:hosted_projects,id'],
             'assigned_staff_id' => ['nullable', 'exists:staff_profiles,id'],
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:20000'],

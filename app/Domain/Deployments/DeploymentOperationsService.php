@@ -340,7 +340,7 @@ class DeploymentOperationsService
             ),
             'notes' => is_string($d->notes) && ! str_starts_with(trim($d->notes), '{') ? $d->notes : null,
             'rollback_available' => $status === 'success',
-            'project_url' => $d->project ? route('projects.show', $d->project) : '#',
+            'project_url' => $d->project ? route('hosted-projects.show', $d->project) : '#',
         ];
     }
 

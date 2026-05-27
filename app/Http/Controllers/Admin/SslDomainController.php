@@ -97,7 +97,7 @@ class SslDomainController extends Controller
             'domain' => ['required', 'string', 'max:255', 'unique:managed_domains,domain'],
             'tenant_id' => ['nullable', 'exists:tenants,id'],
             'server_id' => ['nullable', 'exists:servers,id'],
-            'project_id' => ['nullable', 'exists:projects,id'],
+            'project_id' => ['nullable', 'exists:hosted_projects,id'],
             'registrar' => ['nullable', 'string', 'max:255'],
             'routing_target' => ['nullable', 'string', 'max:255'],
             'ssl_issuer' => ['nullable', 'string', 'max:255'],

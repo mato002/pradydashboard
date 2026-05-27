@@ -96,7 +96,7 @@ class ApiCredentialsController extends Controller
     public function storeKey(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'project_id' => ['required', 'exists:projects,id'],
+            'project_id' => ['required', 'exists:hosted_projects,id'],
             'name' => ['required', 'string', 'max:255'],
             'status' => ['required', 'in:active,suspended,revoked'],
         ]);

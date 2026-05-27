@@ -22,7 +22,7 @@ return new class extends Migration
             $table->string('subject_type')->nullable();
             $table->unsignedBigInteger('subject_id')->nullable();
             $table->foreignId('tenant_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('project_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('hosted_project_id')->nullable()->constrained('hosted_projects')->nullOnDelete();
             $table->foreignId('server_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('invoice_id')->nullable()->constrained('tenant_invoices')->nullOnDelete();
             $table->foreignId('support_ticket_id')->nullable()->constrained('support_tickets')->nullOnDelete();
@@ -35,7 +35,7 @@ return new class extends Migration
 
             $table->index(['category', 'created_at']);
             $table->index(['tenant_id', 'created_at']);
-            $table->index(['project_id', 'created_at']);
+            $table->index(['hosted_project_id', 'created_at']);
             $table->index(['server_id', 'created_at']);
             $table->index(['invoice_id', 'created_at']);
             $table->index(['support_ticket_id', 'created_at']);

@@ -103,7 +103,7 @@ class SupportOperationsSummary
 
         $openTickets = SupportTicket::query()
             ->with(['tenant:id,company_name', 'assignedStaff'])
-            ->where('project_id', $projectId)
+            ->where('hosted_project_id', $projectId)
             ->whereIn('status', $openStatuses)
             ->orderByDesc('opened_at')
             ->get();

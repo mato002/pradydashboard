@@ -2,7 +2,7 @@
 
 namespace App\Domain\Projects;
 
-use App\Models\Project;
+use App\Models\HostedProject;
 use App\Models\ProjectDeployment;
 use App\Models\Server;
 use Carbon\Carbon;
@@ -16,7 +16,7 @@ class ProjectOperationsService
     public function kpis(Collection $projects): array
     {
         $projects = collect($projects);
-        $enriched = $projects->map(fn (Project $p) => $this->enrich($p));
+        $enriched = $projects->map(fn (HostedProject $p) => $this->enrich($p));
 
         return [
             'total_projects' => $projects->count(),
@@ -32,7 +32,7 @@ class ProjectOperationsService
     /**
      * @return array<string, mixed>
      */
-    public function enrich(Project $project): array
+    public function enrich(HostedProject $project): array
     {
         $seed = crc32((string) $project->id.$project->domain);
         $environment = $this->environment($project, $seed);
@@ -49,7 +49,7 @@ class ProjectOperationsService
             'deploy_status' => $deployStatus,
             'ci_status' => $this->ciStatus($deployStatus, $seed),
             'last_deployment' => $lastDeployment,
-            'version' => $lastDeployment['version'] ?? $project->version ?? '—',
+            'version' => $lastDeployment['version'] ?? $this->currentVersionLabel($project),
             'ssl_health' => $project->server?->ssl_status === 'valid' ? 'healthy' : ($project->server?->ssl_status ? 'warning' : 'unknown'),
             'bandwidth_gb' => null,
             'storage_pct' => $server?->disk_usage_percent !== null ? (float) $server->disk_usage_percent : null,
@@ -69,8 +69,8 @@ class ProjectOperationsService
         }
 
         return ProjectDeployment::query()
-            ->with('project')
-            ->whereIn('project_id', $projectIds)
+            ->with('hostedProject')
+            ->whereIn('hosted_project_id', $projectIds)
             ->orderByDesc('deployed_at')
             ->orderByDesc('created_at')
             ->limit($limit)
@@ -80,8 +80,8 @@ class ProjectOperationsService
 
                 return [
                     'id' => 'dep-'.$d->id,
-                    'project' => $d->project?->name ?? '—',
-                    'project_id' => $d->project_id,
+                    'project' => $d->hostedProject?->name ?? '—',
+                    'project_id' => $d->hosted_project_id,
                     'version' => $d->version,
                     'status' => $meta['status'] ?? 'success',
                     'environment' => $meta['environment'] ?? 'production',
@@ -96,7 +96,7 @@ class ProjectOperationsService
     /**
      * @return list<array{label: string, status: string}>
      */
-    public function pipelineStages(Project $project): array
+    public function pipelineStages(HostedProject $project): array
     {
         $meta = $this->enrich($project);
         $status = $meta['deploy_status'];
@@ -127,7 +127,7 @@ class ProjectOperationsService
             ->get()
             ->map(function (Server $server) use ($projects): array {
                 $hosted = $projects->where('server_id', $server->id);
-                $prod = $hosted->filter(fn (Project $p) => $this->enrich($p)['environment'] === 'production')->count();
+                $prod = $hosted->filter(fn (HostedProject $p) => $this->enrich($p)['environment'] === 'production')->count();
                 $staging = $hosted->count() - $prod;
 
                 return [
@@ -153,7 +153,7 @@ class ProjectOperationsService
     /**
      * @return list<string>
      */
-    public function buildLogs(Project $project): array
+    public function buildLogs(HostedProject $project): array
     {
         $v = $this->enrich($project)['version'];
 
@@ -170,7 +170,7 @@ class ProjectOperationsService
     /**
      * @return list<array{key: string, value: string, masked: bool}>
      */
-    public function environmentVariables(Project $project): array
+    public function environmentVariables(HostedProject $project): array
     {
         return [
             ['key' => 'APP_ENV', 'value' => $this->enrich($project)['environment'], 'masked' => false],
@@ -184,7 +184,7 @@ class ProjectOperationsService
     /**
      * @return array{version: string, deployed_at: Carbon, status: string}
      */
-    private function resolveLastDeployment(Project $project): array
+    private function resolveLastDeployment(HostedProject $project): array
     {
         $latest = $project->relationLoaded('deployments')
             ? $project->deployments->sortByDesc('deployed_at')->first()
@@ -201,14 +201,30 @@ class ProjectOperationsService
         }
 
         return [
-            'version' => $project->version ?? '—',
+            'version' => $this->currentVersionLabel($project),
             'deployed_at' => $project->created_at ?? now(),
             'status' => 'pending',
         ];
     }
 
-    private function environment(Project $project, int $seed): string
+    private function currentVersionLabel(HostedProject $project): string
     {
+        $project->loadMissing('product.versions');
+
+        $fromProduct = $project->product?->versions
+            ?->where('is_current', true)
+            ->first()
+            ?->version;
+
+        return $fromProduct ?? '—';
+    }
+
+    private function environment(HostedProject $project, int $seed): string
+    {
+        if (filled($project->environment)) {
+            return $project->environment;
+        }
+
         if ($project->status === 'maintenance') {
             return 'staging';
         }
@@ -224,7 +240,7 @@ class ProjectOperationsService
         return 'production';
     }
 
-    private function uptimePercent(Project $project, int $seed): ?float
+    private function uptimePercent(HostedProject $project, int $seed): ?float
     {
         if ($project->status === 'suspended') {
             return 0.0;
@@ -256,7 +272,7 @@ class ProjectOperationsService
         return $server->status === 'online' ? 100.0 : null;
     }
 
-    private function deployStatus(Project $project, int $seed): string
+    private function deployStatus(HostedProject $project, int $seed): string
     {
         if ($project->status === 'suspended') {
             return 'failed';

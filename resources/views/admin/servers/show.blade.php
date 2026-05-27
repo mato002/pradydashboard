@@ -213,7 +213,7 @@
                 <ul class="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
                     @forelse ($server->projects as $project)
                         <li class="py-2 text-sm">
-                            <a href="{{ route('projects.show', $project) }}" class="font-medium text-indigo-600 dark:text-indigo-400">{{ $project->name }}</a>
+                            <a href="{{ route('hosted-projects.show', $project) }}" class="font-medium text-indigo-600 dark:text-indigo-400">{{ $project->name }}</a>
                             <span class="text-slate-500">· {{ $project->domain }}</span>
                         </li>
                     @empty

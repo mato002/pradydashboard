@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ProjectVersion extends Model
 {
     protected $fillable = [
-        'project_id',
+        'product_id',
         'version',
         'release_date',
         'release_type',
@@ -26,8 +26,24 @@ class ProjectVersion extends Model
         ];
     }
 
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    /** @deprecated Use product() */
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->product();
+    }
+
+    public function getProjectIdAttribute(): ?int
+    {
+        return $this->product_id;
+    }
+
+    public function setProjectIdAttribute(?int $value): void
+    {
+        $this->attributes['product_id'] = $value;
     }
 }

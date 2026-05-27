@@ -72,7 +72,7 @@ class TenantNoticeController extends Controller
 
         return $request->validate([
             'tenant_project_subscription_id' => ['nullable', Rule::in($subscriptionIds->all())],
-            'project_id' => ['nullable', 'exists:projects,id'],
+            'project_id' => ['nullable', 'exists:hosted_projects,id'],
             'notice_type' => ['required', Rule::in(array_keys(SupportOpsOptions::noticeTypes()))],
             'title' => ['required', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:20000'],

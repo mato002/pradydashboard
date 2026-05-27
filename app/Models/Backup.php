@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class Backup extends Model
 {
@@ -15,6 +16,7 @@ class Backup extends Model
         'name',
         'server_id',
         'tenant_id',
+        'hosted_project_id',
         'project_id',
         'backup_type',
         'size_bytes',
@@ -48,9 +50,39 @@ class Backup extends Model
         return $this->belongsTo(Tenant::class);
     }
 
+    public static function hostedProjectForeignKey(): string
+    {
+        static $key = null;
+
+        if ($key === null) {
+            $table = (new static)->getTable();
+            $key = Schema::hasColumn($table, 'hosted_project_id') ? 'hosted_project_id' : 'project_id';
+        }
+
+        return $key;
+    }
+
+    public function hostedProject(): BelongsTo
+    {
+        return $this->belongsTo(HostedProject::class, static::hostedProjectForeignKey());
+    }
+
+    /** @deprecated Use {@see hostedProject()} */
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->hostedProject();
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    public static function attributesWithHostedProject(?int $hostedProjectId, array $attributes = []): array
+    {
+        if ($hostedProjectId !== null) {
+            $attributes[static::hostedProjectForeignKey()] = $hostedProjectId;
+        }
+
+        return $attributes;
     }
 
     public function statusVariant(): string

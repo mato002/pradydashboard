@@ -27,6 +27,8 @@ document.addEventListener('alpine:init', () => {
         dateMenuOpen: false,
         notifOpen: false,
         searchOpen: false,
+        workspaceLoading: false,
+
         init() {
             applyThemeClass(this.theme === 'system' ? 'system' : this.theme);
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -34,12 +36,167 @@ document.addEventListener('alpine:init', () => {
                     applyThemeClass('system');
                 }
             });
-            this.syncSidebarForViewport();
-            window.addEventListener('resize', () => this.syncSidebarForViewport());
+
+            document.addEventListener('click', (event) => this.handleWorkspaceLinkClick(event));
+
+            window.addEventListener('popstate', () => {
+                if (window.history.state?.tenantTab !== undefined) {
+                    return;
+                }
+                this.loadWorkspaceFromUrl(window.location.href, false);
+            });
         },
-        syncSidebarForViewport() {
-            if (window.innerWidth >= 1024) {
-                this.sidebarOpen = false;
+
+        shouldHandleWorkspaceLink(link) {
+            if (!link?.href || link.hasAttribute('data-prady-full-nav') || link.hasAttribute('data-tenant-full-nav')) {
+                return false;
+            }
+            if (link.target === '_blank' || link.hasAttribute('download')) {
+                return false;
+            }
+            if (link.closest('#tenant-workspace-root')) {
+                return false;
+            }
+
+            const href = link.getAttribute('href') || '';
+            if (!href || href.startsWith('#') || href.startsWith('javascript:')) {
+                return false;
+            }
+
+            let target;
+            try {
+                target = new URL(link.href, window.location.origin);
+            } catch {
+                return false;
+            }
+
+            if (target.origin !== window.location.origin) {
+                return false;
+            }
+
+            const skipPaths = ['/logout', '/login', '/register', '/confirm-password'];
+            if (skipPaths.some((p) => target.pathname === p || target.pathname.startsWith(p + '/'))) {
+                return false;
+            }
+
+            const inSidebar = link.closest('aside');
+            const inWorkspace = link.closest('#prady-workspace-content');
+
+            return Boolean(inSidebar || inWorkspace);
+        },
+
+        handleWorkspaceLinkClick(event) {
+            const link = event.target.closest('a[href]');
+            if (!this.shouldHandleWorkspaceLink(link)) {
+                return;
+            }
+
+            event.preventDefault();
+            this.sidebarOpen = false;
+            this.loadWorkspaceFromUrl(link.href);
+        },
+
+        updatePageChrome(workspaceEl, doc) {
+            const heading = workspaceEl?.dataset?.pageHeading;
+            const subheading = workspaceEl?.dataset?.pageSubheading;
+            const documentTitle = workspaceEl?.dataset?.documentTitle;
+
+            const headingEl = document.getElementById('prady-page-heading');
+            if (headingEl && heading) {
+                headingEl.textContent = heading;
+            }
+
+            const subheadingEl = document.getElementById('prady-page-subheading');
+            if (subheadingEl && subheading) {
+                subheadingEl.textContent = subheading;
+            }
+
+            if (documentTitle) {
+                document.title = documentTitle;
+            } else if (doc?.querySelector('title')?.textContent) {
+                document.title = doc.querySelector('title').textContent;
+            }
+
+            this.updateSidebarActiveState(window.location.pathname);
+        },
+
+        updateSidebarActiveState(pathname) {
+            const active =
+                'bg-gradient-to-r from-indigo-500/20 to-violet-500/10 text-white shadow-inner shadow-indigo-500/10 ring-1 ring-inset ring-white/10';
+            const idle = 'text-slate-400 hover:bg-white/5 hover:text-white';
+            const shared = 'group flex items-center gap-3 rounded-xl px-3 py-2 transition';
+
+            document.querySelectorAll('aside nav a[href]').forEach((anchor) => {
+                let linkPath;
+                try {
+                    linkPath = new URL(anchor.href, window.location.origin).pathname;
+                } catch {
+                    return;
+                }
+
+                const isActive =
+                    pathname === linkPath ||
+                    (linkPath !== '/' && linkPath.length > 1 && pathname.startsWith(linkPath + '/'));
+
+                anchor.className = `${shared} ${isActive ? active : idle}`;
+            });
+        },
+
+        async loadWorkspaceFromUrl(url, pushState = true) {
+            if (this.workspaceLoading) {
+                return;
+            }
+
+            this.workspaceLoading = true;
+
+            try {
+                const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                const headers = {
+                    Accept: 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-Prady-Workspace': '1',
+                };
+                if (token) {
+                    headers['X-CSRF-TOKEN'] = token;
+                }
+
+                const response = await fetch(url, {
+                    headers,
+                    credentials: 'same-origin',
+                });
+
+                if (!response.ok) {
+                    window.location.href = url;
+                    return;
+                }
+
+                const html = await response.text();
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const next = doc.getElementById('prady-workspace-content');
+                const current = document.getElementById('prady-workspace-content');
+
+                if (!next || !current) {
+                    window.location.href = url;
+                    return;
+                }
+
+                current.replaceWith(next);
+
+                if (window.Alpine) {
+                    window.Alpine.initTree(next);
+                }
+
+                this.updatePageChrome(next, doc);
+
+                if (pushState) {
+                    window.history.pushState({ pradyNav: true }, '', url);
+                }
+
+                window.scrollTo({ top: 0, behavior: 'auto' });
+            } catch {
+                window.location.href = url;
+            } finally {
+                this.workspaceLoading = false;
             }
         },
         setTheme(mode) {
@@ -123,6 +280,128 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
+    Alpine.data('tenantWorkspace', (config) => ({
+        baseUrl: config.baseUrl,
+        activeTab: config.initialTab,
+        tabs: config.tabs ?? [],
+        loading: false,
+
+        init() {
+            this.syncTabFromLocation(false);
+
+            this.$el.addEventListener('click', (event) => {
+                const link = event.target.closest('a[href]');
+                if (!link || link.hasAttribute('data-tenant-full-nav')) {
+                    return;
+                }
+
+                let target;
+                try {
+                    target = new URL(link.href, window.location.origin);
+                } catch {
+                    return;
+                }
+
+                const base = new URL(this.baseUrl, window.location.origin);
+                if (target.pathname !== base.pathname) {
+                    return;
+                }
+
+                const tab = target.searchParams.get('tab') || 'overview';
+                if (!this.tabs.includes(tab)) {
+                    return;
+                }
+
+                event.preventDefault();
+                this.navigateToUrl(link.href, tab);
+            });
+
+            window.addEventListener('popstate', () => {
+                this.syncTabFromLocation(true);
+            });
+        },
+
+        syncTabFromLocation(fetchPanel) {
+            const url = new URL(window.location.href);
+            const tab = url.searchParams.get('tab') || 'overview';
+            if (!this.tabs.includes(tab)) {
+                return;
+            }
+            this.activeTab = tab;
+            if (fetchPanel) {
+                this.navigateToUrl(url.toString(), tab, false);
+            }
+        },
+
+        navigate(tab) {
+            const url = new URL(this.baseUrl, window.location.origin);
+            url.searchParams.set('tab', tab);
+            this.navigateToUrl(url.toString(), tab);
+        },
+
+        async navigateToUrl(url, tab = null, pushState = true) {
+            if (this.loading) {
+                return;
+            }
+
+            const resolvedTab =
+                tab ||
+                new URL(url, window.location.origin).searchParams.get('tab') ||
+                'overview';
+
+            this.activeTab = resolvedTab;
+            this.loading = true;
+
+            const panel = document.getElementById('tenant-workspace-panel');
+            const scrollY = window.scrollY;
+
+            try {
+                const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                const headers = {
+                    Accept: 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-Tenant-Workspace': '1',
+                    'X-Prady-Workspace': '1',
+                };
+                if (token) {
+                    headers['X-CSRF-TOKEN'] = token;
+                }
+
+                const response = await fetch(url, {
+                    headers,
+                    credentials: 'same-origin',
+                });
+
+                if (!response.ok) {
+                    window.location.href = url;
+                    return;
+                }
+
+                const html = await response.text();
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const next = doc.getElementById('tenant-workspace-panel');
+
+                if (panel && next) {
+                    panel.innerHTML = next.innerHTML;
+                    panel.dataset.tenantTab = next.dataset.tenantTab || resolvedTab;
+                    if (next.getAttribute('aria-label')) {
+                        panel.setAttribute('aria-label', next.getAttribute('aria-label'));
+                    }
+                }
+
+                if (pushState) {
+                    window.history.pushState({ tenantTab: resolvedTab }, '', url);
+                }
+
+                window.scrollTo({ top: scrollY, behavior: 'instant' in window ? 'instant' : 'auto' });
+            } catch {
+                window.location.href = url;
+            } finally {
+                this.loading = false;
+            }
+        },
+    }));
+
     Alpine.data('tenantFormWizard', () => ({
         step: 1,
         maxStep: 4,
@@ -148,12 +427,27 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
-    Alpine.data('tenantControlCenter', (directory, tenantDetails) => ({
+    Alpine.data('tenantControlCenter', (directory, tenantDetails, lifecycleStatuses = {}, quickStatuses = [], reopenTenantId = null) => ({
         directory,
         tenantDetails,
+        lifecycleStatuses,
+        quickStatuses,
         selectedTenant: directory[0] ?? null,
         drawerOpen: false,
         filterStatus: '',
+        statusModalOpen: false,
+        statusModalTenant: null,
+        statusModalValue: 'active',
+
+        init() {
+            if (reopenTenantId === null || reopenTenantId === '') {
+                return;
+            }
+            const tenant = this.directory.find((t) => String(t.id) === String(reopenTenantId));
+            if (tenant) {
+                this.openDrawer(tenant);
+            }
+        },
 
         get filteredDirectory() {
             return this.directory.filter((t) => {
@@ -182,6 +476,21 @@ document.addEventListener('alpine:init', () => {
         closeDrawer() {
             this.drawerOpen = false;
             document.body.classList.remove('overflow-hidden');
+        },
+
+        openStatusModal(tenant) {
+            this.statusModalTenant = tenant;
+            this.statusModalValue = tenant.status ?? 'active';
+            this.statusModalOpen = true;
+            document.body.classList.add('overflow-hidden');
+        },
+
+        closeStatusModal() {
+            this.statusModalOpen = false;
+            this.statusModalTenant = null;
+            if (!this.drawerOpen) {
+                document.body.classList.remove('overflow-hidden');
+            }
         },
     }));
 

@@ -11,7 +11,7 @@ class TenantProjectSubscription extends Model
 {
     protected $fillable = [
         'tenant_id',
-        'project_id',
+        'product_id',
         'package_name',
         'billing_cycle',
         'start_date',
@@ -58,9 +58,15 @@ class TenantProjectSubscription extends Model
         return $this->belongsTo(Tenant::class);
     }
 
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    /** @deprecated Use product() — subscriptions are product-scoped after hosted_projects migration. */
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->product();
     }
 
     public function infrastructure(): HasOne

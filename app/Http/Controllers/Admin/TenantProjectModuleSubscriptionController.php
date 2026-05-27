@@ -39,7 +39,7 @@ class TenantProjectModuleSubscriptionController extends Controller
         ]);
 
         $moduleIds = ProjectModule::query()
-            ->where('project_id', $projectId)
+            ->where('product_id', $projectId)
             ->pluck('id');
 
         $changedModules = [];

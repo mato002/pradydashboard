@@ -96,7 +96,7 @@
                                 <a href="{{ route('tenants.show', $log->tenant_id) }}" class="text-indigo-600 hover:underline">{{ $log->tenant->company_name }}</a>
                             @endif
                             @if ($log->project)
-                                · <a href="{{ route('projects.show', $log->project_id) }}" class="text-indigo-600 hover:underline">{{ $log->project->name }}</a>
+                                · <a href="{{ route('hosted-projects.show', $log->project_id) }}" class="text-indigo-600 hover:underline">{{ $log->project->name }}</a>
                             @endif
                             @if ($log->server)
                                 · <a href="{{ route('servers.show', $log->server_id) }}" class="text-indigo-600 hover:underline">{{ $log->server->name }}</a>

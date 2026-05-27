@@ -9,12 +9,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasColumn('projects', 'system_code')) {
-            Schema::table('projects', function (Blueprint $table) {
-            $table->string('system_code', 80)->nullable()->after('product_slug');
+        if (! Schema::hasColumn('products', 'system_code')) {
+            Schema::table('products', function (Blueprint $table) {
+            $table->string('system_code', 80)->nullable()->after('slug');
             $table->string('owner_department')->nullable()->after('description');
-            $table->text('internal_notes')->nullable()->after('notes');
-            $table->string('min_supported_version', 50)->nullable()->after('version');
+            $table->text('internal_notes')->nullable()->after('owner_department');
+            $table->string('min_supported_version', 50)->nullable()->after('default_license_mode');
             $table->date('latest_release_date')->nullable()->after('min_supported_version');
             $table->string('business_model', 60)->nullable()->after('latest_release_date');
             $table->string('deployment_type', 60)->nullable()->after('business_model');
@@ -62,7 +62,7 @@ return new class extends Migration
         if (! Schema::hasTable('project_modules')) {
         Schema::create('project_modules', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('project_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('product_id')->constrained('products')->cascadeOnDelete();
             $table->string('name');
             $table->string('code', 80);
             $table->text('description')->nullable();
@@ -75,15 +75,15 @@ return new class extends Migration
             $table->text('internal_notes')->nullable();
             $table->timestamps();
 
-            $table->unique(['project_id', 'code']);
-            $table->index(['project_id', 'status']);
+            $table->unique(['product_id', 'code']);
+            $table->index(['product_id', 'status']);
         });
         }
 
         if (! Schema::hasTable('project_versions')) {
         Schema::create('project_versions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('project_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('product_id')->constrained('products')->cascadeOnDelete();
             $table->string('version', 50);
             $table->date('release_date')->nullable();
             $table->string('release_type', 20)->default('minor');
@@ -93,8 +93,8 @@ return new class extends Migration
             $table->boolean('is_current')->default(false);
             $table->timestamps();
 
-            $table->unique(['project_id', 'version']);
-            $table->index(['project_id', 'is_current']);
+            $table->unique(['product_id', 'version']);
+            $table->index(['product_id', 'is_current']);
         });
         }
 
@@ -102,7 +102,7 @@ return new class extends Migration
         Schema::create('tenant_project_subscriptions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('project_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('product_id')->constrained('products')->cascadeOnDelete();
             $table->string('package_name')->nullable();
             $table->string('billing_cycle', 20)->default('monthly');
             $table->date('start_date')->nullable();
@@ -127,10 +127,10 @@ return new class extends Migration
             $table->text('internal_notes')->nullable();
             $table->timestamps();
 
-            $table->unique(['tenant_id', 'project_id']);
+            $table->unique(['tenant_id', 'product_id']);
             $table->index(['tenant_id', 'license_status']);
             $table->index(['tenant_id', 'product_status']);
-            $table->index(['project_id', 'product_status']);
+            $table->index(['product_id', 'product_status']);
             $table->index('renewal_date');
         });
         }
@@ -247,7 +247,7 @@ return new class extends Migration
             $table->unsignedBigInteger('tenant_project_subscription_id')->nullable();
             $table->foreign('tenant_project_subscription_id', 'odoc_subscription_fk')
                 ->references('id')->on('tenant_project_subscriptions')->cascadeOnDelete();
-            $table->foreignId('project_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('product_id')->nullable()->constrained('products')->nullOnDelete();
             $table->string('document_type', 60);
             $table->string('title');
             $table->string('file_path');
@@ -311,7 +311,7 @@ return new class extends Migration
             ]);
         });
 
-        Schema::table('projects', function (Blueprint $table) {
+        Schema::table('products', function (Blueprint $table) {
             $table->dropColumn([
                 'system_code', 'owner_department', 'internal_notes', 'min_supported_version', 'latest_release_date',
                 'business_model', 'deployment_type', 'default_setup_fee', 'default_monthly_fee', 'billing_model',
@@ -329,12 +329,12 @@ return new class extends Migration
             return;
         }
 
-        $tenants = DB::table('tenants')->whereNotNull('project_id')->get(['id', 'project_id', 'subscription_plan', 'billing_cycle', 'start_date', 'renewal_date', 'subscription_amount', 'tenant_currency', 'grace_days', 'status', 'deployment_version', 'tenant_domain', 'cpanel_account_ref', 'database_ref', 'login_url', 'server_id']);
+        $tenants = DB::table('tenants')->whereNotNull('product_id')->get(['id', 'product_id', 'subscription_plan', 'billing_cycle', 'start_date', 'renewal_date', 'subscription_amount', 'tenant_currency', 'grace_days', 'status', 'deployment_version', 'tenant_domain', 'cpanel_account_ref', 'database_ref', 'login_url', 'server_id']);
 
         foreach ($tenants as $row) {
             $exists = DB::table('tenant_project_subscriptions')
                 ->where('tenant_id', $row->id)
-                ->where('project_id', $row->project_id)
+                ->where('product_id', $row->product_id)
                 ->exists();
 
             if ($exists) {
@@ -350,7 +350,7 @@ return new class extends Migration
 
             $subscriptionId = DB::table('tenant_project_subscriptions')->insertGetId([
                 'tenant_id' => $row->id,
-                'project_id' => $row->project_id,
+                'product_id' => $row->product_id,
                 'package_name' => $row->subscription_plan,
                 'billing_cycle' => $row->billing_cycle ?? 'monthly',
                 'start_date' => $row->start_date,

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ProjectDeployment extends Model
 {
     protected $fillable = [
-        'project_id',
+        'hosted_project_id',
         'version',
         'deployed_at',
         'notes',
@@ -21,8 +21,24 @@ class ProjectDeployment extends Model
         ];
     }
 
+    public function hostedProject(): BelongsTo
+    {
+        return $this->belongsTo(HostedProject::class, 'hosted_project_id');
+    }
+
+    /** @deprecated Use hostedProject() */
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->hostedProject();
+    }
+
+    public function getProjectIdAttribute(): ?int
+    {
+        return $this->hosted_project_id;
+    }
+
+    public function setProjectIdAttribute(?int $value): void
+    {
+        $this->attributes['hosted_project_id'] = $value;
     }
 }

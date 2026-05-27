@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ProjectModule extends Model
 {
     protected $fillable = [
-        'project_id',
+        'product_id',
         'name',
         'code',
         'description',
@@ -32,9 +32,25 @@ class ProjectModule extends Model
         ];
     }
 
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    /** @deprecated Use product() */
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->product();
+    }
+
+    public function getProjectIdAttribute(): ?int
+    {
+        return $this->product_id;
+    }
+
+    public function setProjectIdAttribute(?int $value): void
+    {
+        $this->attributes['product_id'] = $value;
     }
 
     public function tenantSubscriptions(): HasMany

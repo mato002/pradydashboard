@@ -2,7 +2,7 @@
 
 namespace App\Domain\Settings;
 
-use App\Models\Project;
+use App\Models\HostedProject;
 use App\Models\Server;
 use App\Models\Setting;
 use App\Models\Tenant;
@@ -65,8 +65,8 @@ class PlatformSettingsService
         $totalServers = max(1, Server::query()->count());
         $serverPct = (int) round(($onlineServers / $totalServers) * 100);
 
-        $activeProjects = Project::query()->where('status', 'active')->count();
-        $totalProjects = max(1, Project::query()->count());
+        $activeProjects = HostedProject::query()->where('status', 'active')->count();
+        $totalProjects = max(1, HostedProject::query()->count());
         $deployPct = (int) round(($activeProjects / $totalProjects) * 100);
 
         $backupOk = Server::query()->whereIn('backup_status', ['ok', 'success', 'healthy'])->count();

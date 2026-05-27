@@ -196,7 +196,7 @@ class OperationalRiskScanner
     private function scanOverdueInvoices(): Collection
     {
         return TenantInvoice::query()
-            ->with('tenant:id,company_name,project_id')
+            ->with('tenant:id,company_name,hosted_project_id')
             ->whereIn('status', ['overdue', 'pending', 'partial', 'partially_paid', 'sent'])
             ->whereNotNull('due_date')
             ->whereDate('due_date', '<', now()->toDateString())
@@ -215,7 +215,7 @@ class OperationalRiskScanner
                 action: __('Review invoice and send reminder or record payment'),
                 dueAt: $inv->due_date,
                 tenantId: $inv->tenant_id,
-                projectId: $inv->tenant?->project_id,
+                projectId: $inv->tenant?->hosted_project_id,
                 subject: $inv,
                 url: route('invoices.show', $inv),
             ));
@@ -250,7 +250,7 @@ class OperationalRiskScanner
                     action: __('Confirm renewal billing and contract status'),
                     dueAt: $tenant->renewal_date,
                     tenantId: $tenant->id,
-                    projectId: $tenant->project_id,
+                    projectId: $tenant->hosted_project_id,
                     subject: $tenant,
                     url: route('tenants.show', ['tenant' => $tenant, 'tab' => 'billing']),
                 );
@@ -265,7 +265,7 @@ class OperationalRiskScanner
         $threshold = now()->addDays(self::RENEWAL_WARNING_DAYS);
 
         return TenantProjectSubscription::query()
-            ->with(['tenant:id,company_name', 'project:id,name'])
+            ->with(['tenant:id,company_name,hosted_project_id', 'product:id,name'])
             ->where(function ($q) use ($threshold): void {
                 $q->where(function ($inner) use ($threshold): void {
                     $inner->whereNotNull('renewal_date')
@@ -291,13 +291,13 @@ class OperationalRiskScanner
                         : __('Subscription renewal due'),
                     description: __(':tenant · :project — :date', [
                         'tenant' => $sub->tenant?->company_name ?? '—',
-                        'project' => $sub->project?->name ?? '—',
+                        'project' => $sub->product?->name ?? '—',
                         'date' => $due?->toFormattedDateString() ?? '—',
                     ]),
                     action: __('Renew or convert subscription before lapse'),
                     dueAt: $due,
                     tenantId: $sub->tenant_id,
-                    projectId: $sub->project_id,
+                    projectId: $sub->tenant?->hosted_project_id,
                     subject: $sub,
                     url: route('tenants.show', ['tenant' => $sub->tenant_id, 'tab' => 'projects']),
                 );
@@ -373,7 +373,7 @@ class OperationalRiskScanner
         $threshold = now()->addDays(self::RENEWAL_WARNING_DAYS);
 
         return OperationalDocument::query()
-            ->with('tenant:id,company_name,project_id')
+            ->with('tenant:id,company_name,hosted_project_id')
             ->whereNotNull('expiry_date')
             ->where('status', '!=', 'archived')
             ->whereDate('expiry_date', '<=', $threshold)
@@ -442,7 +442,7 @@ class OperationalRiskScanner
     private function scanOverdueFollowUps(): Collection
     {
         return TenantCommunication::query()
-            ->with('tenant:id,company_name,project_id')
+            ->with('tenant:id,company_name,hosted_project_id')
             ->where('follow_up_required', true)
             ->where('status', 'pending_follow_up')
             ->whereNotNull('follow_up_date')
@@ -460,7 +460,7 @@ class OperationalRiskScanner
                 action: __('Complete follow-up or reschedule'),
                 dueAt: $c->follow_up_date,
                 tenantId: $c->tenant_id,
-                projectId: $c->tenant?->project_id,
+                projectId: $c->tenant?->hosted_project_id,
                 subject: $c,
                 url: route('tenants.show', ['tenant' => $c->tenant_id, 'tab' => 'communications']),
             ));
@@ -474,7 +474,7 @@ class OperationalRiskScanner
         $open = SupportOpsOptions::openTicketStatuses();
 
         return SupportTicket::query()
-            ->with(['tenant:id,company_name,project_id', 'assignedStaff:id,full_name'])
+            ->with(['tenant:id,company_name,hosted_project_id', 'assignedStaff:id,full_name'])
             ->whereIn('status', $open)
             ->whereNotNull('due_at')
             ->where('due_at', '<', now())
@@ -491,7 +491,7 @@ class OperationalRiskScanner
                 action: __('Update ticket status or reassign'),
                 dueAt: $t->due_at,
                 tenantId: $t->tenant_id,
-                projectId: $t->project_id,
+                projectId: $t->hosted_project_id,
                 staffProfileId: $t->assigned_staff_id,
                 subject: $t,
                 url: route('support-tickets.show', $t->id),
@@ -632,7 +632,7 @@ class OperationalRiskScanner
                         title: __('Missing signed contract'),
                         description: __(':tenant — :project requires a contract on file', [
                             'tenant' => $tenant->company_name,
-                            'project' => $sub->project?->name ?? '—',
+                            'project' => $sub->product?->name ?? '—',
                         ]),
                         action: __('Upload signed contract in Documents tab'),
                         dueAt: now(),

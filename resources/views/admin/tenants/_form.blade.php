@@ -9,20 +9,29 @@
 <div class="grid gap-6 md:grid-cols-2">
     @if ($show('organization'))
         <div class="md:col-span-2">
-                    <x-input-label for="company_name" :value="__('Company name')" />
-                    <x-text-input id="company_name" name="company_name" type="text" class="mt-1 block w-full" :value="old('company_name', $tenant->company_name)" required @if($section === 'organization' || $section === 'all') autofocus @endif />
-                    <x-input-error class="mt-2" :messages="$errors->get('company_name')" />
-                </div>
+            <x-input-label for="company_name" :value="__('Company name')" />
+            <x-text-input
+                id="company_name"
+                name="company_name"
+                type="text"
+                class="{{ $selectClass }}"
+                :value="old('company_name', $tenant->company_name)"
+                placeholder="{{ __('e.g. Matware SACCO') }}"
+                required
+                :autofocus="$section === 'organization' || $section === 'all'"
+            />
+            <x-input-error class="mt-2" :messages="$errors->get('company_name')" />
+        </div>
 
-                <div>
-                    <x-input-label for="business_type" :value="__('Business type')" />
-                    <x-text-input id="business_type" name="business_type" type="text" class="mt-1 block w-full" :value="old('business_type', $tenant->business_type)" placeholder="Property, Retail, Healthcare…" />
+        <div>
+            <x-input-label for="business_type" :value="__('Business type')" />
+            <x-text-input id="business_type" name="business_type" type="text" class="{{ $selectClass }}" :value="old('business_type', $tenant->business_type)" placeholder="Property, Retail, Healthcare…" />
                     <x-input-error class="mt-2" :messages="$errors->get('business_type')" />
                 </div>
 
                 <div>
                     <x-input-label for="kra_pin" :value="__('KRA PIN')" />
-                    <x-text-input id="kra_pin" name="kra_pin" type="text" class="mt-1 block w-full" :value="old('kra_pin', $tenant->kra_pin)" />
+                    <x-text-input id="kra_pin" name="kra_pin" type="text" class="{{ $selectClass }}" :value="old('kra_pin', $tenant->kra_pin)" />
                     <x-input-error class="mt-2" :messages="$errors->get('kra_pin')" />
                 </div>
 
@@ -34,31 +43,31 @@
 
                 <div>
                     <x-input-label for="country" :value="__('Country (ISO-2)')" />
-                    <x-text-input id="country" name="country" type="text" maxlength="2" class="mt-1 block w-full uppercase" :value="old('country', $tenant->country)" placeholder="KE" />
+                    <x-text-input id="country" name="country" type="text" maxlength="2" class="{{ $selectClass }} uppercase" :value="old('country', $tenant->country)" placeholder="KE" />
                     <x-input-error class="mt-2" :messages="$errors->get('country')" />
                 </div>
 
                 <div>
                     <x-input-label for="logo_path" :value="__('Logo path / URL')" />
-                    <x-text-input id="logo_path" name="logo_path" type="text" class="mt-1 block w-full" :value="old('logo_path', $tenant->logo_path)" />
+                    <x-text-input id="logo_path" name="logo_path" type="text" class="{{ $selectClass }}" :value="old('logo_path', $tenant->logo_path)" />
                     <x-input-error class="mt-2" :messages="$errors->get('logo_path')" />
                 </div>
 
                 <div>
                     <x-input-label for="contact_person" :value="__('Contact person')" />
-                    <x-text-input id="contact_person" name="contact_person" type="text" class="mt-1 block w-full" :value="old('contact_person', $tenant->contact_person)" />
+                    <x-text-input id="contact_person" name="contact_person" type="text" class="{{ $selectClass }}" :value="old('contact_person', $tenant->contact_person)" />
                     <x-input-error class="mt-2" :messages="$errors->get('contact_person')" />
                 </div>
 
                 <div>
                     <x-input-label for="phone" :value="__('Phone')" />
-                    <x-text-input id="phone" name="phone" type="text" class="mt-1 block w-full" :value="old('phone', $tenant->phone)" />
+                    <x-text-input id="phone" name="phone" type="text" class="{{ $selectClass }}" :value="old('phone', $tenant->phone)" />
                     <x-input-error class="mt-2" :messages="$errors->get('phone')" />
                 </div>
 
                 <div class="md:col-span-2">
                     <x-input-label for="email" :value="__('Email')" />
-                    <x-text-input id="email" name="email" type="email" class="mt-1 block w-full" :value="old('email', $tenant->email)" />
+                    <x-text-input id="email" name="email" type="email" class="{{ $selectClass }}" :value="old('email', $tenant->email)" />
                     <x-input-error class="mt-2" :messages="$errors->get('email')" />
                 </div>
             @endif
@@ -67,8 +76,9 @@
         <div class="md:col-span-2">
             <x-input-label for="project_id" :value="__('Hosted product')" />
             <select id="project_id" name="project_id" class="{{ $selectClass }}" required>
+                <option value="" disabled @selected(! old('project_id', $tenant->project_id ?? ($preselectedProjectId ?? null)))>{{ __('Select hosted product…') }}</option>
                 @foreach ($projects as $p)
-                    <option value="{{ $p->id }}" @selected(old('project_id', $tenant->project_id) == $p->id)>{{ $p->name }} — {{ $p->domain }}</option>
+                    <option value="{{ $p->id }}" @selected(old('project_id', $tenant->project_id ?? ($preselectedProjectId ?? null)) == $p->id)>{{ $p->name }} — {{ $p->domain }}</option>
                 @endforeach
             </select>
             <x-input-error class="mt-2" :messages="$errors->get('project_id')" />
@@ -85,9 +95,23 @@
             <x-input-error class="mt-2" :messages="$errors->get('server_id')" />
         </div>
 
+        <div>
+            <x-input-label for="tenant_key" :value="__('Tenant key (for license API)')" />
+            <x-text-input id="tenant_key" name="tenant_key" type="text" class="{{ $selectClass }} font-mono text-sm" :value="old('tenant_key', $tenant->tenant_key)" placeholder="{{ __('e.g. matware-sacco — auto-generated if empty') }}" />
+            <p class="mt-1 text-xs text-slate-500">{{ __('Used as PRADY_TENANT_KEY in the hosted product .env') }}</p>
+            <x-input-error class="mt-2" :messages="$errors->get('tenant_key')" />
+        </div>
+
+        <div>
+            <x-input-label for="tenant_code" :value="__('Tenant code')" />
+            <x-text-input id="tenant_code" name="tenant_code" type="text" class="{{ $selectClass }} font-mono text-sm uppercase" :value="old('tenant_code', $tenant->tenant_code)" placeholder="{{ __('e.g. MATWARE') }}" />
+            <x-input-error class="mt-2" :messages="$errors->get('tenant_code')" />
+        </div>
+
         <div class="md:col-span-2">
             <x-input-label for="tenant_domain" :value="__('Tenant application domain')" />
-            <x-text-input id="tenant_domain" name="tenant_domain" type="text" class="mt-1 block w-full font-mono text-sm" :value="old('tenant_domain', $tenant->tenant_domain)" placeholder="abc.property.pradytecai.com" />
+            <x-text-input id="tenant_domain" name="tenant_domain" type="text" class="{{ $selectClass }} font-mono text-sm" :value="old('tenant_domain', $tenant->tenant_domain)" placeholder="mfi.pradytec.com" />
+            <p class="mt-1 text-xs text-slate-500">{{ __('Must match the host users open in the browser (license check).') }}</p>
             <x-input-error class="mt-2" :messages="$errors->get('tenant_domain')" />
         </div>
 
@@ -139,7 +163,7 @@
 
         <div>
             <x-input-label for="billing_cycle" :value="__('Billing cycle')" />
-            <select id="billing_cycle" name="billing_cycle" class="{{ $selectClass }}">
+            <select id="billing_cycle" name="billing_cycle" class="{{ $selectClass }}" required>
                 @foreach (['monthly', 'annual'] as $c)
                     <option value="{{ $c }}" @selected(old('billing_cycle', $tenant->billing_cycle ?? 'monthly') === $c)>{{ ucfirst($c) }}</option>
                 @endforeach
@@ -173,7 +197,7 @@
 
                 <div class="md:col-span-2">
                     <x-input-label for="status" :value="__('Lifecycle status')" />
-                    <select id="status" name="status" class="{{ $selectClass }}">
+                    <select id="status" name="status" class="{{ $selectClass }}" required>
                         @foreach (['trial', 'active', 'warning', 'restricted', 'suspended', 'overdue', 'cancelled', 'terminated'] as $st)
                             <option value="{{ $st }}" @selected(old('status', $tenant->status ?? 'trial') === $st)>{{ ucfirst($st) }}</option>
                         @endforeach

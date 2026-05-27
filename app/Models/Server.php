@@ -63,7 +63,12 @@ class Server extends Model
 
     public function projects(): HasMany
     {
-        return $this->hasMany(Project::class);
+        return $this->hasMany(HostedProject::class);
+    }
+
+    public function hostedProjects(): HasMany
+    {
+        return $this->projects();
     }
 
     public function tenants(): HasMany

@@ -1,5 +1,26 @@
 @php
     $growthMax = max(collect($growthSeries)->max('value') ?? 1, 1);
+    $lifecycleStatuses = [
+        'prospect' => __('Prospect'),
+        'onboarding' => __('Onboarding'),
+        'trial' => __('Trial'),
+        'active' => __('Active'),
+        'warning' => __('Warning'),
+        'restricted' => __('Restricted'),
+        'overdue' => __('Overdue'),
+        'suspended' => __('Suspended'),
+        'cancelled' => __('Cancelled'),
+        'terminated' => __('Terminated'),
+    ];
+    $quickStatuses = [
+        ['value' => 'active', 'label' => __('Mark as active')],
+        ['value' => 'trial', 'label' => __('Mark as trial')],
+        ['value' => 'warning', 'label' => __('Mark as warning')],
+        ['value' => 'overdue', 'label' => __('Mark as overdue')],
+        ['value' => 'suspended', 'label' => __('Mark as suspended')],
+        ['value' => 'restricted', 'label' => __('Mark as restricted')],
+        ['value' => 'cancelled', 'label' => __('Mark as cancelled')],
+    ];
     $statusVariant = fn (string $s): string => match ($s) {
         'active' => 'success',
         'trial' => 'warning',
@@ -11,7 +32,7 @@
 
 <x-dashboard-layout :heading="__('Tenants')" :subheading="__('Multi-tenant SaaS operations control center')">
     <div
-        x-data="tenantControlCenter(@js($directory), @js($tenantDetails))"
+        x-data="tenantControlCenter(@js($directory), @js($tenantDetails), @js($lifecycleStatuses), @js($quickStatuses), @js(session('tenant_drawer')))"
         class="space-y-6"
     >
         @if (session('status'))
@@ -217,7 +238,7 @@
                                             </div>
                                         </td>
                                         <td class="text-right" @click.stop>
-                                            <a :href="tenant.show_url" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">{{ __('Open') }}</a>
+                                            @include('admin.tenants.partials.directory-row-actions')
                                         </td>
                                     </tr>
                                 </template>
@@ -228,6 +249,56 @@
                         {{ $tenants->links() }}
                     </div>
                 </div>
+            </div>
+        </div>
+
+        {{-- Change status modal --}}
+        <div
+            x-show="statusModalOpen"
+            x-cloak
+            class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+            @keydown.escape.window="closeStatusModal()"
+            @click.self="closeStatusModal()"
+        >
+            <div
+                x-show="statusModalOpen"
+                x-transition
+                class="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+                @click.stop
+            >
+                <h3 class="text-lg font-semibold text-slate-900 dark:text-white">{{ __('Change tenant status') }}</h3>
+                <p class="mt-1 text-sm text-slate-500" x-show="statusModalTenant">
+                    <span x-text="statusModalTenant?.company"></span>
+                    <span class="text-slate-400">·</span>
+                    <span class="font-medium capitalize" x-text="statusModalTenant?.status"></span>
+                </p>
+                <form
+                    x-show="statusModalTenant"
+                    :action="statusModalTenant?.status_url"
+                    method="post"
+                    class="mt-4 space-y-4"
+                >
+                    <input type="hidden" name="_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="_method" value="PATCH">
+                    <div>
+                        <label for="tenant-status-select" class="text-xs font-semibold uppercase tracking-wider text-slate-500">{{ __('Lifecycle status') }}</label>
+                        <select
+                            id="tenant-status-select"
+                            name="status"
+                            x-model="statusModalValue"
+                            class="mt-1.5 block w-full rounded-xl border-slate-200 bg-slate-50 py-2.5 pl-3 pr-8 text-sm font-medium dark:border-slate-700 dark:bg-slate-800"
+                            required
+                        >
+                            <template x-for="[value, label] in Object.entries(lifecycleStatuses)" :key="value">
+                                <option :value="value" x-text="label"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" @click="closeStatusModal()" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold dark:border-slate-700">{{ __('Cancel') }}</button>
+                        <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:brightness-110">{{ __('Save status') }}</button>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -345,13 +416,43 @@
                             <div>
                                 <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{{ __('Multi-tenant controls') }}</h4>
                                 <div class="grid grid-cols-2 gap-2">
-                                    <button type="button" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">{{ __('Suspend') }}</button>
-                                    <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold dark:border-slate-700">{{ __('Impersonate') }}</button>
-                                    <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold dark:border-slate-700">{{ __('Force backup') }}</button>
-                                    <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold dark:border-slate-700">{{ __('Migrate server') }}</button>
-                                    <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold dark:border-slate-700">{{ __('Reset license') }}</button>
-                                    <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold dark:border-slate-700">{{ __('Restart services') }}</button>
+                                    <template x-if="selectedTenant?.can_suspend">
+                                        <form method="post" :action="selectedTenant.suspend_url" class="contents" @submit="if (!confirm(@js(__('Suspend this tenant? Their apps will be blocked at the next license check.')))) { $event.preventDefault(); }">
+                                            @csrf
+                                            <button type="submit" class="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">{{ __('Suspend') }}</button>
+                                        </form>
+                                    </template>
+                                    <a
+                                        :href="selectedTenant.impersonate_url"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-center text-[11px] font-semibold dark:border-slate-700"
+                                    >{{ __('Impersonate') }}</a>
+                                    <template x-if="selectedTenant?.can_backup">
+                                        <form method="post" :action="selectedTenant.backup_url" class="contents" @submit="if (!confirm(@js(__('Queue an on-demand backup for this tenant?')))) { $event.preventDefault(); }">
+                                            @csrf
+                                            <button type="submit" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold dark:border-slate-700">{{ __('Force backup') }}</button>
+                                        </form>
+                                    </template>
+                                    <a
+                                        x-show="selectedTenant?.can_update"
+                                        :href="selectedTenant.infrastructure_url"
+                                        class="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-center text-[11px] font-semibold dark:border-slate-700"
+                                    >{{ __('Migrate server') }}</a>
+                                    <template x-if="selectedTenant?.can_update">
+                                        <form method="post" :action="selectedTenant.reset_license_url" class="contents" @submit="if (!confirm(@js(__('Reset license to active for this tenant?')))) { $event.preventDefault(); }">
+                                            @csrf
+                                            <button type="submit" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold dark:border-slate-700">{{ __('Reset license') }}</button>
+                                        </form>
+                                    </template>
+                                    <template x-if="selectedTenant?.can_update">
+                                        <form method="post" :action="selectedTenant.restart_services_url" class="contents" @submit="if (!confirm(@js(__('Send a service restart signal via the tenant integration?')))) { $event.preventDefault(); }">
+                                            @csrf
+                                            <button type="submit" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold dark:border-slate-700">{{ __('Restart services') }}</button>
+                                        </form>
+                                    </template>
                                 </div>
+                                <p x-show="!selectedTenant?.can_update && !selectedTenant?.can_suspend" class="mt-2 text-[11px] text-slate-400">{{ __('You do not have permission to run operational actions on this tenant.') }}</p>
                             </div>
                         </div>
 

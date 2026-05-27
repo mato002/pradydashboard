@@ -14,7 +14,7 @@ class ManagedDomain extends Model
         'is_subdomain',
         'tenant_id',
         'server_id',
-        'project_id',
+        'hosted_project_id',
         'registrar',
         'status',
         'ssl_status',
@@ -56,9 +56,25 @@ class ManagedDomain extends Model
         return $this->belongsTo(Server::class);
     }
 
+    public function hostedProject(): BelongsTo
+    {
+        return $this->belongsTo(HostedProject::class, 'hosted_project_id');
+    }
+
+    /** @deprecated Use hostedProject() */
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->hostedProject();
+    }
+
+    public function getProjectIdAttribute(): ?int
+    {
+        return $this->hosted_project_id;
+    }
+
+    public function setProjectIdAttribute(?int $value): void
+    {
+        $this->attributes['hosted_project_id'] = $value;
     }
 
     public function dnsRecords(): HasMany

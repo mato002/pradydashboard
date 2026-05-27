@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Domain\Auth\HardcodedSuperuserProvisioner;
+use App\Domain\Rbac\LoginRoleActivationService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use Illuminate\Http\RedirectResponse;
@@ -29,9 +29,8 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        $user = $request->user();
-        if ($user) {
-            app(HardcodedSuperuserProvisioner::class)->ensureActiveRole($user);
+        if ($user = $request->user()) {
+            app(LoginRoleActivationService::class)->activateForSession($user);
         }
 
         if ($user?->mustChangePassword()) {

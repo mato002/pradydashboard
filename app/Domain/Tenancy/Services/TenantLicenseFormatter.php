@@ -42,18 +42,19 @@ class TenantLicenseFormatter
             $result->tenantLifecycleStatus === 'suspended' => 'suspended',
             $result->accessLevel === 'restricted' => 'restricted',
             $result->tenantLifecycleStatus === 'overdue' || $result->subscriptionStatus === 'unpaid' => 'overdue',
-            $result->subscriptionStatus === 'grace' || $result->tenantLifecycleStatus === 'warning' => 'overdue',
+            $result->subscriptionStatus === 'grace' || $result->tenantLifecycleStatus === 'warning' => 'warning',
             default => 'active',
         };
 
         $accessLevel = match (true) {
             in_array($tenantStatus, ['terminated', 'suspended'], true) => 'blocked',
             $result->accessLevel === 'restricted' => 'read_only',
-            $tenantStatus === 'overdue' => 'warning',
+            in_array($tenantStatus, ['overdue', 'warning'], true) => 'warning',
             default => 'full',
         };
 
-        $allowed = ! in_array($accessLevel, ['blocked'], true);
+        $allowed = ! in_array($accessLevel, ['blocked', 'read_only'], true)
+            && ! in_array($tenantStatus, ['overdue', 'restricted', 'suspended', 'terminated'], true);
 
         $message = $result->message ?? match ($accessLevel) {
             'full' => 'Access granted',

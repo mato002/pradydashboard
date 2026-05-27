@@ -62,7 +62,7 @@ class DeploymentController extends Controller
     public function deploy(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'project_id' => ['required', 'exists:projects,id'],
+            'project_id' => ['required', 'exists:hosted_projects,id'],
             'version' => ['nullable', 'string', 'max:100'],
             'environment' => ['required', 'in:production,staging,development,qa,sandbox'],
         ]);
@@ -79,7 +79,7 @@ class DeploymentController extends Controller
         ], $project);
 
         $deployment = ProjectDeployment::query()->create([
-            'project_id' => $project->id,
+            'hosted_project_id' => $project->id,
             'version' => $version,
             'deployed_at' => now(),
             'notes' => json_encode($notes),
@@ -100,7 +100,7 @@ class DeploymentController extends Controller
         $meta['triggered_by'] = auth()->user()?->name ?? 'Rollback';
 
         $rollback = ProjectDeployment::query()->create([
-            'project_id' => $deployment->project_id,
+            'hosted_project_id' => $deployment->hosted_project_id,
             'version' => $deployment->version.'-rollback',
             'deployed_at' => now(),
             'notes' => json_encode($meta),
@@ -121,7 +121,7 @@ class DeploymentController extends Controller
         $meta['triggered_by'] = auth()->user()?->name ?? 'Redeploy';
 
         $redeploy = ProjectDeployment::query()->create([
-            'project_id' => $deployment->project_id,
+            'hosted_project_id' => $deployment->hosted_project_id,
             'version' => $deployment->version,
             'deployed_at' => now(),
             'notes' => json_encode($meta),

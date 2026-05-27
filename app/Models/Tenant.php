@@ -22,7 +22,8 @@ class Tenant extends Model
         'tenant_key',
         'license_secret',
         'access_level',
-        'project_id',
+        'hosted_project_id',
+        'product_id',
         'server_id',
         'company_name',
         'business_type',
@@ -102,7 +103,27 @@ class Tenant extends Model
 
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->hostedProject();
+    }
+
+    public function hostedProject(): BelongsTo
+    {
+        return $this->belongsTo(HostedProject::class, 'hosted_project_id');
+    }
+
+    public function getProjectIdAttribute(): ?int
+    {
+        return $this->hosted_project_id;
+    }
+
+    public function setProjectIdAttribute(?int $value): void
+    {
+        $this->attributes['hosted_project_id'] = $value;
+    }
+
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
     }
 
     public function server(): BelongsTo

@@ -203,7 +203,7 @@
                             @endif
                             <div class="min-w-0 flex-1">
                                 <a href="{{ route('tenants.show', $tenant) }}" class="block truncate font-semibold text-slate-900 transition hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400">{{ $tenant->company_name }}</a>
-                                <p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ $tenant->tenant_domain ?? $tenant->project?->domain ?? '—' }}</p>
+                                <p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ $tenant->domain ?? $tenant->tenant_domain ?? $tenant->hostedProject?->domain ?? '—' }}</p>
                             </div>
                             <div class="flex shrink-0 flex-col items-end gap-1">
                                 <x-ui.status-badge :variant="$tenantVariant($tenant->status)">{{ $tenant->status }}</x-ui.status-badge>

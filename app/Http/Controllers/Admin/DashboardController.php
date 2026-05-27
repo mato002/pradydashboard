@@ -7,7 +7,8 @@ use App\Domain\Billing\BillingSummary;
 use App\Domain\Operations\OperationalRiskScanner;
 use App\Domain\Support\SupportOperationsSummary;
 use App\Http\Controllers\Controller;
-use App\Models\Project;
+use App\Models\HostedProject;
+use App\Support\Admin\OperationalRiskPresenter;
 use App\Support\OperationalMetrics;
 use App\Models\Server;
 use App\Models\SupportTicket;
@@ -21,8 +22,8 @@ class DashboardController extends Controller
     public function __invoke()
     {
         $serversCount = Server::query()->count();
-        $projectsCount = Project::query()->count();
-        $activeProjects = Project::query()->where('status', 'active')->count();
+        $projectsCount = HostedProject::query()->count();
+        $activeProjects = HostedProject::query()->where('status', 'active')->count();
         $tenantsCount = Tenant::query()->count();
         $activeTenants = Tenant::query()->where('status', 'active')->count();
         $onlineServers = Server::query()->where('status', 'online')->count();
@@ -36,9 +37,9 @@ class DashboardController extends Controller
         $overdueExposure = (float) $billingSummary['overdue_amount'];
 
         if ($monthlyRevenue <= 0) {
-            $tenantMrr = (float) Tenant::query()->whereIn('status', ['active', 'trial'])->sum('subscription_amount');
-            $projectMrr = (float) Project::query()->sum('monthly_revenue');
-            $monthlyRevenue = $tenantMrr > 0 ? $tenantMrr : $projectMrr;
+            $monthlyRevenue = (float) Tenant::query()
+                ->whereIn('status', ['active', 'trial'])
+                ->sum('subscription_amount');
         }
 
         $revenueGrowthPct = $this->estimateRevenueGrowthPercent();
@@ -51,7 +52,7 @@ class DashboardController extends Controller
             ->get();
 
         $recentTenants = Tenant::query()
-            ->with('project')
+            ->with(['hostedProject', 'product'])
             ->latest()
             ->take(6)
             ->get();
@@ -62,7 +63,8 @@ class DashboardController extends Controller
 
         $spark = fn (string $key) => OperationalMetrics::emptySparkline();
         $recentActivity = app(ActivityLogQuery::class)->recent(10);
-        $attentionRisks = app(OperationalRiskScanner::class)->attentionRequired(8);
+        $attentionRisks = app(OperationalRiskScanner::class)->attentionRequired(50);
+        $riskOpsCenter = OperationalRiskPresenter::build($attentionRisks);
 
         return view('admin.dashboard', compact(
             'serversCount',
@@ -87,6 +89,7 @@ class DashboardController extends Controller
             'supportSummary',
             'recentActivity',
             'attentionRisks',
+            'riskOpsCenter',
         ));
     }
 
@@ -137,9 +140,11 @@ class DashboardController extends Controller
      */
     private function buildProductRevenue(): Collection
     {
-        $rows = Project::query()
-            ->selectRaw('COALESCE(NULLIF(product_slug, ""), name) as bucket')
-            ->selectRaw('SUM(COALESCE(monthly_revenue, 0)) as total')
+        $rows = Tenant::query()
+            ->leftJoin('products', 'products.id', '=', 'tenants.product_id')
+            ->whereIn('tenants.status', ['active', 'trial'])
+            ->selectRaw('COALESCE(NULLIF(products.name, ""), ?) as bucket', [__('Unassigned')])
+            ->selectRaw('SUM(COALESCE(tenants.subscription_amount, 0)) as total')
             ->groupBy('bucket')
             ->orderByDesc('total')
             ->limit(5)

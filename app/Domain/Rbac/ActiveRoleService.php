@@ -62,7 +62,11 @@ class ActiveRoleService
             return null;
         }
 
-        if ($assignment->role?->requires_elevation && ! $record->hasValidElevation()) {
+        if (
+            $assignment->role?->requires_elevation
+            && ! $record->hasValidElevation()
+            && ! $assignment->role->isSuperAdmin()
+        ) {
             $record->delete();
 
             return null;

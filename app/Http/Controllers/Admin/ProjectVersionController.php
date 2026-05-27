@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Activity\ActivityLogger;
 use App\Http\Controllers\Controller;
-use App\Models\Project;
-use App\Support\ActivityLogCategory;
+use App\Models\Product;
 use App\Models\ProjectVersion;
+use App\Support\ActivityLogCategory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -16,7 +16,7 @@ class ProjectVersionController extends Controller
         private readonly ActivityLogger $activityLogger,
     ) {}
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Product $product): RedirectResponse
     {
         $data = $request->validate([
             'version' => ['required', 'string', 'max:50'],
@@ -28,15 +28,14 @@ class ProjectVersionController extends Controller
         ]);
 
         if ($request->boolean('is_current')) {
-            $project->versions()->update(['is_current' => false]);
-            $project->update([
-                'version' => $data['version'],
-                'min_supported_version' => $data['minimum_supported_version'] ?? $project->min_supported_version,
+            $product->versions()->update(['is_current' => false]);
+            $product->update([
+                'min_supported_version' => $data['minimum_supported_version'] ?? $product->min_supported_version,
                 'latest_release_date' => $data['release_date'] ?? now(),
             ]);
         }
 
-        $version = $project->versions()->create([
+        $version = $product->versions()->create([
             ...$data,
             'is_current' => $request->boolean('is_current'),
         ]);
@@ -44,7 +43,7 @@ class ProjectVersionController extends Controller
         $this->activityLogger->log(
             'project.version_created',
             ActivityLogCategory::PROJECT,
-            __('Version :version registered for :project', ['version' => $version->version, 'project' => $project->name]),
+            __('Version :version registered for :product', ['version' => $version->version, 'product' => $product->name]),
             $version,
             null,
             $version->only(['version', 'release_type', 'is_current']),
@@ -53,9 +52,9 @@ class ProjectVersionController extends Controller
         return back()->with('status', __('Version registered.'));
     }
 
-    public function destroy(Project $project, ProjectVersion $version): RedirectResponse
+    public function destroy(Product $product, ProjectVersion $version): RedirectResponse
     {
-        abort_unless($version->project_id === $project->id, 404);
+        abort_unless((int) $version->product_id === (int) $product->id, 404);
 
         $label = $version->version;
         $version->delete();
@@ -63,8 +62,8 @@ class ProjectVersionController extends Controller
         $this->activityLogger->log(
             'project.version_deleted',
             ActivityLogCategory::PROJECT,
-            __('Version :version removed from :project', ['version' => $label, 'project' => $project->name]),
-            $project,
+            __('Version :version removed from :product', ['version' => $label, 'product' => $product->name]),
+            $product,
             ['version' => $label],
             null,
         );

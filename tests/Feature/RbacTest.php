@@ -309,7 +309,7 @@ class RbacTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_expired_elevation_blocks_super_admin_permissions(): void
+    public function test_expired_elevation_does_not_block_super_admin_permissions(): void
     {
         $admin = $this->superAdminUser();
         $record = UserActiveRole::query()->where('user_id', $admin->id)->first();
@@ -317,7 +317,11 @@ class RbacTest extends TestCase
 
         $this->actingAs($admin)
             ->get(route('access-control.permissions.index'))
-            ->assertForbidden();
+            ->assertOk();
+
+        $this->actingAs($admin)
+            ->get(route('server-health.index'))
+            ->assertOk();
     }
 
     public function test_elevation_password_failure_does_not_switch_role(): void
@@ -527,13 +531,14 @@ class RbacTest extends TestCase
 
     public function test_project_scoped_user_sees_only_assigned_project_on_index(): void
     {
-        $projectA = Project::query()->create(['name' => 'Project A', 'domain' => 'a.test']);
-        $projectB = Project::query()->create(['name' => 'Project B', 'domain' => 'b.test']);
+        $product = \App\Models\Product::query()->create(['name' => 'RBAC Product', 'slug' => 'rbac-product', 'status' => 'active']);
+        $projectA = Project::query()->create(['product_id' => $product->id, 'name' => 'Project A', 'domain' => 'a.test', 'environment' => 'production', 'status' => 'active']);
+        $projectB = Project::query()->create(['product_id' => $product->id, 'name' => 'Project B', 'domain' => 'b.test', 'environment' => 'production', 'status' => 'active']);
 
         $user = $this->scopedUser(RoleScopeType::Project, ['projects.view'], projectId: $projectA->id);
 
         $this->actingAs($user)
-            ->get(route('projects.index'))
+            ->get(route('hosted-projects.index'))
             ->assertOk()
             ->assertSee('Project A')
             ->assertDontSee('Project B');
@@ -622,9 +627,9 @@ class RbacTest extends TestCase
 
     private function superAdminUser(): User
     {
-        $user = User::query()->where('email', config('superuser.email'))->first();
+        $user = User::query()->first();
         if (! $user) {
-            $user = User::factory()->create(['email' => config('superuser.email')]);
+            $user = User::factory()->create();
             $this->seed(RbacBootstrapSeeder::class);
         }
 

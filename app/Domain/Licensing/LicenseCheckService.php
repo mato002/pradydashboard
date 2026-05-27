@@ -24,7 +24,7 @@ class LicenseCheckService
     {
         $resolvedProductKey = $project->resolveProductKey();
 
-        if ($productKey !== $resolvedProductKey) {
+        if (strcasecmp($productKey, $resolvedProductKey) !== 0) {
             return [
                 'payload' => ['message' => 'Product key does not match this API credential.'],
                 'http_status' => 403,
@@ -37,7 +37,13 @@ class LicenseCheckService
 
         if (! $tenant) {
             return [
-                'payload' => ['message' => 'Tenant not found for this product.'],
+                'payload' => [
+                    'message' => 'Tenant not found for this hosted project.',
+                    'hint' => 'Confirm the tenant is linked to this hosted project and PRADY_TENANT_KEY matches tenant_key on the tenant record.',
+                    'tenant_key' => $tenantKey,
+                    'hosted_project_id' => $project->id,
+                    'hosted_project' => $project->name,
+                ],
                 'http_status' => 404,
                 'tenant' => null,
                 'project' => $project,
@@ -65,6 +71,11 @@ class LicenseCheckService
         $result = $this->evaluator->evaluate($project, $tenant);
         $payload = $this->formatter->toPublicApiArray($result);
 
+        if (! ($payload['allowed'] ?? true)) {
+            $billing = app(TenantLicenseBillingContext::class)->forTenant($tenant);
+            $payload['billing'] = $billing ?? app(TenantLicenseBillingContext::class)->fallbackForTenant($tenant);
+        }
+
         $tenant->update([
             'access_level' => $payload['access_level'],
         ]);
@@ -82,7 +93,7 @@ class LicenseCheckService
     public function resolveTenant(Project $project, string $tenantKey): ?Tenant
     {
         return Tenant::query()
-            ->where('project_id', $project->id)
+            ->where('hosted_project_id', $project->id)
             ->where(function ($q) use ($tenantKey) {
                 $q->where('tenant_key', $tenantKey)
                     ->orWhere('external_key', $tenantKey);
@@ -148,7 +159,7 @@ class LicenseCheckService
 
         LicenseCheckLog::query()->create([
             'tenant_id' => $tenant?->id,
-            'project_id' => $project->id,
+            'hosted_project_id' => $project->id,
             'tenant_key' => $tenantKey,
             'product_key' => $productKey,
             'domain' => $domain,

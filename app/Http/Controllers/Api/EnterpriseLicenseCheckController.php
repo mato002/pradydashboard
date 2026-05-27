@@ -44,7 +44,7 @@ class EnterpriseLicenseCheckController extends Controller
 
         $tenant = Tenant::query()
             ->whereKey($data['tenant_id'])
-            ->where('project_id', $project->id)
+            ->where('hosted_project_id', $project->id)
             ->with(['latestAccessControl', 'licenseModules'])
             ->first();
 

@@ -33,14 +33,13 @@ class EloquentTenantRepository implements TenantRepositoryInterface
                 'communications' => fn ($q) => $q->with(['staffProfile', 'relatedTicket'])->latest('communication_date')->limit(30),
                 'notices' => fn ($q) => $q->latest()->limit(20),
                 'projectSubscriptions' => fn ($q) => $q->with([
-                    'project.server',
-                    'project.modules',
+                    'product.modules',
                     'infrastructure.server',
                     'versionTracking',
                     'serviceIntegrations',
                     'moduleSubscriptions.projectModule',
                 ]),
-                'operationalDocuments' => fn ($q) => $q->with(['uploader', 'subscription.project', 'project'])->latest(),
+                'operationalDocuments' => fn ($q) => $q->with(['uploader', 'subscription.product', 'project'])->latest(),
             ])
             ->firstOrFail();
     }

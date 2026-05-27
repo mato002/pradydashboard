@@ -15,7 +15,7 @@ class SupportTicket extends Model
     protected $fillable = [
         'tenant_id',
         'tenant_project_subscription_id',
-        'project_id',
+        'hosted_project_id',
         'assigned_staff_id',
         'subject',
         'description',
@@ -52,7 +52,12 @@ class SupportTicket extends Model
 
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->hostedProject();
+    }
+
+    public function hostedProject(): BelongsTo
+    {
+        return $this->belongsTo(HostedProject::class, 'hosted_project_id');
     }
 
     public function assignedStaff(): BelongsTo

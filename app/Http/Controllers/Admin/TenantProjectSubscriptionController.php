@@ -7,7 +7,7 @@ use App\Domain\Tenancy\TenantProjectProvisioner;
 use App\Http\Controllers\Concerns\AuthorizesRbacScope;
 use App\Http\Controllers\Controller;
 use App\Support\ActivityLogCategory;
-use App\Models\Project;
+use App\Models\Product;
 use App\Models\Tenant;
 use App\Models\TenantProjectSubscription;
 use Illuminate\Http\RedirectResponse;
@@ -26,7 +26,7 @@ class TenantProjectSubscriptionController extends Controller
         $this->authorizeTenantRbac($tenant, 'update');
 
         $data = $request->validate([
-            'project_id' => ['required', 'exists:projects,id'],
+            'product_id' => ['required', 'exists:products,id'],
             'package_name' => ['nullable', 'string', 'max:255'],
             'billing_cycle' => ['nullable', 'in:monthly,yearly,annual,per_user,usage_based,one_off,hybrid'],
             'monthly_fee' => ['nullable', 'numeric', 'min:0'],
@@ -35,27 +35,23 @@ class TenantProjectSubscriptionController extends Controller
             'renewal_date' => ['nullable', 'date'],
         ]);
 
-        $project = Project::query()->findOrFail($data['project_id']);
-        $assignment = $this->rbacScope()->assignment();
-        if ($assignment?->scope_type === \App\Support\Rbac\RoleScopeType::Project) {
-            abort_unless((int) $project->id === (int) $assignment->project_id, 403);
-        }
+        $product = Product::query()->findOrFail($data['product_id']);
 
         $subscription = TenantProjectSubscription::query()->create([
             'tenant_id' => $tenant->id,
-            'project_id' => $project->id,
-            'package_name' => $data['package_name'] ?? $project->name,
-            'billing_cycle' => $data['billing_cycle'] ?? $project->billing_model ?? 'monthly',
-            'monthly_fee' => $data['monthly_fee'] ?? $project->default_monthly_fee,
-            'setup_fee' => $data['setup_fee'] ?? $project->default_setup_fee,
-            'currency' => $data['currency'] ?? $project->currency ?? 'KES',
+            'product_id' => $product->id,
+            'package_name' => $data['package_name'] ?? $product->name,
+            'billing_cycle' => $data['billing_cycle'] ?? $product->billing_model ?? 'monthly',
+            'monthly_fee' => $data['monthly_fee'] ?? $product->default_monthly_fee,
+            'setup_fee' => $data['setup_fee'] ?? $product->default_setup_fee,
+            'currency' => $data['currency'] ?? $product->currency ?? 'KES',
             'renewal_date' => $data['renewal_date'] ?? null,
             'contract_status' => 'draft',
             'license_status' => 'active',
             'product_status' => 'active',
-            'grace_period_days' => $project->grace_period_days,
-            'kill_switch_enabled' => (bool) $project->kill_switch_allowed,
-            'offline_mode_allowed' => (bool) $project->offline_mode_allowed,
+            'grace_period_days' => $product->grace_period_days,
+            'kill_switch_enabled' => (bool) $product->kill_switch_allowed,
+            'offline_mode_allowed' => (bool) $product->offline_mode_allowed,
         ]);
 
         return back()->with('status', __('Project subscription added.'));

@@ -11,12 +11,6 @@ return [
     /** Grant elevation timestamp when bootstrapping active Super Admin (first login). */
     'bootstrap_grant_elevation' => (bool) env('RBAC_BOOTSTRAP_GRANT_ELEVATION', true),
 
-    /** Emails that receive bootstrap Super Admin (comma-separated in env). */
-    'bootstrap_admin_emails' => array_filter(array_map(
-        'trim',
-        explode(',', (string) env('RBAC_BOOTSTRAP_ADMIN_EMAILS', 'superuser@pradytecai.com'))
-    )),
-
     /** Role codes that cannot be created via admin UI. */
     'reserved_role_codes' => [
         'super_admin',

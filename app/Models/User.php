@@ -35,11 +35,6 @@ class User extends Authenticatable
         ];
     }
 
-    public function isHardcodedSuperuser(): bool
-    {
-        return strcasecmp($this->email, (string) config('superuser.email')) === 0;
-    }
-
     public function passwordExpired(): bool
     {
         if ($this->password_changed_at === null) {

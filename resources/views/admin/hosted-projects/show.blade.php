@@ -39,17 +39,9 @@
             <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">{{ __('Restart') }}</button>
             <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">{{ __('View Logs') }}</button>
             <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-violet-200/80 bg-violet-50 px-4 py-2 text-xs font-semibold text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200">{{ __('Scale') }}</button>
-            <a href="{{ route('projects.edit', $project) }}" class="inline-flex items-center rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold dark:border-slate-700">{{ __('Edit') }}</a>
+            <a href="{{ route('hosted-projects.edit', $hostedProject) }}" class="inline-flex items-center rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold dark:border-slate-700">{{ __('Edit') }}</a>
         </div>
     </div>
-
-    <x-admin.assigned-staff :assignments="$staffAssignments" class="mb-6" />
-
-    <x-admin.risk-cards :risks="$operationalRisks" class="mb-6" :compact="true" />
-
-    @include('admin.projects.partials.support-summary')
-
-    <x-admin.activity-feed :logs="$activityLogs" class="mb-6" />
 
     {{-- Health metrics --}}
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
@@ -106,9 +98,9 @@
                             <th>{{ __('By') }}</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100 dark:divide-slate-800/80">
+                    <tbody>
                         @foreach ($deploymentHistory as $dep)
-                            <tr>
+                            <tr data-href="{{ route('deployments.index') }}">
                                 <td class="font-mono text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ $dep['version'] }}</td>
                                 <td><x-ui.status-badge :variant="$dep['status'] === 'success' ? 'success' : 'danger'">{{ $dep['status'] }}</x-ui.status-badge></td>
                                 <td class="capitalize text-xs">{{ $dep['environment'] }}</td>
@@ -133,6 +125,8 @@
 
         {{-- Side panels --}}
         <div class="space-y-5 lg:col-span-5">
+            @include('admin.hosted-projects.partials.integration-kit', ['integrationKit' => $integrationKit])
+
             <div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card dark:border-slate-800 dark:bg-slate-900/60">
                 <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('DNS & SSL') }}</h3>
                 <dl class="mt-3 space-y-2 text-xs">
@@ -155,12 +149,10 @@
             </div>
 
             <div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card dark:border-slate-800 dark:bg-slate-900/60">
-                <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('License API token') }}</h3>
-                <p class="mt-1 text-[11px] text-slate-500">{{ __('Bearer token for tenant license checks') }}</p>
-                <pre class="mt-2 overflow-x-auto rounded-lg bg-slate-950 p-3 text-[10px] text-slate-300">{{ Str::limit($project->api_token, 48) }}…</pre>
-                <form method="post" action="{{ route('projects.regenerate-token', $project) }}" class="mt-3" onsubmit="return confirm('{{ __('Regenerate token?') }}');">
+                <form method="post" action="{{ route('hosted-projects.regenerate-token', $hostedProject) }}" class="flex items-center justify-between gap-2" onsubmit="return confirm(@js(__('Regenerate API token? Existing product .env must be updated.')));">
                     @csrf
-                    <button type="submit" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('Regenerate token') }}</button>
+                    <p class="text-[11px] text-slate-500">{{ __('Invalidates the current project API token.') }}</p>
+                    <button type="submit" class="shrink-0 text-xs font-semibold text-rose-600 dark:text-rose-400">{{ __('Regenerate token') }}</button>
                 </form>
             </div>
 
@@ -175,86 +167,13 @@
                             <x-ui.status-badge :variant="$statusVariant($tenant->status)">{{ $tenant->status }}</x-ui.status-badge>
                         </li>
                     @empty
-                        <li class="px-4 py-4 text-sm text-slate-500">{{ __('No tenants linked.') }}</li>
+                        <li class="px-4 py-4 text-sm text-slate-500">
+                            {{ __('No tenants linked.') }}
+                            <a href="{{ $integrationKit['create_tenant_url'] ?? route('tenants.create') }}" class="mt-1 block font-semibold text-indigo-600 dark:text-indigo-400">{{ __('Add tenant for license keys') }} →</a>
+                        </li>
                     @endforelse
                 </ul>
             </div>
-        </div>
-    </div>
-
-    <div class="mt-6 grid gap-5 lg:grid-cols-2">
-        <div class="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-900/60">
-            <h3 class="text-sm font-semibold">{{ __('Product operations') }}</h3>
-            <dl class="mt-3 space-y-2 text-sm">
-                <div class="flex justify-between"><dt class="text-slate-500">{{ __('MRR (subscriptions)') }}</dt><dd class="font-semibold">KES {{ number_format($mrr, 0) }}</dd></div>
-                <div class="flex justify-between"><dt class="text-slate-500">{{ __('Business model') }}</dt><dd>{{ $project->business_model ?? '—' }}</dd></div>
-                <div class="flex justify-between"><dt class="text-slate-500">{{ __('Deployment type') }}</dt><dd>{{ $project->deployment_type ?? '—' }}</dd></div>
-            </dl>
-        </div>
-        <div class="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-900/60">
-            <h3 class="text-sm font-semibold">{{ __('Tenant rollout summary') }}</h3>
-            <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-                <div><dt class="text-slate-500">{{ __('Total deployments') }}</dt><dd class="text-lg font-semibold tabular-nums">{{ $rolloutSummary['total'] }}</dd></div>
-                <div><dt class="text-slate-500">{{ __('Latest') }}</dt><dd class="text-lg font-semibold tabular-nums text-emerald-600">{{ $rolloutSummary['latest'] }}</dd></div>
-                <div><dt class="text-slate-500">{{ __('Outdated') }}</dt><dd class="text-lg font-semibold tabular-nums text-amber-600">{{ $rolloutSummary['outdated'] }}</dd></div>
-                <div><dt class="text-slate-500">{{ __('Critical update required') }}</dt><dd class="text-lg font-semibold tabular-nums text-rose-600">{{ $rolloutSummary['critical_update_required'] }}</dd></div>
-                <div><dt class="text-slate-500">{{ __('Unknown') }}</dt><dd class="text-lg font-semibold tabular-nums">{{ $rolloutSummary['unknown'] }}</dd></div>
-            </dl>
-            @if ($rolloutSummary['project_current_version'])
-                <p class="mt-2 text-xs text-slate-500">{{ __('Project current version') }}: <span class="font-mono">{{ $rolloutSummary['project_current_version'] }}</span></p>
-            @endif
-        </div>
-    </div>
-
-    <div class="mt-6 grid gap-5 lg:grid-cols-2">
-        <div class="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-900/60">
-            <h3 class="text-sm font-semibold">{{ __('Missing required contracts') }}</h3>
-            <ul class="mt-2 space-y-1 text-sm">
-                @forelse ($missingContracts as $row)
-                    <li>
-                        <a href="{{ route('tenants.show', ['tenant' => $row['tenant_id'], 'tab' => 'documents', 'subscription' => $row['subscription_id']]) }}" class="text-indigo-600 dark:text-indigo-400">
-                            {{ $row['company_name'] }}
-                        </a>
-                    </li>
-                @empty
-                    <li class="text-slate-500">{{ __('All subscribed tenants have signed contracts on file.') }}</li>
-                @endforelse
-            </ul>
-        </div>
-        <div class="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-900/60">
-            <h3 class="text-sm font-semibold">{{ __('Integrations by service type') }}</h3>
-            <ul class="mt-2 space-y-1 text-sm">
-                @forelse ($integrationSummary as $type => $count)
-                    <li class="flex justify-between">
-                        <span>{{ $integrationServiceLabels[$type] ?? $type }}</span>
-                        <span class="font-semibold tabular-nums">{{ $count }}</span>
-                    </li>
-                @empty
-                    <li class="text-slate-500">{{ __('No tenant integrations configured.') }}</li>
-                @endforelse
-            </ul>
-        </div>
-    </div>
-
-    <div class="mt-6 grid gap-5 lg:grid-cols-2">
-        <div class="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-900/60">
-            <h3 class="text-sm font-semibold">{{ __('Version registry') }}</h3>
-            <ul class="mt-2 space-y-1 text-sm">
-                @forelse ($project->versions as $ver)
-                    <li class="flex justify-between"><span class="font-mono">{{ $ver->version }}</span><span class="text-slate-500">{{ $ver->is_current ? __('Current') : $ver->release_type }}</span></li>
-                @empty
-                    <li class="text-slate-500">{{ __('No versions registered.') }}</li>
-                @endforelse
-            </ul>
-            <form method="post" action="{{ route('projects.versions.store', $project) }}" class="mt-4 flex flex-wrap gap-2">
-                @csrf
-                <input name="version" placeholder="v1.0.0" required class="rounded border-slate-300 text-xs dark:border-slate-700 dark:bg-slate-900" />
-                <select name="release_type" class="rounded border-slate-300 text-xs dark:border-slate-700 dark:bg-slate-900">
-                    <option value="minor">minor</option><option value="major">major</option><option value="patch">patch</option>
-                </select>
-                <label class="flex items-center gap-1 text-xs"><input type="checkbox" name="is_current" value="1" /> {{ __('Current') }}</label>
-                <button type="submit" class="rounded bg-indigo-600 px-2 py-1 text-xs text-white">{{ __('Add') }}</button>
-            </form>
         </div>
     </div>
 

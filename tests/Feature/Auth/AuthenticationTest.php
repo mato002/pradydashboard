@@ -2,8 +2,15 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\Role;
 use App\Models\User;
+use App\Models\UserActiveRole;
+use App\Models\UserRoleAssignment;
+use App\Support\Rbac\RoleScopeType;
+use App\Support\Rbac\UserRoleAssignmentStatus;
+use Database\Seeders\RbacBootstrapSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -40,6 +47,36 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertGuest();
+    }
+
+    public function test_super_admin_user_can_access_dashboard_after_login(): void
+    {
+        $this->seed(RbacBootstrapSeeder::class);
+
+        $user = User::factory()->create([
+            'email' => 'ops-admin@pradytecai.test',
+            'password' => Hash::make('password'),
+        ]);
+
+        $superAdmin = Role::query()->where('code', 'super_admin')->firstOrFail();
+
+        UserRoleAssignment::query()->create([
+            'user_id' => $user->id,
+            'role_id' => $superAdmin->id,
+            'scope_type' => RoleScopeType::Global,
+            'status' => UserRoleAssignmentStatus::Active,
+        ]);
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(route('dashboard', absolute: false));
+
+        $active = UserActiveRole::query()->where('user_id', $user->id)->first();
+
+        $this->assertNotNull($active);
+        $this->assertSame($superAdmin->id, $active->assignment?->role_id);
+        $this->assertNotNull($active->elevation_verified_at);
     }
 
     public function test_users_can_logout(): void

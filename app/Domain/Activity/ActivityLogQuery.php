@@ -41,7 +41,7 @@ class ActivityLogQuery
         }
 
         if ($projectId = $filters['project_id'] ?? null) {
-            $query->where('project_id', $projectId);
+            $query->where('hosted_project_id', $projectId);
         }
 
         if ($serverId = $filters['server_id'] ?? null) {
@@ -129,7 +129,7 @@ class ActivityLogQuery
         }
 
         if ($projectId) {
-            $query->where('project_id', $projectId);
+            $query->where('hosted_project_id', $projectId);
         }
 
         if ($serverId) {

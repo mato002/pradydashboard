@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthenticateProjectApiToken;
+use App\Http\Middleware\EnsureActiveRole;
 use App\Http\Middleware\EnsurePasswordIsFresh;
 use App\Http\Middleware\EnsurePermission;
 use Illuminate\Console\Scheduling\Schedule;
@@ -22,7 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'password.fresh' => EnsurePasswordIsFresh::class,
         ]);
 
-        $middleware->appendToGroup('web', EnsurePasswordIsFresh::class);
+        $middleware->appendToGroup('web', [
+            EnsureActiveRole::class,
+            EnsurePasswordIsFresh::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

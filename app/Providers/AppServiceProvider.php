@@ -3,7 +3,6 @@
 namespace App\Providers;
 
 use App\Domain\Activity\ActivityLogger;
-use App\Domain\Auth\HardcodedSuperuserProvisioner;
 use App\Domain\Rbac\ActiveRoleService;
 use App\Domain\Rbac\RbacScopeFilter;
 use App\Domain\Rbac\PermissionMatcher;
@@ -48,14 +47,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (! $this->app->runningInConsole()) {
-            try {
-                app(HardcodedSuperuserProvisioner::class)->provision();
-            } catch (\Throwable) {
-                // Database may be unavailable during early install.
-            }
-        }
-
         Tenant::observe(TenantObserver::class);
 
         RateLimiter::for('license-check', function (Request $request) {

@@ -11,7 +11,7 @@
     <p class="mb-1 mt-1 hidden px-2 text-center text-[9px] font-bold uppercase tracking-widest text-slate-600 lg:block" x-show="sidebarCollapsed" x-cloak>·</p>
 
     @permission('dashboard.view')
-    <a href="{{ route('dashboard') }}" class="{{ $link(request()->routeIs('dashboard')) }} group flex items-center gap-3 rounded-xl px-3 py-2 transition" title="{{ __('Overview') }}">
+    <a href="{{ route('dashboard') }}" data-prady-nav class="{{ $link(request()->routeIs('dashboard')) }} group flex items-center gap-3 rounded-xl px-3 py-2 transition" title="{{ __('Overview') }}">
         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10 group-hover:bg-white/10">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-6 10.5 6M4.5 19.5h15" /></svg>
         </span>
@@ -29,11 +29,19 @@
     </a>
     @endpermission
     @permission('projects.view')
-    <a href="{{ route('projects.index') }}" class="{{ $link(request()->routeIs('projects.*')) }} group flex items-center gap-3 rounded-xl px-3 py-2 transition" title="{{ __('Hosted Projects') }}">
+    <a href="{{ route('hosted-projects.index') }}" class="{{ $link(request()->routeIs('hosted-projects.*') || request()->routeIs('projects.*')) }} group flex items-center gap-3 rounded-xl px-3 py-2 transition" title="{{ __('Hosted Projects') }}">
         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10 group-hover:bg-white/10">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15a2.25 2.25 0 012.25 2.25v.75m-18 0A2.25 2.25 0 004.5 15h15a2.25 2.25 0 002.25-2.25m-18 0v-1.5A2.25 2.25 0 014.5 9h15a2.25 2.25 0 012.25 2.25v1.5" /></svg>
         </span>
         <span class="truncate" :class="sidebarCollapsed ? 'lg:hidden' : ''">{{ __('Hosted Projects') }}</span>
+    </a>
+    @endpermission
+    @permission('projects.view')
+    <a href="{{ route('products.index') }}" class="{{ $link(request()->routeIs('products.*')) }} group flex items-center gap-3 rounded-xl px-3 py-2 transition" title="{{ __('Products') }}">
+        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10 group-hover:bg-white/10">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m13.5 0V12a2.25 2.25 0 002.25 2.25M3.75 19.5h19.5a2.25 2.25 0 00-2.25-2.25V5.25a2.25 2.25 0 012.25-2.25h13.5a2.25 2.25 0 012.25 2.25v14.25a2.25 2.25 0 01-2.25 2.25m-13.5 0h13.5" /></svg>
+        </span>
+        <span class="truncate" :class="sidebarCollapsed ? 'lg:hidden' : ''">{{ __('Products') }}</span>
     </a>
     @endpermission
     @permission('ssl.view')

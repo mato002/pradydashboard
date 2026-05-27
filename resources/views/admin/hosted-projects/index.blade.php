@@ -32,7 +32,7 @@
                 </span>
                 <p class="text-xs font-semibold uppercase tracking-widest text-cyan-600 dark:text-cyan-400">{{ __('CI/CD connected') }}</p>
             </div>
-            <h2 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">{{ __('Product & Deployment Center') }}</h2>
+            <h2 class="mt-1 text-xl font-semibold tracking-tight sm:text-2xl text-slate-900 dark:text-white">{{ __('Hosted instances Center') }}</h2>
             <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ __('Manage SaaS products, environments, deployments, and infrastructure allocation') }}</p>
         </div>
         <div class="flex flex-wrap gap-2">
@@ -40,9 +40,9 @@
                 <svg class="h-4 w-4 text-cyan-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12M12 16.5V3" /></svg>
                 {{ __('Deploy') }}
             </button>
-            <a href="{{ route('projects.create') }}" class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-500/25 transition hover:brightness-110">
+            <a href="{{ route('hosted-projects.create') }}" class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-500/25 transition hover:brightness-110">
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                {{ __('Add Project') }}
+                {{ __('Add hosted project') }}
             </a>
         </div>
     </div>
@@ -69,30 +69,26 @@
         </x-ui.kpi-card>
     </div>
 
-    <div class="mt-6 grid gap-5 lg:grid-cols-12">
+    <x-admin.quick-links group="control_plane" class="mb-4 mt-6" />
+
+    <div class="grid gap-5 lg:grid-cols-12">
         {{-- Main table --}}
         <div class="space-y-4 lg:col-span-8">
-            <form method="GET" class="flex flex-wrap gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-card dark:border-slate-800 dark:bg-slate-900/60">
-                <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="{{ __('Search projects…') }}" class="min-w-[12rem] flex-1 rounded-xl border-slate-200 bg-slate-50 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-                <select name="environment" class="rounded-xl border-slate-200 bg-slate-50 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                    <option value="">{{ __('All environments') }}</option>
-                    <option value="production" @selected($filters['environment'] === 'production')>{{ __('Production') }}</option>
-                    <option value="staging" @selected($filters['environment'] === 'staging')>{{ __('Staging') }}</option>
-                </select>
-                <select name="status" class="rounded-xl border-slate-200 bg-slate-50 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                    <option value="">{{ __('All statuses') }}</option>
-                    <option value="active" @selected($filters['status'] === 'active')>{{ __('Active') }}</option>
-                    <option value="maintenance" @selected($filters['status'] === 'maintenance')>{{ __('Maintenance') }}</option>
-                    <option value="suspended" @selected($filters['status'] === 'suspended')>{{ __('Suspended') }}</option>
-                </select>
-                <button type="submit" class="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white dark:bg-white dark:text-slate-900">{{ __('Filter') }}</button>
-            </form>
+            <x-admin.list-toolbar
+                :search-value="$filters['q'] ?? ''"
+                search-placeholder="{{ __('Search products, domains…') }}"
+                :export-href="route('hosted-projects.export', request()->query())"
+                :result-count="$hostedProjects->total()"
+            >
+                <x-admin.filter-select name="environment" :placeholder="__('Environment')" :value="$filters['environment'] ?? ''" :options="['production' => __('Production'), 'staging' => __('Staging')]" />
+                <x-admin.filter-select name="status" :placeholder="__('Status')" :value="$filters['status'] ?? ''" :options="['active' => __('Active'), 'maintenance' => __('Maintenance'), 'suspended' => __('Suspended')]" />
+            </x-admin.list-toolbar>
 
-            <x-ui.table-panel :title="__('Hosted products')" :action-href="route('projects.create')" :action-label="__('Add')">
+            <x-ui.table-panel :title="__('Hosted products')" :action-href="route('hosted-projects.create')" :action-label="__('Add')">
                 <table class="prady-table min-w-[1200px]">
                     <thead>
                         <tr>
-                            <th>{{ __('Project') }}</th>
+                            <th>{{ __('Hosted project') }}</th>
                             <th>{{ __('Domain') }}</th>
                             <th>{{ __('Environment') }}</th>
                             <th>{{ __('Hosting Server') }}</th>
@@ -104,17 +100,17 @@
                             <th class="text-right">{{ __('Actions') }}</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100 dark:divide-slate-800/80">
+                    <tbody>
                         @forelse ($enrichedRows as $row)
-                            @php $project = $row['project']; @endphp
-                            <tr class="group transition hover:bg-slate-50/80 dark:hover:bg-slate-800/30">
+                            @php $hostedProject = $row['hostedProject']; @endphp
+                            <x-ui.clickable-row :href="route('hosted-projects.show', $hostedProject)" class="group transition hover:bg-slate-50/80 dark:hover:bg-slate-800/30">
                                 <td>
-                                    <a href="{{ route('projects.show', $project) }}" class="flex items-center gap-2 font-semibold text-indigo-600 dark:text-indigo-400">
-                                        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-indigo-500/20 text-xs font-bold text-indigo-700 dark:text-indigo-200">{{ mb_strtoupper(mb_substr($project->name, 0, 2)) }}</span>
-                                        {{ $project->name }}
+                                    <a href="{{ route('hosted-projects.show', $hostedProject) }}" class="flex items-center gap-2 font-semibold text-indigo-600 dark:text-indigo-400">
+                                        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-indigo-500/20 text-xs font-bold text-indigo-700 dark:text-indigo-200">{{ mb_strtoupper(mb_substr($hostedProject->name, 0, 2)) }}</span>
+                                        {{ $hostedProject->name }}
                                     </a>
                                 </td>
-                                <td class="font-mono text-xs text-slate-600 dark:text-slate-300">{{ $project->domain }}</td>
+                                <td class="font-mono text-xs text-slate-600 dark:text-slate-300">{{ $hostedProject->domain }}</td>
                                 <td>
                                     <span @class([
                                         'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1',
@@ -122,10 +118,10 @@
                                         'bg-amber-500/10 text-amber-800 ring-amber-500/20 dark:text-amber-200' => $row['environment'] === 'staging',
                                     ])>{{ $row['environment'] }}</span>
                                 </td>
-                                <td class="text-sm text-slate-600 dark:text-slate-300">{{ $project->server?->name ?? '—' }}</td>
-                                <td class="text-right tabular-nums font-medium">{{ $project->tenants_count }}</td>
+                                <td class="text-sm text-slate-600 dark:text-slate-300">{{ $hostedProject->server?->name ?? '—' }}</td>
+                                <td class="text-right tabular-nums font-medium">{{ $hostedProject->tenants_count }}</td>
                                 <td>
-                                    <x-ui.status-badge :variant="$statusVariant($project->status)">{{ $project->status }}</x-ui.status-badge>
+                                    <x-ui.status-badge :variant="$statusVariant($hostedProject->status)">{{ $hostedProject->status }}</x-ui.status-badge>
                                 </td>
                                 <td>
                                     <div class="flex items-center gap-2 min-w-[5rem]">
@@ -140,17 +136,13 @@
                                     <span class="{{ $ciColor($row['ci_status']) }}">{{ $deployLabel($row['deploy_status']) }}</span>
                                 </td>
                                 <td class="font-mono text-xs text-slate-600 dark:text-slate-300">{{ $row['version'] }}</td>
-                                <td class="text-right">
-                                    <div class="flex justify-end gap-1 opacity-80 group-hover:opacity-100">
-                                        <a href="{{ route('projects.show', $project) }}" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800" title="{{ __('View') }}">
-                                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                        </a>
-                                        <a href="{{ route('projects.edit', $project) }}" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="{{ __('Edit') }}">
-                                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
-                                        </a>
-                                    </div>
+                                <td class="text-right" @click.stop>
+                                    <x-ui.row-actions-menu>
+                                        <x-ui.row-action :href="route('hosted-projects.show', $hostedProject)">{{ __('View') }}</x-ui.row-action>
+                                        <x-ui.row-action :href="route('hosted-projects.edit', $hostedProject)">{{ __('Edit') }}</x-ui.row-action>
+                                    </x-ui.row-actions-menu>
                                 </td>
-                            </tr>
+                            </x-ui.clickable-row>
                         @empty
                             <tr>
                                 <td colspan="10" class="py-12 text-center text-sm text-slate-500">{{ __('No hosted projects yet. Add your first SaaS product.') }}</td>
@@ -158,7 +150,7 @@
                         @endforelse
                     </tbody>
                 </table>
-                <x-slot name="footer">{{ $projects->links() }}</x-slot>
+                <x-slot name="footer"><x-admin.pagination-bar :paginator="$hostedProjects" /></x-slot>
             </x-ui.table-panel>
         </div>
 
@@ -170,12 +162,12 @@
                     <p class="text-[11px] text-slate-400">{{ __('Recent pipeline activity') }}</p>
                 </div>
                 <ul class="max-h-80 divide-y divide-white/5 overflow-y-auto">
-                    @foreach ($recentDeployments as $dep)
+                    @forelse ($recentDeployments as $dep)
                         <li class="px-4 py-3">
                             <div class="flex items-start justify-between gap-2">
                                 <div>
                                     <p class="text-xs font-semibold text-white">
-                                        <a href="{{ route('projects.show', $dep['project_id']) }}" class="hover:text-cyan-300">{{ $dep['project'] }}</a>
+                                        <a href="{{ route('hosted-projects.show', $dep['project_id']) }}" class="hover:text-cyan-300">{{ $dep['project'] ?? '—' }}</a>
                                     </p>
                                     <p class="mt-0.5 font-mono text-[10px] text-cyan-400/90">{{ $dep['version'] }}</p>
                                 </div>
@@ -183,7 +175,9 @@
                             </div>
                             <p class="mt-1.5 text-[10px] text-slate-500">{{ $dep['triggered_by'] }} · {{ $dep['deployed_at']->diffForHumans() }} · {{ $dep['duration_sec'] }}s</p>
                         </li>
-                    @endforeach
+                    @empty
+                        <li class="px-4 py-6 text-center text-[11px] text-slate-500">{{ __('No deployments recorded yet.') }}</li>
+                    @endforelse
                 </ul>
                 <div class="border-t border-white/10 px-4 py-3">
                     <div class="flex gap-2">
@@ -200,7 +194,7 @@
                     @foreach ($enrichedRows->take(4) as $row)
                         <li>
                             <div class="flex justify-between font-semibold text-slate-700 dark:text-slate-200">
-                                <span class="truncate">{{ $row['project']->name }}</span>
+                                <span class="truncate">{{ $row['hostedProject']->name }}</span>
                                 <span class="tabular-nums text-slate-500">{{ $row['response_ms'] }}ms</span>
                             </div>
                             <div class="mt-1 flex gap-2 text-[10px] text-slate-500">
@@ -243,8 +237,9 @@
                     </div>
                 </div>
             @empty
-                <p class="col-span-full py-6 text-center text-sm text-slate-500">{{ __('Add servers to map infrastructure to projects.') }}</p>
+                <p class="col-span-full py-6 text-center text-sm text-slate-500">{{ __('Add servers to map infrastructure to hosted-projects.') }}</p>
             @endforelse
         </div>
     </div>
 </x-dashboard-layout>
+

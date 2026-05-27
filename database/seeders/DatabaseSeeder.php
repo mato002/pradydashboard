@@ -2,10 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -17,21 +15,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            RbacBootstrapSeeder::class,
             LicenseModuleSeeder::class,
             HrDepartmentSeeder::class,
         ]);
-
-        User::query()->firstOrCreate(
-            ['email' => config('superuser.email')],
-            [
-                'name' => config('superuser.name'),
-                'password' => Hash::make(config('superuser.password')),
-                'email_verified_at' => now(),
-                'password_changed_at' => now(),
-            ]
-        );
-
-        $this->call(RbacBootstrapSeeder::class);
         $this->call(DocumentTemplateSeeder::class);
         $this->call(PaymentTestDataSeeder::class);
 

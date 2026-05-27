@@ -80,11 +80,10 @@ class BackupDemoSeeder extends Seeder
                 ? null
                 : $started->copy()->addSeconds($job['duration'] ?? 60);
 
-            Backup::query()->create([
+            Backup::query()->create(Backup::attributesWithHostedProject($project?->id, [
                 'name' => $job['name'],
                 'server_id' => $server?->id,
                 'tenant_id' => $tenant?->id,
-                'project_id' => $project?->id,
                 'backup_type' => $job['type'],
                 'size_bytes' => $job['size'],
                 'started_at' => $started,
@@ -95,7 +94,7 @@ class BackupDemoSeeder extends Seeder
                 'integrity_verified' => $job['status'] === 'successful' && $i % 3 !== 0,
                 'is_restore_point' => $job['restore'],
                 'notes' => $job['status'] === 'failed' ? __('Checksum mismatch on archive segment 3') : null,
-            ]);
+            ]));
         }
     }
 }

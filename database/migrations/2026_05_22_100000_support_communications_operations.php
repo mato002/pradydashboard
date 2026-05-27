@@ -15,7 +15,7 @@ return new class extends Migration
                     ->references('id')->on('tenant_project_subscriptions')->nullOnDelete();
             }
             if (! Schema::hasColumn('support_tickets', 'assigned_staff_id')) {
-                $table->foreignId('assigned_staff_id')->nullable()->after('project_id')
+                $table->foreignId('assigned_staff_id')->nullable()->after('hosted_project_id')
                     ->constrained('staff_profiles')->nullOnDelete();
             }
             if (! Schema::hasColumn('support_tickets', 'description')) {
@@ -86,7 +86,7 @@ return new class extends Migration
                 $table->unsignedBigInteger('tenant_project_subscription_id')->nullable();
                 $table->foreign('tenant_project_subscription_id', 'tnotice_subscription_fk')
                     ->references('id')->on('tenant_project_subscriptions')->nullOnDelete();
-                $table->foreignId('project_id')->nullable()->constrained()->nullOnDelete();
+                $table->foreignId('product_id')->nullable()->constrained('products')->nullOnDelete();
                 $table->string('notice_type', 40);
                 $table->string('title');
                 $table->text('message');

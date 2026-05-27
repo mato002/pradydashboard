@@ -51,7 +51,7 @@
                 ]"
             >
                 <div class="flex h-[4.25rem] shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
-                    <a href="{{ route('dashboard') }}" class="flex min-w-0 items-center gap-3">
+                    <a href="{{ route('dashboard') }}" data-prady-nav class="flex min-w-0 items-center gap-3">
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold tracking-tight text-white shadow-lg shadow-indigo-500/30">P</span>
                         <div class="min-w-0 flex-1 overflow-hidden transition-opacity" :class="sidebarCollapsed ? 'lg:opacity-0 lg:pointer-events-none' : ''">
                             <p class="truncate text-sm font-semibold tracking-tight text-white">Prady Dashboard</p>
@@ -111,9 +111,9 @@
                                     {!! $headerSlot !!}
                                 </div>
                             @elseif ($heading)
-                                <h1 class="truncate text-lg font-semibold tracking-tight text-slate-900 dark:text-white">{{ $heading }}</h1>
+                                <h1 id="prady-page-heading" class="truncate text-lg font-semibold tracking-tight text-slate-900 dark:text-white">{{ $heading }}</h1>
                             @endif
-                            <p class="truncate text-xs text-slate-500 dark:text-slate-400">
+                            <p id="prady-page-subheading" class="truncate text-xs text-slate-500 dark:text-slate-400">
                                 @auth
                                     {{ $subheading ?? __('Welcome back') }}, {{ Auth::user()->name }}
                                 @else
@@ -190,10 +190,10 @@
                                         </button>
                                     </x-slot>
                                     <x-slot name="content">
-                                        <x-dropdown-link :href="route('profile.edit')">{{ __('Profile') }}</x-dropdown-link>
+                                        <x-dropdown-link :href="route('profile.edit')" data-prady-full-nav>{{ __('Profile') }}</x-dropdown-link>
                                         <form method="POST" action="{{ route('logout') }}">
                                             @csrf
-                                            <x-dropdown-link :href="route('logout')" onclick="event.preventDefault(); this.closest('form').submit();">
+                                            <x-dropdown-link :href="route('logout')" data-prady-full-nav onclick="event.preventDefault(); this.closest('form').submit();">
                                                 {{ __('Log Out') }}
                                             </x-dropdown-link>
                                         </form>
@@ -205,14 +205,23 @@
                 </header>
 
                 <div class="relative bg-mesh-light dark:bg-mesh-dark">
-                    <main class="relative mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                        @if (session('status'))
-                            <div class="mb-5 rounded-2xl border border-emerald-200/80 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
-                                {{ session('status') }}
-                            </div>
-                        @endif
+                    <div class="pointer-events-none absolute inset-0 bg-slate-100/90 dark:bg-slate-950/80"></div>
+                    <main class="relative mx-auto min-w-0 max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                        <div
+                            x-show="workspaceLoading"
+                            x-transition.opacity
+                            x-cloak
+                            class="absolute inset-0 z-20 rounded-2xl bg-white/75 px-4 py-6 backdrop-blur-[2px] dark:bg-slate-950/75 sm:px-6 lg:px-8"
+                        >
+                            <x-prady-workspace-skeleton />
+                        </div>
 
-                        {{ $slot }}
+                        <div
+                            class="relative min-w-0 transition-opacity duration-200"
+                            :class="workspaceLoading ? 'pointer-events-none opacity-40' : 'opacity-100'"
+                        >
+                            {{ $slot }}
+                        </div>
                     </main>
 
                     <footer class="relative border-t border-slate-200/60 bg-white/60 px-4 py-4 text-xs text-slate-500 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/40 dark:text-slate-400 sm:px-6 lg:px-8">

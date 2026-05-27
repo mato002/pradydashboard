@@ -48,7 +48,7 @@ class RbacScopeFilter
 
         return match ($assignment->scope_type) {
             RoleScopeType::Tenant => $query->where($column, $assignment->tenant_id),
-            RoleScopeType::Project => $query->where('project_id', $assignment->project_id),
+            RoleScopeType::Project => $query->where('hosted_project_id', $assignment->project_id),
             RoleScopeType::Server => $query->where('server_id', $assignment->server_id),
             default => $query->whereRaw('0 = 1'),
         };
@@ -65,14 +65,14 @@ class RbacScopeFilter
         return match ($assignment->scope_type) {
             RoleScopeType::Project => $query->where($column, $assignment->project_id),
             RoleScopeType::Tenant => $query->whereIn($column, function ($sub) use ($assignment) {
-                $sub->select('project_id')
+                $sub->select('hosted_project_id')
                     ->from('tenants')
                     ->where('id', $assignment->tenant_id)
-                    ->whereNotNull('project_id');
+                    ->whereNotNull('hosted_project_id');
             }),
             RoleScopeType::Server => $query->whereIn($column, function ($sub) use ($assignment) {
                 $sub->select('id')
-                    ->from('projects')
+                    ->from('hosted_projects')
                     ->where('server_id', $assignment->server_id);
             }),
             default => $query->whereRaw('0 = 1'),
@@ -97,7 +97,7 @@ class RbacScopeFilter
             }),
             RoleScopeType::Project => $query->whereIn($column, function ($sub) use ($assignment) {
                 $sub->select('server_id')
-                    ->from('projects')
+                    ->from('hosted_projects')
                     ->where('id', $assignment->project_id)
                     ->whereNotNull('server_id');
             }),
@@ -116,7 +116,7 @@ class RbacScopeFilter
         return match ($assignment->scope_type) {
             RoleScopeType::Tenant => $query->where($column, $assignment->tenant_id),
             RoleScopeType::Project => $query->whereIn($column, function ($sub) use ($assignment) {
-                $sub->select('id')->from('tenants')->where('project_id', $assignment->project_id);
+                $sub->select('id')->from('tenants')->where('hosted_project_id', $assignment->project_id);
             }),
             RoleScopeType::Server => $query->whereIn($column, function ($sub) use ($assignment) {
                 $sub->select('id')->from('tenants')->where('server_id', $assignment->server_id);
@@ -135,7 +135,7 @@ class RbacScopeFilter
 
         return match ($assignment->scope_type) {
             RoleScopeType::Tenant => $query->where('tenant_id', $assignment->tenant_id),
-            RoleScopeType::Project => $query->where('project_id', $assignment->project_id),
+            RoleScopeType::Project => $query->where('hosted_project_id', $assignment->project_id),
             RoleScopeType::Server => $query->where('server_id', $assignment->server_id),
             default => $query->whereRaw('0 = 1'),
         };
@@ -154,7 +154,7 @@ class RbacScopeFilter
             RoleScopeType::Tenant => (int) $assignment->tenant_id === (int) $tenantId,
             RoleScopeType::Project => Tenant::query()
                 ->where('id', $tenantId)
-                ->where('project_id', $assignment->project_id)
+                ->where('hosted_project_id', $assignment->project_id)
                 ->exists(),
             RoleScopeType::Server => Tenant::query()
                 ->where('id', $tenantId)
@@ -178,7 +178,7 @@ class RbacScopeFilter
 
         $allowed = match ($assignment->scope_type) {
             RoleScopeType::Tenant => (int) $subscription->tenant_id === (int) $assignment->tenant_id,
-            RoleScopeType::Project => (int) $subscription->project_id === (int) $assignment->project_id,
+            RoleScopeType::Project => (int) $subscription->tenant?->hosted_project_id === (int) $assignment->project_id,
             RoleScopeType::Server => (int) (
                 $subscription->infrastructure?->server_id
                 ?? $subscription->tenant?->server_id

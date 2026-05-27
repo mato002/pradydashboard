@@ -23,15 +23,19 @@ class UserRoleAssignmentService
     public function assign(User $actor, User $target, Role $role, array $data): UserRoleAssignment
     {
         if ($role->isSuperAdmin() && ! $this->rbacGuard->isActiveSuperAdmin($actor->activeRoleAssignment)) {
-            throw ValidationException::withMessages([
-                'role_id' => __('Only a Super Admin can assign the Super Admin role.'),
-            ]);
+            if ($this->activeSuperAdminAssignmentCount() > 0) {
+                throw ValidationException::withMessages([
+                    'role_id' => __('Only a Super Admin can assign the Super Admin role.'),
+                ]);
+            }
         }
 
         if ($actor->id === $target->id && $role->isSuperAdmin() && ! $this->rbacGuard->isActiveSuperAdmin()) {
-            throw ValidationException::withMessages([
-                'role_id' => __('You cannot assign Super Admin to yourself.'),
-            ]);
+            if ($this->activeSuperAdminAssignmentCount() > 0) {
+                throw ValidationException::withMessages([
+                    'role_id' => __('You cannot assign Super Admin to yourself.'),
+                ]);
+            }
         }
 
         $scopeType = $data['scope_type'] ?? RoleScopeType::Global->value;
@@ -111,6 +115,17 @@ class UserRoleAssignmentService
             ['status' => UserRoleAssignmentStatus::Active->value],
             ['status' => UserRoleAssignmentStatus::Revoked->value, 'reason' => $reason],
         );
+    }
+
+    private function activeSuperAdminAssignmentCount(): int
+    {
+        $code = config('rbac.super_admin_role_code') ?: 'super_admin';
+
+        return UserRoleAssignment::query()
+            ->where('status', UserRoleAssignmentStatus::Active)
+            ->whereHas('role', fn ($q) => $q->where('code', $code)->where('is_system', true))
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->count();
     }
 
     private function duplicateActiveAssignmentExists(

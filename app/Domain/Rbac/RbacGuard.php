@@ -35,11 +35,7 @@ class RbacGuard
         }
 
         if ($this->isActiveSuperAdmin($assignment)) {
-            if ($user->isHardcodedSuperuser() && config('superuser.bypass_elevation', true)) {
-                return true;
-            }
-
-            return $this->hasValidElevationForRole($activeRecord, $assignment);
+            return true;
         }
 
         if (! $assignment->isActivatable()) {

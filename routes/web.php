@@ -1,56 +1,71 @@
 <?php
 
+use App\Http\Controllers\ActiveRoleController;
 use App\Http\Controllers\Admin\AccessControlsController;
 use App\Http\Controllers\Admin\ActivityLogsController;
 use App\Http\Controllers\Admin\ApiCredentialsController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DeploymentController;
+use App\Http\Controllers\Admin\HrController;
+use App\Http\Controllers\Admin\HrDepartmentController;
 use App\Http\Controllers\Admin\InvoiceController;
 use App\Http\Controllers\Admin\LicenseCheckLogController;
 use App\Http\Controllers\Admin\ModulePlaceholderController;
 use App\Http\Controllers\Admin\MonitoringController;
+use App\Http\Controllers\Admin\OperationalDocumentController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PaymentReconciliationController;
 use App\Http\Controllers\Admin\ProjectController;
-use App\Http\Controllers\Admin\ServerController;
-use App\Http\Controllers\Admin\ServerHealthController;
-use App\Http\Controllers\Admin\ServerProviderNoticeController;
-use App\Http\Controllers\Admin\SslDomainController;
-use App\Http\Controllers\Admin\SubscriptionController;
-use App\Http\Controllers\Admin\SupportTicketCommentController;
-use App\Http\Controllers\Admin\SupportTicketsController;
-use App\Http\Controllers\Admin\TenantCommunicationController;
-use App\Http\Controllers\Admin\TenantNoticeController;
-use App\Http\Controllers\Admin\TenantSupportTicketController;
-use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\ProjectModuleController;
 use App\Http\Controllers\Admin\ProjectVersionController;
-use App\Http\Controllers\Admin\RiskCenterController;
-use App\Http\Controllers\Admin\TenantBillingController;
-use App\Http\Controllers\Admin\TenantController;
-use App\Http\Controllers\Admin\OperationalDocumentController;
-use App\Http\Controllers\Admin\TenantProjectIntegrationController;
-use App\Http\Controllers\Admin\TenantProjectLicenseController;
-use App\Http\Controllers\Admin\TenantProjectInfrastructureController;
-use App\Http\Controllers\Admin\TenantProjectModuleSubscriptionController;
-use App\Http\Controllers\Admin\TenantProjectSubscriptionController;
-use App\Http\Controllers\Admin\TenantProjectVersionController;
-use App\Http\Controllers\Admin\HrController;
-use App\Http\Controllers\Admin\HrDepartmentController;
-use App\Http\Controllers\Admin\StaffAssignmentController;
-use App\Http\Controllers\Admin\StaffDocumentController;
-use App\Http\Controllers\Admin\StaffProfileController;
-use App\Http\Controllers\Admin\UsersRolesController;
-use App\Http\Controllers\Admin\TenantModuleController;
-use App\Http\Controllers\ActiveRoleController;
 use App\Http\Controllers\Admin\Rbac\PermissionController as RbacPermissionController;
 use App\Http\Controllers\Admin\Rbac\RoleController as RbacRoleController;
 use App\Http\Controllers\Admin\Rbac\RoleInheritanceController;
 use App\Http\Controllers\Admin\Rbac\RolePermissionController;
 use App\Http\Controllers\Admin\Rbac\RoleSwitchLogController;
 use App\Http\Controllers\Admin\Rbac\UserRoleAssignmentController;
+use App\Http\Controllers\Admin\RiskCenterController;
+use App\Http\Controllers\Admin\ServerController;
+use App\Http\Controllers\Admin\ServerHealthController;
+use App\Http\Controllers\Admin\ServerProviderNoticeController;
+use App\Http\Controllers\Admin\SslDomainController;
+use App\Http\Controllers\Admin\StaffAssignmentController;
+use App\Http\Controllers\Admin\StaffDocumentController;
+use App\Http\Controllers\Admin\StaffProfileController;
+use App\Http\Controllers\Admin\SubscriptionController;
+use App\Http\Controllers\Admin\SupportTicketCommentController;
+use App\Http\Controllers\Admin\SupportTicketsController;
+use App\Http\Controllers\Admin\SystemSettingsController;
+use App\Http\Controllers\Admin\TenantBillingController;
+use App\Http\Controllers\Admin\TenantCommunicationController;
+use App\Http\Controllers\Admin\TenantController;
+use App\Http\Controllers\Admin\TenantModuleController;
+use App\Http\Controllers\Admin\TenantNoticeController;
+use App\Http\Controllers\Admin\TenantProjectInfrastructureController;
+use App\Http\Controllers\Admin\TenantProjectIntegrationController;
+use App\Http\Controllers\Admin\TenantProjectLicenseController;
+use App\Http\Controllers\Admin\TenantProjectModuleSubscriptionController;
+use App\Http\Controllers\Admin\TenantProjectSubscriptionController;
+use App\Http\Controllers\Admin\TenantProjectVersionController;
+use App\Http\Controllers\Admin\TenantSupportTicketController;
+use App\Http\Controllers\Admin\UsersRolesController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayApiKeysController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayCallbackLogsController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayGoLiveDryRunController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayHealthController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayIncidentInvestigationController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayOperationsConsoleController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayProductionReadinessController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayTransactionsController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayWebhookDeliveriesController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayWebhookEventsController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\PaybillAccountsController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\PaymentProfilesController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\PaymentsGatewayOverviewController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\TenantProfilesController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\WebhookEndpointsController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'landing')->name('home');
@@ -61,9 +76,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('active-role/switch', [ActiveRoleController::class, 'switch'])->name('active-role.switch');
 
     Route::middleware('permission:servers.sync')->group(function () {
-    Route::post('servers/probe', [ServerController::class, 'probe'])->name('servers.probe');
-    Route::post('servers/sync-fleet', [ServerController::class, 'syncFleet'])->name('servers.sync-fleet');
-    Route::post('servers/{server}/sync-telemetry', [ServerController::class, 'syncTelemetry'])->name('servers.sync-telemetry');
+        Route::post('servers/probe', [ServerController::class, 'probe'])->name('servers.probe');
+        Route::post('servers/sync-fleet', [ServerController::class, 'syncFleet'])->name('servers.sync-fleet');
+        Route::post('servers/{server}/sync-telemetry', [ServerController::class, 'syncTelemetry'])->name('servers.sync-telemetry');
     });
 
     Route::resource('servers', ServerController::class)
@@ -158,10 +173,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middlewareFor(['edit', 'update', 'destroy'], 'permission:tenants.update');
 
     Route::middleware('permission:projects.update')->group(function () {
-    Route::post('projects/{project}/modules', [ProjectModuleController::class, 'store'])->name('projects.modules.store');
-    Route::delete('projects/{project}/modules/{module}', [ProjectModuleController::class, 'destroy'])->name('projects.modules.destroy');
-    Route::post('projects/{project}/versions', [ProjectVersionController::class, 'store'])->name('projects.versions.store');
-    Route::delete('projects/{project}/versions/{version}', [ProjectVersionController::class, 'destroy'])->name('projects.versions.destroy');
+        Route::post('projects/{project}/modules', [ProjectModuleController::class, 'store'])->name('projects.modules.store');
+        Route::delete('projects/{project}/modules/{module}', [ProjectModuleController::class, 'destroy'])->name('projects.modules.destroy');
+        Route::post('projects/{project}/versions', [ProjectVersionController::class, 'store'])->name('projects.versions.store');
+        Route::delete('projects/{project}/versions/{version}', [ProjectVersionController::class, 'destroy'])->name('projects.versions.destroy');
     });
 
     Route::get('support-tickets', [SupportTicketsController::class, 'index'])->middleware('permission:support.tickets.view')->name('support-tickets.index');
@@ -191,6 +206,83 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('webhooks/{webhook}', [ApiCredentialsController::class, 'updateWebhook'])->name('webhooks.update')->where('webhook', '[A-Za-z0-9_]+');
     });
 
+    Route::prefix('settings/api-integrations/payments-gateway')
+        ->name('settings.payments-gateway.')
+        ->group(function () {
+            Route::middleware('permission:payments_gateway.view')->group(function () {
+                Route::get('/', PaymentsGatewayOverviewController::class)->name('overview');
+                Route::get('tenants', [TenantProfilesController::class, 'index'])->name('tenants.index');
+                Route::get('tenants/{tenant}', [TenantProfilesController::class, 'show'])->name('tenants.show');
+                Route::get('tenants/{tenant}/payment-profiles', [PaymentProfilesController::class, 'index'])->name('tenants.payment-profiles.index');
+                Route::get('payment-profiles/{profileUuid}', [PaymentProfilesController::class, 'show'])->name('payment-profiles.show')->whereUuid('profileUuid');
+                Route::get('payment-profiles/{profileUuid}/paybill-accounts', [PaybillAccountsController::class, 'index'])->name('payment-profiles.paybill-accounts.index')->whereUuid('profileUuid');
+                Route::get('payment-profiles/{profileUuid}/api-keys', [GatewayApiKeysController::class, 'index'])->name('payment-profiles.api-keys.index')->whereUuid('profileUuid');
+                Route::get('payment-profiles/{profileUuid}/webhook-endpoints', [WebhookEndpointsController::class, 'index'])->name('payment-profiles.webhook-endpoints.index')->whereUuid('profileUuid');
+                Route::get('operations-console', [GatewayOperationsConsoleController::class, 'index'])->name('operations-console');
+                Route::get('operations-console/dead-letters/{uuid}', [GatewayIncidentInvestigationController::class, 'showDeadLetter'])->name('operations-console.dead-letters.show')->whereUuid('uuid');
+                Route::get('operations-console/callback-logs/{uuid}', [GatewayIncidentInvestigationController::class, 'showCallbackLog'])->name('operations-console.callback-logs.show')->whereUuid('uuid');
+                Route::get('operations-console/webhook-deliveries/{uuid}', [GatewayIncidentInvestigationController::class, 'showWebhookDelivery'])->name('operations-console.webhook-deliveries.show')->whereUuid('uuid');
+                Route::get('operations-console/treasury-alerts/{uuid}', [GatewayIncidentInvestigationController::class, 'showTreasuryAlert'])->name('operations-console.treasury-alerts.show')->whereUuid('uuid');
+                Route::get('operations-console/webhook-events/{uuid}', [GatewayIncidentInvestigationController::class, 'showWebhookEvent'])->name('operations-console.webhook-events.show')->whereUuid('uuid');
+                Route::get('operations-console/unmatched-transactions/{uuid}', [GatewayIncidentInvestigationController::class, 'showUnmatchedTransaction'])->name('operations-console.unmatched-transactions.show')->whereUuid('uuid');
+                Route::get('transactions', [GatewayTransactionsController::class, 'index'])->name('transactions.index');
+                Route::get('transactions/{transactionUuid}', [GatewayTransactionsController::class, 'show'])->name('transactions.show')->whereUuid('transactionUuid');
+                Route::get('callback-logs', [GatewayCallbackLogsController::class, 'index'])->name('callback-logs.index');
+                Route::get('callback-logs/{callbackLogUuid}', [GatewayCallbackLogsController::class, 'show'])->name('callback-logs.show')->whereUuid('callbackLogUuid');
+                Route::get('webhook-events', [GatewayWebhookEventsController::class, 'index'])->name('webhook-events.index');
+                Route::get('webhook-events/{eventUuid}', [GatewayWebhookEventsController::class, 'show'])->name('webhook-events.show')->whereUuid('eventUuid');
+                Route::get('webhook-deliveries', [GatewayWebhookDeliveriesController::class, 'index'])->name('webhook-deliveries.index');
+                Route::get('webhook-deliveries/{deliveryUuid}', [GatewayWebhookDeliveriesController::class, 'show'])->name('webhook-deliveries.show')->whereUuid('deliveryUuid');
+                Route::get('production-readiness', [GatewayProductionReadinessController::class, 'index'])->name('production-readiness');
+                Route::get('go-live-dry-run', [GatewayGoLiveDryRunController::class, 'index'])->name('go-live-dry-run');
+                Route::get('health', GatewayHealthController::class)->name('health');
+            });
+
+            Route::middleware('permission:payments_gateway.manage')->group(function () {
+                Route::post('operations-console/bulk-action', [GatewayOperationsConsoleController::class, 'bulkAction'])->name('operations-console.bulk-action');
+                Route::post('operations-console/webhook-deliveries/{deliveryUuid}/redispatch', [GatewayOperationsConsoleController::class, 'redispatchWebhookDelivery'])->name('operations-console.webhook-deliveries.redispatch')->whereUuid('deliveryUuid');
+                Route::post('operations-console/dead-letters/{deadLetterUuid}/replay', [GatewayOperationsConsoleController::class, 'replayDeadLetter'])->name('operations-console.dead-letters.replay')->whereUuid('deadLetterUuid');
+                Route::post('operations-console/dead-letters/{deadLetterUuid}/discard', [GatewayOperationsConsoleController::class, 'discardDeadLetter'])->name('operations-console.dead-letters.discard')->whereUuid('deadLetterUuid');
+                Route::post('operations-console/callback-logs/{callbackLogUuid}/retry', [GatewayOperationsConsoleController::class, 'retryCallback'])->name('operations-console.callback-logs.retry')->whereUuid('callbackLogUuid');
+                Route::post('operations-console/treasury-alerts/{alertUuid}/acknowledge', [GatewayOperationsConsoleController::class, 'acknowledgeAlert'])->name('operations-console.treasury-alerts.acknowledge')->whereUuid('alertUuid');
+                Route::post('operations-console/treasury-alerts/{alertUuid}/resolve', [GatewayOperationsConsoleController::class, 'resolveAlert'])->name('operations-console.treasury-alerts.resolve')->whereUuid('alertUuid');
+
+                Route::post('tenants/{tenant}/link', [TenantProfilesController::class, 'link'])->name('tenants.link');
+                Route::post('tenants/{tenant}/unlink', [TenantProfilesController::class, 'unlink'])->name('tenants.unlink');
+                Route::post('tenants/{tenant}/sync', [TenantProfilesController::class, 'sync'])->name('tenants.sync');
+                Route::post('tenants/{tenant}/webhook-endpoints/{endpointUuid}/test', [TenantProfilesController::class, 'testWebhookEndpoint'])->name('tenants.webhook-endpoints.test')->whereUuid('endpointUuid');
+
+                Route::get('tenants/{tenant}/payment-profiles/create', [PaymentProfilesController::class, 'create'])->name('tenants.payment-profiles.create');
+                Route::post('tenants/{tenant}/payment-profiles', [PaymentProfilesController::class, 'store'])->name('tenants.payment-profiles.store');
+                Route::get('tenants/{tenant}/payment-profiles/{profileUuid}/paybill-accounts/create', [PaybillAccountsController::class, 'createFromTenant'])->name('tenants.paybill-accounts.create')->whereUuid('profileUuid');
+                Route::post('tenants/{tenant}/payment-profiles/{profileUuid}/paybill-accounts', [PaybillAccountsController::class, 'storeFromTenant'])->name('tenants.paybill-accounts.store')->whereUuid('profileUuid');
+                Route::get('payment-profiles/{profileUuid}/edit', [PaymentProfilesController::class, 'edit'])->name('payment-profiles.edit')->whereUuid('profileUuid');
+                Route::patch('payment-profiles/{profileUuid}', [PaymentProfilesController::class, 'update'])->name('payment-profiles.update')->whereUuid('profileUuid');
+                Route::post('payment-profiles/{profileUuid}/suspend', [PaymentProfilesController::class, 'suspend'])->name('payment-profiles.suspend')->whereUuid('profileUuid');
+                Route::post('payment-profiles/{profileUuid}/activate', [PaymentProfilesController::class, 'activate'])->name('payment-profiles.activate')->whereUuid('profileUuid');
+
+                Route::get('payment-profiles/{profileUuid}/paybill-accounts/create', [PaybillAccountsController::class, 'create'])->name('payment-profiles.paybill-accounts.create')->whereUuid('profileUuid');
+                Route::post('payment-profiles/{profileUuid}/paybill-accounts', [PaybillAccountsController::class, 'store'])->name('payment-profiles.paybill-accounts.store')->whereUuid('profileUuid');
+                Route::get('paybill-accounts/{accountUuid}/edit', [PaybillAccountsController::class, 'edit'])->name('paybill-accounts.edit')->whereUuid('accountUuid');
+                Route::patch('paybill-accounts/{accountUuid}', [PaybillAccountsController::class, 'update'])->name('paybill-accounts.update')->whereUuid('accountUuid');
+                Route::post('paybill-accounts/{accountUuid}/suspend', [PaybillAccountsController::class, 'suspend'])->name('paybill-accounts.suspend')->whereUuid('accountUuid');
+                Route::post('paybill-accounts/{accountUuid}/activate', [PaybillAccountsController::class, 'activate'])->name('paybill-accounts.activate')->whereUuid('accountUuid');
+
+                Route::post('payment-profiles/{profileUuid}/api-keys', [GatewayApiKeysController::class, 'store'])->name('payment-profiles.api-keys.store')->whereUuid('profileUuid');
+                Route::post('payment-profiles/{profileUuid}/api-keys/{keyUuid}/revoke', [GatewayApiKeysController::class, 'revoke'])->name('payment-profiles.api-keys.revoke')->whereUuid(['profileUuid', 'keyUuid']);
+
+                Route::get('payment-profiles/{profileUuid}/webhook-endpoints/create', [WebhookEndpointsController::class, 'create'])->name('payment-profiles.webhook-endpoints.create')->whereUuid('profileUuid');
+                Route::post('payment-profiles/{profileUuid}/webhook-endpoints', [WebhookEndpointsController::class, 'store'])->name('payment-profiles.webhook-endpoints.store')->whereUuid('profileUuid');
+                Route::get('webhook-endpoints/{endpointUuid}/edit', [WebhookEndpointsController::class, 'edit'])->name('webhook-endpoints.edit')->whereUuid('endpointUuid');
+                Route::patch('webhook-endpoints/{endpointUuid}', [WebhookEndpointsController::class, 'update'])->name('webhook-endpoints.update')->whereUuid('endpointUuid');
+                Route::post('webhook-endpoints/{endpointUuid}/disable', [WebhookEndpointsController::class, 'disable'])->name('webhook-endpoints.disable')->whereUuid('endpointUuid');
+                Route::post('webhook-endpoints/{endpointUuid}/enable', [WebhookEndpointsController::class, 'enable'])->name('webhook-endpoints.enable')->whereUuid('endpointUuid');
+
+                Route::post('webhook-events/{eventUuid}/redispatch', [GatewayWebhookEventsController::class, 'redispatch'])->name('webhook-events.redispatch')->whereUuid('eventUuid');
+                Route::post('webhook-deliveries/{deliveryUuid}/redispatch', [GatewayWebhookDeliveriesController::class, 'redispatch'])->name('webhook-deliveries.redispatch')->whereUuid('deliveryUuid');
+            });
+        });
+
     Route::get('hr', [HrController::class, 'index'])->middleware('permission:hr.staff.view')->name('hr.index');
     Route::resource('hr/departments', HrDepartmentController::class)->names('hr.departments')->except(['show', 'destroy'])
         ->middlewareFor('index', 'permission:hr.staff.view')
@@ -201,29 +293,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middlewareFor(['create', 'store'], 'permission:hr.staff.create')
         ->middlewareFor(['edit', 'update'], 'permission:hr.staff.update');
     Route::middleware('permission:hr.staff.update')->group(function () {
-    Route::post('hr/staff/{staff}/assignments', [StaffAssignmentController::class, 'store'])->name('hr.staff.assignments.store');
-    Route::put('hr/staff/{staff}/assignments/{assignment}', [StaffAssignmentController::class, 'update'])->name('hr.staff.assignments.update');
-    Route::delete('hr/staff/{staff}/assignments/{assignment}', [StaffAssignmentController::class, 'destroy'])->name('hr.staff.assignments.destroy');
-    Route::post('hr/staff/{staff}/documents', [StaffDocumentController::class, 'store'])->name('hr.staff.documents.store');
-    Route::delete('hr/staff/{staff}/documents/{document}', [StaffDocumentController::class, 'destroy'])->name('hr.staff.documents.destroy');
+        Route::post('hr/staff/{staff}/assignments', [StaffAssignmentController::class, 'store'])->name('hr.staff.assignments.store');
+        Route::put('hr/staff/{staff}/assignments/{assignment}', [StaffAssignmentController::class, 'update'])->name('hr.staff.assignments.update');
+        Route::delete('hr/staff/{staff}/assignments/{assignment}', [StaffAssignmentController::class, 'destroy'])->name('hr.staff.assignments.destroy');
+        Route::post('hr/staff/{staff}/documents', [StaffDocumentController::class, 'store'])->name('hr.staff.documents.store');
+        Route::delete('hr/staff/{staff}/documents/{document}', [StaffDocumentController::class, 'destroy'])->name('hr.staff.documents.destroy');
     });
     Route::get('hr/staff/{staff}/documents/{document}/download', [StaffDocumentController::class, 'download'])->middleware('permission:hr.staff.view')->name('hr.staff.documents.download');
 
     Route::middleware('permission:rbac.manage')->group(function () {
-    Route::get('users-roles', [UsersRolesController::class, 'index'])->name('users-roles.index');
-    Route::prefix('users-roles')->name('users-roles.')->group(function () {
-        Route::get('users/create', [UsersRolesController::class, 'createUser'])->name('users.create');
-        Route::post('users', [UsersRolesController::class, 'storeUser'])->name('users.store');
-        Route::get('users/{userRef}', [UsersRolesController::class, 'showUser'])->name('users.show')->where('userRef', '[A-Za-z0-9_]+');
-        Route::get('users/{userRef}/edit', [UsersRolesController::class, 'editUser'])->name('users.edit')->where('userRef', '[A-Za-z0-9_]+');
-        Route::put('users/{userRef}', [UsersRolesController::class, 'updateUser'])->name('users.update')->where('userRef', '[A-Za-z0-9_]+');
-        Route::delete('users/{userRef}', [UsersRolesController::class, 'destroyUser'])->name('users.destroy')->where('userRef', '[A-Za-z0-9_]+');
-        Route::get('roles/create', [UsersRolesController::class, 'createRole'])->name('roles.create');
-        Route::post('roles', [UsersRolesController::class, 'storeRole'])->name('roles.store');
-        Route::get('roles/{slug}', [UsersRolesController::class, 'showRole'])->name('roles.show')->where('slug', '[a-z0-9_]+');
-        Route::get('roles/{slug}/edit', [UsersRolesController::class, 'editRole'])->name('roles.edit')->where('slug', '[a-z0-9_]+');
-        Route::put('roles/{slug}', [UsersRolesController::class, 'updateRole'])->name('roles.update')->where('slug', '[a-z0-9_]+');
-    });
+        Route::get('users-roles', [UsersRolesController::class, 'index'])->name('users-roles.index');
+        Route::prefix('users-roles')->name('users-roles.')->group(function () {
+            Route::get('users/create', [UsersRolesController::class, 'createUser'])->name('users.create');
+            Route::post('users', [UsersRolesController::class, 'storeUser'])->name('users.store');
+            Route::get('users/{userRef}', [UsersRolesController::class, 'showUser'])->name('users.show')->where('userRef', '[A-Za-z0-9_]+');
+            Route::get('users/{userRef}/edit', [UsersRolesController::class, 'editUser'])->name('users.edit')->where('userRef', '[A-Za-z0-9_]+');
+            Route::put('users/{userRef}', [UsersRolesController::class, 'updateUser'])->name('users.update')->where('userRef', '[A-Za-z0-9_]+');
+            Route::delete('users/{userRef}', [UsersRolesController::class, 'destroyUser'])->name('users.destroy')->where('userRef', '[A-Za-z0-9_]+');
+            Route::get('roles/create', [UsersRolesController::class, 'createRole'])->name('roles.create');
+            Route::post('roles', [UsersRolesController::class, 'storeRole'])->name('roles.store');
+            Route::get('roles/{slug}', [UsersRolesController::class, 'showRole'])->name('roles.show')->where('slug', '[a-z0-9_]+');
+            Route::get('roles/{slug}/edit', [UsersRolesController::class, 'editRole'])->name('roles.edit')->where('slug', '[a-z0-9_]+');
+            Route::put('roles/{slug}', [UsersRolesController::class, 'updateRole'])->name('roles.update')->where('slug', '[a-z0-9_]+');
+        });
     });
 
     Route::prefix('access-control')->name('access-control.')->middleware('permission:rbac.manage')->group(function () {

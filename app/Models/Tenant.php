@@ -16,6 +16,9 @@ class Tenant extends Model
 
     protected $fillable = [
         'external_key',
+        'payments_gateway_tenant_uuid',
+        'payments_gateway_linked_at',
+        'payments_gateway_status',
         'tenant_key',
         'license_secret',
         'access_level',
@@ -69,6 +72,7 @@ class Tenant extends Model
         return [
             'start_date' => 'date',
             'renewal_date' => 'date',
+            'payments_gateway_linked_at' => 'datetime',
             'subscription_amount' => 'decimal:2',
             'penalties_total' => 'decimal:2',
             'billing_tax_exempt' => 'boolean',
@@ -200,5 +204,10 @@ class Tenant extends Model
         }
 
         return $key;
+    }
+
+    public function isPaymentsGatewayLinked(): bool
+    {
+        return filled($this->payments_gateway_tenant_uuid);
     }
 }

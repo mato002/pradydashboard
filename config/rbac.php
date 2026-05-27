@@ -57,6 +57,7 @@ return [
         'payments.',
         'license_logs.',
         'api_credentials.',
+        'payments_gateway.',
         'tenant_access_controls.',
         'server_health.',
         'provider_notices.',

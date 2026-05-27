@@ -52,6 +52,8 @@ class PermissionRegistry
             ['code' => 'license_logs.view', 'name' => 'View license logs', 'description' => 'View license check logs.', 'group' => 'license'],
             ['code' => 'api_credentials.view', 'name' => 'View API credentials', 'description' => 'View API keys and webhooks.', 'group' => 'api'],
             ['code' => 'api_credentials.update', 'name' => 'Update API credentials', 'description' => 'Manage API keys and webhooks.', 'group' => 'api'],
+            ['code' => 'payments_gateway.view', 'name' => 'View Payments Gateway', 'description' => 'Monitor and control payments.pradytecai.com.', 'group' => 'api'],
+            ['code' => 'payments_gateway.manage', 'name' => 'Manage Payments Gateway', 'description' => 'Create, edit, and suspend gateway records.', 'group' => 'api'],
             ['code' => 'tenant_access_controls.view', 'name' => 'View tenant access controls', 'description' => 'View tenant enforcement policies.', 'group' => 'access'],
             ['code' => 'tenant_access_controls.update', 'name' => 'Update tenant access controls', 'description' => 'Suspend, restrict, or unlock tenants.', 'group' => 'access'],
             ['code' => 'server_health.view', 'name' => 'View server health', 'description' => 'View server health metrics.', 'group' => 'servers'],

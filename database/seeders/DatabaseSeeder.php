@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
 
         $this->call(RbacBootstrapSeeder::class);
         $this->call(DocumentTemplateSeeder::class);
+        $this->call(PaymentTestDataSeeder::class);
 
         if (config('app.demo_mode')) {
             $this->call([

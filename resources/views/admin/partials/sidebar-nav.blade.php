@@ -196,4 +196,29 @@
         <span class="truncate" :class="sidebarCollapsed ? 'lg:hidden' : ''">{{ __('API & Integrations') }}</span>
     </a>
     @endpermission
+    @permission('payments_gateway.view')
+    <a href="{{ route('settings.payments-gateway.overview') }}" class="{{ $link(request()->routeIs('settings.payments-gateway.*') && ! request()->routeIs(['settings.payments-gateway.operations-console', 'settings.payments-gateway.transactions.*', 'settings.payments-gateway.callback-logs.*', 'settings.payments-gateway.webhook-events.*', 'settings.payments-gateway.webhook-deliveries.*'])) }} group ml-3 flex items-center gap-3 rounded-xl px-3 py-2 transition lg:ml-4" title="{{ __('Payments Gateway') }}">
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10 group-hover:bg-white/10">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>
+        </span>
+        <span class="truncate text-sm" :class="sidebarCollapsed ? 'lg:hidden' : ''">{{ __('Payments Gateway') }}</span>
+    </a>
+    @php
+        $paymentsGatewayMonitoringLinks = [
+            ['route' => 'settings.payments-gateway.operations-console', 'label' => __('Operations Console'), 'pattern' => 'settings.payments-gateway.operations-console'],
+            ['route' => 'settings.payments-gateway.transactions.index', 'label' => __('Transactions'), 'pattern' => 'settings.payments-gateway.transactions.*'],
+            ['route' => 'settings.payments-gateway.callback-logs.index', 'label' => __('Callback Logs'), 'pattern' => 'settings.payments-gateway.callback-logs.*'],
+            ['route' => 'settings.payments-gateway.webhook-events.index', 'label' => __('Webhook Events'), 'pattern' => 'settings.payments-gateway.webhook-events.*'],
+            ['route' => 'settings.payments-gateway.webhook-deliveries.index', 'label' => __('Webhook Deliveries'), 'pattern' => 'settings.payments-gateway.webhook-deliveries.*'],
+            ['route' => 'settings.payments-gateway.production-readiness', 'label' => __('Production Readiness'), 'pattern' => 'settings.payments-gateway.production-readiness'],
+            ['route' => 'settings.payments-gateway.go-live-dry-run', 'label' => __('Go-Live Dry Run'), 'pattern' => 'settings.payments-gateway.go-live-dry-run'],
+        ];
+    @endphp
+    @foreach ($paymentsGatewayMonitoringLinks as $monitoringLink)
+        <a href="{{ route($monitoringLink['route']) }}" class="{{ $link(request()->routeIs($monitoringLink['pattern'])) }} group ml-6 flex items-center gap-2 rounded-xl px-3 py-1.5 transition lg:ml-8" title="{{ $monitoringLink['label'] }}">
+            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-500"></span>
+            <span class="truncate text-xs" :class="sidebarCollapsed ? 'lg:hidden' : ''">{{ $monitoringLink['label'] }}</span>
+        </a>
+    @endforeach
+    @endpermission
 </nav>

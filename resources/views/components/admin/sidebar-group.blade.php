@@ -24,9 +24,9 @@
     <button
         type="button"
         class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white"
-        :class="isOpen() && !$root.sidebarCollapsed ? 'bg-white/5 text-white' : ''"
+        :class="isOpen() && !$store.sidebar.collapsed ? 'bg-white/5 text-white' : ''"
         @click="
-            if ($root.sidebarCollapsed && window.matchMedia('(min-width: 1024px)').matches) {
+            if ($store.sidebar.collapsed && window.matchMedia('(min-width: 1024px)').matches) {
                 flyout = !flyout;
             } else {
                 $store.sidebar.toggleGroup(groupId, defaultOpen);
@@ -40,11 +40,11 @@
                 {!! $icon !!}
             </span>
         @endif
-        <span class="min-w-0 flex-1 truncate" :class="$root.sidebarCollapsed ? 'lg:hidden' : ''">{{ $label }}</span>
+        <span class="min-w-0 flex-1 truncate" :class="$store.sidebar.collapsed ? 'lg:hidden' : ''">{{ $label }}</span>
         <svg
             class="h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200"
             :class="[
-                $root.sidebarCollapsed ? 'lg:hidden' : '',
+                $store.sidebar.collapsed ? 'lg:hidden' : '',
                 isOpen() ? 'rotate-180' : '',
             ]"
             viewBox="0 0 24 24"
@@ -58,24 +58,24 @@
     </button>
 
     <div
-        x-show="(isOpen() && !$root.sidebarCollapsed) || (flyout && $root.sidebarCollapsed)"
+        x-show="(isOpen() && !$store.sidebar.collapsed) || (flyout && $store.sidebar.collapsed)"
         x-transition:enter="transition ease-out duration-150"
         x-transition:enter-start="opacity-0"
         x-transition:enter-end="opacity-100"
         x-transition:leave="transition ease-in duration-100"
         x-transition:leave-start="opacity-100"
         x-transition:leave-end="opacity-0"
-        @click.outside="if ($root.sidebarCollapsed) { closeFlyout(); }"
+        @click.outside="if ($store.sidebar.collapsed) { closeFlyout(); }"
         x-cloak
         data-sidebar-popover
-        :class="$root.sidebarCollapsed
+        :class="$store.sidebar.collapsed
             ? 'absolute left-full top-0 z-[60] ml-2 hidden min-w-[12.5rem] rounded-xl border border-sidebar-border bg-sidebar py-2 shadow-2xl ring-1 ring-white/10 lg:block'
             : 'mt-0.5 space-y-0.5 pb-1'"
     >
         @if ($icon)
-            <p class="mb-1 hidden px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500 lg:block" :class="$root.sidebarCollapsed ? '' : 'lg:!hidden'">{{ $label }}</p>
+            <p class="mb-1 hidden px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500 lg:block" :class="$store.sidebar.collapsed ? '' : 'lg:!hidden'">{{ $label }}</p>
         @endif
-        <div :class="$root.sidebarCollapsed ? 'space-y-0.5 px-1.5' : ''">
+        <div :class="$store.sidebar.collapsed ? 'space-y-0.5 px-1.5' : ''">
             {{ $slot }}
         </div>
     </div>

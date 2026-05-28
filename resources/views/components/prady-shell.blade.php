@@ -46,14 +46,14 @@
                 class="fixed inset-y-0 left-0 z-50 flex min-h-screen flex-col border-r border-sidebar-border bg-sidebar text-slate-300 shadow-2xl transition-all duration-300 ease-out lg:z-30"
                 :class="[
                     sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-                    sidebarCollapsed ? 'lg:w-20' : 'lg:w-64',
+                    $store.sidebar.collapsed ? 'lg:w-20' : 'lg:w-64',
                     'w-64',
                 ]"
             >
                 <div class="flex h-[4.25rem] shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
                     <a href="{{ route('dashboard') }}" data-prady-nav class="flex min-w-0 items-center gap-3">
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold tracking-tight text-white shadow-lg shadow-indigo-500/30">P</span>
-                        <div class="min-w-0 flex-1 overflow-hidden transition-opacity" :class="sidebarCollapsed ? 'lg:opacity-0 lg:pointer-events-none' : ''">
+                        <div class="min-w-0 flex-1 overflow-hidden transition-opacity" :class="$store.sidebar.collapsed ? 'lg:opacity-0 lg:pointer-events-none' : ''">
                             <p class="truncate text-sm font-semibold tracking-tight text-white">Prady Dashboard</p>
                             <p class="truncate text-[11px] text-slate-500">{{ __('Cloud operations') }}</p>
                         </div>
@@ -70,28 +70,28 @@
                         target="_blank"
                         rel="noopener noreferrer"
                         class="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white"
-                        :class="sidebarCollapsed ? 'lg:justify-center' : ''"
+                        :class="$store.sidebar.collapsed ? 'lg:justify-center' : ''"
                     >
                         <svg class="h-5 w-5 shrink-0 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                             <path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke-linecap="round" stroke-linejoin="round" />
                             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
-                        <span class="truncate" :class="sidebarCollapsed ? 'lg:hidden' : ''">{{ __('Documentation') }}</span>
+                        <span class="truncate" :class="$store.sidebar.collapsed ? 'lg:hidden' : ''">{{ __('Documentation') }}</span>
                     </a>
                     <button
                         type="button"
                         class="mt-2 hidden w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 lg:flex"
-                        @click="sidebarCollapsed = ! sidebarCollapsed"
+                        @click="$store.sidebar.toggleCollapsed()"
                     >
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                         </svg>
-                        <span x-show="!sidebarCollapsed" x-transition>{{ __('Collapse') }}</span>
+                        <span x-show="!$store.sidebar.collapsed" x-transition>{{ __('Collapse') }}</span>
                     </button>
                 </div>
             </aside>
 
-            <div class="min-h-screen pl-0 transition-[padding] duration-300 ease-out" :class="sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'">
+            <div class="min-h-screen pl-0 transition-[padding] duration-300 ease-out" :class="$store.sidebar.collapsed ? 'lg:pl-20' : 'lg:pl-64'">
                 <header class="sticky top-0 z-20 border-b border-slate-200/80 bg-white/80 shadow-sm backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/75">
                     <div class="flex h-[4.25rem] items-center gap-3 px-4 sm:px-6 lg:px-8">
                         <button

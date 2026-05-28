@@ -22,12 +22,19 @@ function applyThemeClass(mode) {
 document.addEventListener('alpine:init', () => {
     Alpine.store('sidebar', {
         groups: {},
+        collapsed: false,
 
         init() {
             try {
                 this.groups = JSON.parse(localStorage.getItem('prady-sidebar-groups') || '{}');
             } catch {
                 this.groups = {};
+            }
+
+            try {
+                this.collapsed = localStorage.getItem('prady-sidebar-collapsed') === '1';
+            } catch {
+                this.collapsed = false;
             }
         },
 
@@ -44,13 +51,17 @@ document.addEventListener('alpine:init', () => {
             this.groups = { ...this.groups, [id]: next };
             localStorage.setItem('prady-sidebar-groups', JSON.stringify(this.groups));
         },
+
+        toggleCollapsed() {
+            this.collapsed = ! this.collapsed;
+            localStorage.setItem('prady-sidebar-collapsed', this.collapsed ? '1' : '0');
+        },
     });
 
     Alpine.store('sidebar').init();
 
     Alpine.data('pradyShell', () => ({
         sidebarOpen: false,
-        sidebarCollapsed: false,
         theme: localStorage.getItem('prady-theme') || 'light',
         dateMenuOpen: false,
         notifOpen: false,
@@ -152,7 +163,6 @@ document.addEventListener('alpine:init', () => {
             const active =
                 'bg-gradient-to-r from-indigo-500/20 to-violet-500/10 text-white shadow-inner shadow-indigo-500/10 ring-1 ring-inset ring-white/10';
             const idle = 'text-slate-400 hover:bg-white/5 hover:text-white';
-            const shared = 'group flex items-center gap-3 rounded-xl px-3 py-2 transition';
 
             document.querySelectorAll('aside nav a[href]').forEach((anchor) => {
                 let linkPath;
@@ -166,7 +176,14 @@ document.addEventListener('alpine:init', () => {
                     pathname === linkPath ||
                     (linkPath !== '/' && linkPath.length > 1 && pathname.startsWith(linkPath + '/'));
 
-                anchor.className = `${shared} ${isActive ? active : idle}`;
+                anchor.classList.remove(...active.split(/\s+/), ...idle.split(/\s+/));
+                anchor.classList.add(...(isActive ? active : idle).split(/\s+/));
+
+                const dot = anchor.querySelector('.rounded-full.bg-indigo-400, .rounded-full.bg-slate-500');
+                if (dot) {
+                    dot.classList.toggle('bg-indigo-400', isActive);
+                    dot.classList.toggle('bg-slate-500', ! isActive);
+                }
             });
         },
 

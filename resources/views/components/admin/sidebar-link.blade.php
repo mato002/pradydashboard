@@ -15,7 +15,7 @@
 <a
     href="{{ $href }}"
     data-prady-nav
-    @click="if ($root.sidebarCollapsed) { $dispatch('sidebar-close-flyout') }"
+    @click="if ($store.sidebar.collapsed) { $dispatch('sidebar-close-flyout') }"
     {{ $attributes->merge(['class' => trim("group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition {$linkClass} " . ($nested ? 'pl-9' : ''))]) }}
     title="{{ $label }}"
 >
@@ -26,5 +26,5 @@
     @elseif ($nested)
         <span @class(['ml-1 h-1.5 w-1.5 shrink-0 rounded-full', 'bg-indigo-400' => $active, 'bg-slate-500' => ! $active])></span>
     @endif
-    <span class="sidebar-link-label truncate" :class="$root.sidebarCollapsed ? 'lg:hidden' : ''">{{ $label }}</span>
+    <span class="sidebar-link-label truncate" :class="$store.sidebar.collapsed ? 'lg:hidden' : ''">{{ $label }}</span>
 </a>

@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Domain\Billing\RecurringBillingProcessor;
+use App\Jobs\Billing\ProcessRecurringBillingJob;
 use Illuminate\Console\Command;
 
 class ProcessRecurringBillingCommand extends Command
@@ -11,11 +11,11 @@ class ProcessRecurringBillingCommand extends Command
 
     protected $description = 'Generate invoices from due recurring billing schedules';
 
-    public function handle(RecurringBillingProcessor $processor): int
+    public function handle(): int
     {
-        $generated = $processor->processDueSchedules();
+        ProcessRecurringBillingJob::dispatch();
 
-        $this->info(__('Generated :count recurring invoice(s).', ['count' => $generated->count()]));
+        $this->info(__('Recurring billing job dispatched to the queue.'));
 
         return self::SUCCESS;
     }

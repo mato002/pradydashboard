@@ -7,6 +7,7 @@ use App\Models\Tenant;
 use App\Models\TenantInvoice;
 use App\Models\TenantPayment;
 use App\Models\TenantProjectSubscription;
+use App\Support\Cache\OperationalCache;
 use Illuminate\Database\Eloquent\Builder;
 
 class BillingSummary
@@ -14,12 +15,29 @@ class BillingSummary
     public function __construct(
         private readonly BillingSettings $settings,
         private readonly DraftInvoiceGenerator $draftGenerator,
+        private readonly OperationalCache $operationalCache,
     ) {}
 
     /**
      * @return array<string, mixed>
      */
     public function platform(?RbacScopeFilter $scopeFilter = null): array
+    {
+        $scopeKey = $this->operationalCache->scopeFingerprint($scopeFilter);
+
+        return $this->operationalCache->remember(
+            'billing',
+            'summary',
+            config('redis_cache.ttl.billing_summary', 120),
+            fn () => $this->computePlatform($scopeFilter),
+            $scopeKey,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function computePlatform(?RbacScopeFilter $scopeFilter): array
     {
         $mrr = (float) $this->scoped($scopeFilter, TenantProjectSubscription::query(), 'tenant_id')
             ->where('product_status', 'active')

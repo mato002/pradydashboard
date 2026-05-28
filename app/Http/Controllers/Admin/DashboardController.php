@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Activity\ActivityLogQuery;
 use App\Domain\Billing\BillingSummary;
 use App\Domain\Operations\OperationalRiskScanner;
+use App\Domain\Rbac\RbacGuard;
 use App\Domain\Support\SupportOperationsSummary;
 use App\Http\Controllers\Controller;
 use App\Models\HostedProject;
+use App\Services\Queue\QueueMonitorService;
 use App\Support\Admin\OperationalRiskPresenter;
 use App\Support\OperationalMetrics;
 use App\Models\Server;
@@ -66,6 +68,12 @@ class DashboardController extends Controller
         $attentionRisks = app(OperationalRiskScanner::class)->attentionRequired(50);
         $riskOpsCenter = OperationalRiskPresenter::build($attentionRisks);
 
+        $monitoringSnapshot = null;
+        $user = auth()->user();
+        if ($user && app(RbacGuard::class)->can($user, 'monitoring.view')) {
+            $monitoringSnapshot = app(QueueMonitorService::class)->snapshot();
+        }
+
         return view('admin.dashboard', compact(
             'serversCount',
             'projectsCount',
@@ -90,6 +98,7 @@ class DashboardController extends Controller
             'recentActivity',
             'attentionRisks',
             'riskOpsCenter',
+            'monitoringSnapshot',
         ));
     }
 

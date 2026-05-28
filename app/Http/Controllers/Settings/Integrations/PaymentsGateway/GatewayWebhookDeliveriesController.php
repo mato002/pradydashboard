@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings\Integrations\PaymentsGateway;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\Concerns\InteractsWithGatewayMonitoring;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\Concerns\InteractsWithPaymentsGateway;
+use App\Jobs\Webhooks\DeliverWebhookEventJob;
 use App\Services\PaymentsGateway\PaymentsGatewayClient;
 use App\Support\PaymentsGateway\GatewayFormOptions;
 use Illuminate\Http\RedirectResponse;
@@ -59,16 +60,12 @@ class GatewayWebhookDeliveriesController extends Controller
 
     public function redispatch(string $deliveryUuid, PaymentsGatewayClient $client): RedirectResponse
     {
-        $response = $client->redispatchWebhookDelivery($deliveryUuid);
-
-        if (! ($response['ok'] ?? false)) {
-            return $this->redirectWithGatewayFailure($response, 'settings.payments-gateway.webhook-deliveries.show', ['deliveryUuid' => $deliveryUuid]);
-        }
+        DeliverWebhookEventJob::dispatch('', false, $deliveryUuid);
 
         return $this->redirectWithGatewaySuccess(
             'settings.payments-gateway.webhook-deliveries.show',
             ['deliveryUuid' => $deliveryUuid],
-            __('Webhook delivery redispatched on Payments Gateway.')
+            __('Webhook delivery redispatch queued for the Payments Gateway.')
         );
     }
 }

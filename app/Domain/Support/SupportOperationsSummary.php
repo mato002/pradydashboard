@@ -6,15 +6,33 @@ use App\Models\SupportTicket;
 use App\Models\Tenant;
 use App\Models\TenantCommunication;
 use App\Models\TenantNotice;
+use App\Support\Cache\OperationalCache;
 use App\Support\SupportOpsOptions;
 use Illuminate\Support\Collection;
 
 class SupportOperationsSummary
 {
+    public function __construct(
+        private readonly OperationalCache $operationalCache,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
     public function platform(): array
+    {
+        return $this->operationalCache->remember(
+            'support',
+            'platform-summary',
+            config('redis_cache.ttl.support_summary', 120),
+            fn () => $this->computePlatformSummary(),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function computePlatformSummary(): array
     {
         $openStatuses = SupportOpsOptions::openTicketStatuses();
 

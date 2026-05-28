@@ -6,14 +6,32 @@ use App\Models\HrDepartment;
 use App\Models\StaffAssignment;
 use App\Models\StaffDocument;
 use App\Models\StaffProfile;
+use App\Support\Cache\OperationalCache;
 use Illuminate\Support\Collection;
 
 class HrOverview
 {
+    public function __construct(
+        private readonly OperationalCache $operationalCache,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
     public function metrics(): array
+    {
+        return $this->operationalCache->remember(
+            'hr',
+            'overview',
+            config('redis_cache.ttl.hr_overview', 600),
+            fn () => $this->computeMetrics(),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function computeMetrics(): array
     {
         $activeStaff = StaffProfile::query()->where('status', 'active')->count();
         $exitedStaff = StaffProfile::query()->where('status', 'exited')->count();

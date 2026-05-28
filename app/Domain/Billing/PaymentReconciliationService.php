@@ -9,6 +9,7 @@ use App\Models\TenantInvoice;
 use App\Models\TenantPayment;
 use App\Support\ActivityLogCategory;
 use App\Support\Billing\PaymentReconciliationStatus;
+use App\Support\Cache\OperationalCache;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -19,6 +20,7 @@ class PaymentReconciliationService
         private readonly InvoicePaymentRecorder $invoiceRecorder,
         private readonly ReceiptGenerator $receiptGenerator,
         private readonly ActivityLogger $activityLogger,
+        private readonly OperationalCache $operationalCache,
     ) {}
 
     public function findDuplicate(TenantPayment $payment): ?TenantPayment
@@ -47,6 +49,23 @@ class PaymentReconciliationService
             ]);
         }
 
+        $locks = ['payment:reconcile:'.$payment->id];
+        $referenceLock = $this->operationalCache->paymentReferenceLockKey(
+            $payment->tenant_id ? (int) $payment->tenant_id : ($invoice->tenant_id ? (int) $invoice->tenant_id : null),
+            $payment->reference,
+        );
+        if ($referenceLock !== null) {
+            $locks[] = $referenceLock;
+        }
+
+        return $this->withPaymentLocks($locks, fn () => $this->performMatchToInvoice($payment, $invoice, $amount));
+    }
+
+    /**
+     * @return array{payment: TenantPayment, receipt: TenantInvoice|null}
+     */
+    private function performMatchToInvoice(TenantPayment $payment, TenantInvoice $invoice, ?float $amount = null): array
+    {
         return DB::transaction(function () use ($payment, $invoice, $amount): array {
             $payment = $payment->fresh(['allocations']);
             $invoice = $invoice->fresh(['lineItems', 'tenant']);
@@ -93,6 +112,35 @@ class PaymentReconciliationService
 
             return ['payment' => $payment->fresh(['allocations', 'tenant']), 'receipt' => $receipt];
         });
+    }
+
+    /**
+     * @param  list<string>  $lockNames
+     * @param  \Closure(): array{payment: TenantPayment, receipt: TenantInvoice|null}  $callback
+     * @return array{payment: TenantPayment, receipt: TenantInvoice|null}
+     */
+    private function withPaymentLocks(array $lockNames, \Closure $callback): array
+    {
+        $seconds = config('redis_cache.locks.payment_reconcile', 30);
+
+        if (count($lockNames) === 1) {
+            $result = $this->operationalCache->lock($lockNames[0], $seconds, $callback);
+            if ($result === null) {
+                throw ValidationException::withMessages([
+                    'payment' => [__('Payment reconciliation is already in progress.')],
+                ]);
+            }
+
+            return $result;
+        }
+
+        return $this->operationalCache->lock(
+            $lockNames[0],
+            $seconds,
+            fn () => $this->withPaymentLocks(array_slice($lockNames, 1), $callback),
+        ) ?? throw ValidationException::withMessages([
+            'payment' => [__('Payment reconciliation is already in progress.')],
+        ]);
     }
 
     /**

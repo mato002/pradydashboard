@@ -6,26 +6,24 @@ use App\Domain\Billing\PaymentMatchingSuggester;
 use App\Domain\Billing\PaymentRecorderService;
 use App\Domain\Billing\PaymentReconciliationService;
 use App\Domain\Billing\PdfGenerator;
-use App\Domain\Tenancy\TenantProjectProvisioner;
 use App\Models\BillingAutomationRule;
 use App\Models\DocumentTemplate;
 use App\Models\PaymentAllocation;
-use App\Models\Project;
 use App\Models\Setting;
 use App\Models\SystemActivityLog;
-use App\Models\Tenant;
 use App\Models\TenantInvoice;
 use App\Models\TenantInvoiceLineItem;
 use App\Models\TenantPayment;
-use App\Models\User;
 use Database\Seeders\DocumentTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\CreatesBillableTenant;
 use Tests\TestCase;
 
 class PaymentReconciliationTest extends TestCase
 {
+    use CreatesBillableTenant;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -40,15 +38,14 @@ class PaymentReconciliationTest extends TestCase
 
     private function tenantWithInvoice(float $total = 10000, string $number = 'INV-PAY-001'): array
     {
-        $project = Project::query()->create(['name' => 'Pay Co', 'domain' => 'pay.test', 'currency' => 'KES']);
-        $tenant = Tenant::query()->create([
-            'project_id' => $project->id,
-            'company_name' => 'Pay Tenant',
-            'billing_email' => 'pay@tenant.test',
-            'billing_phone' => '254700000001',
-            'status' => 'active',
-        ]);
-        (new TenantProjectProvisioner)->syncPrimarySubscription($tenant);
+        [, , $tenant] = $this->createTenantWithSubscription(
+            'Pay Tenant',
+            [
+                'billing_email' => 'pay@tenant.test',
+                'billing_phone' => '254700000001',
+            ],
+            ['name' => 'Pay Co', 'domain' => 'pay.test'],
+        );
 
         $invoice = TenantInvoice::query()->create([
             'tenant_id' => $tenant->id,

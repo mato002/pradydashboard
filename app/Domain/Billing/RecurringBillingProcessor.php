@@ -7,10 +7,12 @@ use App\Models\BillingAutomationRule;
 use App\Models\InvoiceRecurringSchedule;
 use App\Models\TenantInvoice;
 use App\Models\TenantInvoiceLineItem;
+use App\Jobs\Billing\SendFinancialDocumentEmailJob;
 use App\Support\ActivityLogCategory;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Support\Cache\OperationalCache;
 
 class RecurringBillingProcessor
 {
@@ -19,6 +21,7 @@ class RecurringBillingProcessor
         private readonly DocumentFinalizer $documentFinalizer,
         private readonly InvoiceEmailDelivery $emailDelivery,
         private readonly ActivityLogger $activityLogger,
+        private readonly OperationalCache $operationalCache,
     ) {}
 
     /**
@@ -40,7 +43,12 @@ class RecurringBillingProcessor
             ->get();
 
         foreach ($schedules as $schedule) {
-            $invoice = $this->generateFromSchedule($schedule);
+            $invoice = $this->operationalCache->lock(
+                'billing:recurring:'.$schedule->id,
+                config('redis_cache.locks.recurring_schedule', 120),
+                fn () => $this->generateFromSchedule($schedule),
+            );
+
             if ($invoice) {
                 $generated->push($invoice);
             }
@@ -101,7 +109,11 @@ class RecurringBillingProcessor
             if ($schedule->auto_email || BillingAutomationRule::platform()->auto_send_invoices) {
                 $recipient = trim((string) ($tenant->billing_email ?? ''));
                 if ($recipient !== '') {
-                    $this->emailDelivery->send($invoice, $document, $recipient, false);
+                    if (config('queue.default') !== 'sync') {
+                        SendFinancialDocumentEmailJob::dispatch($invoice->id, $document->id, $recipient, false);
+                    } else {
+                        $this->emailDelivery->send($invoice, $document, $recipient, false);
+                    }
                 }
             }
 

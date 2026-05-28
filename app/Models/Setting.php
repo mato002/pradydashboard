@@ -21,8 +21,9 @@ class Setting extends Model
 
     public static function get(string $key, ?string $default = null): ?string
     {
-        return Cache::rememberForever(
+        return Cache::remember(
             self::cacheKey($key),
+            config('redis_cache.ttl.settings', 3600),
             fn () => static::query()->where('key', $key)->value('value') ?? $default
         );
     }

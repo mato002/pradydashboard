@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Backup;
+use App\Support\Cache\OperationalCache;
 use App\Support\DemoMode;
 use App\Support\OperationalMetrics;
 use App\Models\ManagedDomain;
@@ -13,6 +14,7 @@ use App\Models\ServerHealthLog;
 use App\Models\Tenant;
 use Database\Seeders\ServerHealthDemoSeeder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\View\View;
 
 class MonitoringController extends Controller
@@ -341,15 +343,50 @@ class MonitoringController extends Controller
      */
     private function buildQueueMetrics(): ?array
     {
-        return null;
+        if (config('queue.default') === 'sync') {
+            return [
+                'pending' => 0,
+                'processing' => 0,
+                'failed' => 0,
+                'throughput' => 0,
+                'workers' => [],
+                'driver' => 'sync',
+            ];
+        }
+
+        try {
+            $connection = Queue::connection();
+            $pending = (int) $connection->size();
+
+            return [
+                'pending' => $pending,
+                'processing' => 0,
+                'failed' => 0,
+                'throughput' => 0,
+                'workers' => [],
+                'driver' => config('queue.default'),
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
-     * @return array{hit_rate: float, memory_mb: int, evictions: int, keys: int}
+     * @return array{hit_rate: float, memory_mb: int, evictions: int, keys: int, available: bool, driver: string}|null
      */
     private function buildCacheMetrics(): ?array
     {
-        return null;
+        $driver = (string) config('cache.default');
+        $operationalCache = app(OperationalCache::class);
+
+        return [
+            'hit_rate' => 0,
+            'memory_mb' => 0,
+            'evictions' => 0,
+            'keys' => 0,
+            'available' => $operationalCache->ping(),
+            'driver' => $driver,
+        ];
     }
 
     /**

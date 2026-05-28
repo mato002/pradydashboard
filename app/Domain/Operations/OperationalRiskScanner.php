@@ -17,6 +17,7 @@ use App\Models\TenantProjectServiceIntegration;
 use App\Models\TenantProjectSubscription;
 use App\Models\TenantProjectVersion;
 use App\Support\OperationalRiskCategory;
+use App\Support\Cache\OperationalCache;
 use App\Support\SupportOpsOptions;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -28,6 +29,10 @@ class OperationalRiskScanner
     public const SSL_WARNING_DAYS = 30;
 
     public const SYNC_STALE_HOURS = 48;
+
+    public function __construct(
+        private readonly OperationalCache $operationalCache,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $filters
@@ -128,11 +133,16 @@ class OperationalRiskScanner
      */
     public function attentionRequired(int $limit = 10): Collection
     {
-        return $this->scan()
-            ->reject(fn (array $r) => $r['acknowledged'])
-            ->whereIn('severity', ['critical', 'warning'])
-            ->take($limit)
-            ->values();
+        return $this->operationalCache->remember(
+            'risk',
+            'attention:'.$limit,
+            config('redis_cache.ttl.risk_attention', 120),
+            fn () => $this->scan()
+                ->reject(fn (array $r) => $r['acknowledged'])
+                ->whereIn('severity', ['critical', 'warning'])
+                ->take($limit)
+                ->values(),
+        );
     }
 
     /**

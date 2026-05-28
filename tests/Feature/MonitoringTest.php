@@ -22,4 +22,17 @@ class MonitoringTest extends TestCase
         $response->assertSee('API monitoring', false);
         $response->assertSee('Escalation policies', false);
     }
+
+    public function test_overview_dashboard_shows_monitoring_section_with_links(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertOk();
+        $response->assertSee('Monitoring & queues');
+        $response->assertSee('Redis & Queues');
+        $response->assertSee(route('monitoring.queues'), false);
+        $response->assertSee(route('monitoring.index'), false);
+    }
 }

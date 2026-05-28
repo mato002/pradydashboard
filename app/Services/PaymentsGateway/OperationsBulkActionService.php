@@ -2,6 +2,7 @@
 
 namespace App\Services\PaymentsGateway;
 
+use App\Jobs\Webhooks\DeliverWebhookEventJob;
 use InvalidArgumentException;
 
 class OperationsBulkActionService
@@ -67,7 +68,7 @@ class OperationsBulkActionService
                 self::ACTION_CALLBACKS_RETRY => $client->retryCallback($uuid),
                 self::ACTION_ALERTS_ACKNOWLEDGE => $client->acknowledgeTreasuryAlert($uuid, $payload),
                 self::ACTION_ALERTS_RESOLVE => $client->resolveTreasuryAlert($uuid, $payload),
-                self::ACTION_WEBHOOK_DELIVERIES_REDISPATCH => $client->redispatchWebhookDelivery($uuid),
+                self::ACTION_WEBHOOK_DELIVERIES_REDISPATCH => $this->queueWebhookRedispatch($uuid),
             };
 
             if ($response['ok'] ?? false) {
@@ -83,5 +84,15 @@ class OperationsBulkActionService
         }
 
         return $summary;
+    }
+
+    /**
+     * @return array{ok: bool}
+     */
+    private function queueWebhookRedispatch(string $deliveryUuid): array
+    {
+        DeliverWebhookEventJob::dispatch('', false, $deliveryUuid);
+
+        return ['ok' => true];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Domain\Servers;
 use App\Models\Backup;
 use App\Models\Server;
 use App\Models\ServerHealthLog;
+use App\Support\Cache\OperationalCache;
 use App\Support\OperationalMetrics;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -13,10 +14,27 @@ class FleetSummaryService
 {
     private const POINTS = 12;
 
+    public function __construct(
+        private readonly OperationalCache $operationalCache,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
     public function summary(): array
+    {
+        return $this->operationalCache->remember(
+            'fleet',
+            'summary',
+            config('redis_cache.ttl.fleet_summary', 90),
+            fn () => $this->computeSummary(),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function computeSummary(): array
     {
         $servers = Server::query()->get();
         $online = $servers->whereIn('status', ['online', 'warning']);

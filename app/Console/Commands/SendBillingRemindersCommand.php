@@ -2,24 +2,20 @@
 
 namespace App\Console\Commands;
 
-use App\Domain\Billing\CollectionReminderService;
+use App\Jobs\Billing\ProcessBillingRemindersJob;
 use Illuminate\Console\Command;
 
 class SendBillingRemindersCommand extends Command
 {
     protected $signature = 'billing:send-reminders';
 
-    protected $description = 'Send payment reminders for overdue invoices per automation rules';
+    protected $description = 'Send automated payment reminder emails for overdue invoices';
 
-    public function handle(CollectionReminderService $reminders): int
+    public function handle(): int
     {
-        $counts = $reminders->processAutomatedReminders();
+        ProcessBillingRemindersJob::dispatch();
 
-        $this->info(sprintf(
-            'Reminders sent: %d, skipped: %d',
-            $counts['reminders'],
-            $counts['skipped'],
-        ));
+        $this->info(__('Billing reminder job dispatched to the queue.'));
 
         return self::SUCCESS;
     }

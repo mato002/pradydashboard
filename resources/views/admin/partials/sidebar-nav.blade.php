@@ -105,7 +105,8 @@
                 <x-admin.sidebar-link :href="route('deployments.index')" :label="__('Deployments')" :active="request()->routeIs('deployments.*')" :icon="$iconDeploy" nested />
             @endpermission
             @permission('monitoring.view')
-                <x-admin.sidebar-link :href="route('monitoring.index')" :label="__('Monitoring')" :active="request()->routeIs('monitoring.*')" :icon="$iconMonitor" nested />
+                <x-admin.sidebar-link :href="route('monitoring.index')" :label="__('Monitoring')" :active="request()->routeIs('monitoring.index')" :icon="$iconMonitor" nested />
+                <x-admin.sidebar-link :href="route('monitoring.queues')" :label="__('Redis & Queues')" :active="request()->routeIs('monitoring.queues')" :icon="$iconMonitor" nested />
             @endpermission
             @permission('risk_center.view')
                 <x-admin.sidebar-link :href="route('risk-center.index')" :label="__('Risk Center')" :active="request()->routeIs('risk-center.*')" :icon="$iconRisk" nested />

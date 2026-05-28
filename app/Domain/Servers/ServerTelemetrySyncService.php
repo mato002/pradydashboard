@@ -12,6 +12,7 @@ use App\Domain\Servers\Drivers\WhmCpanelMonitorDriver;
 use App\Domain\Servers\Support\ServerConnectionConfig;
 use App\Models\Server;
 use App\Models\ServerHealthLog;
+use App\Support\Cache\OperationalCache;
 use Illuminate\Support\Collection;
 
 class ServerTelemetrySyncService
@@ -19,8 +20,9 @@ class ServerTelemetrySyncService
     /** @var list<ServerMonitorDriver> */
     private array $drivers;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly OperationalCache $operationalCache,
+    ) {
         $this->drivers = [
             new WhmCpanelMonitorDriver,
             new DigitalOceanMonitorDriver,
@@ -51,6 +53,28 @@ class ServerTelemetrySyncService
             ];
         }
 
+        $result = $this->operationalCache->lock(
+            'server:sync:'.$server->id,
+            config('redis_cache.locks.server_sync', 120),
+            fn () => $this->performSync($server),
+        );
+
+        if ($result === null) {
+            return [
+                'ok' => false,
+                'snapshot' => new ServerTelemetrySnapshot,
+                'message' => __('Telemetry sync already in progress for this server.'),
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array{ok: bool, snapshot: ServerTelemetrySnapshot, message: string}
+     */
+    private function performSync(Server $server): array
+    {
         $snapshot = $this->poll($server);
         $this->apply($server, $snapshot);
 
@@ -82,7 +106,7 @@ class ServerTelemetrySyncService
             $result = $this->sync($server);
 
             return [
-                'server' => $server->fresh(),
+                'server' => $server,
                 'ok' => $result['ok'],
                 'message' => $result['message'],
             ];

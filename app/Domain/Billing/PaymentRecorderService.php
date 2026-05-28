@@ -9,6 +9,7 @@ use App\Models\TenantPayment;
 use App\Support\ActivityLogCategory;
 use App\Support\Billing\PaymentReconciliationStatus;
 use App\Support\Billing\PaymentSource;
+use App\Support\Cache\OperationalCache;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -17,12 +18,40 @@ class PaymentRecorderService
     public function __construct(
         private readonly InvoicePaymentRecorder $invoiceRecorder,
         private readonly ActivityLogger $activityLogger,
+        private readonly OperationalCache $operationalCache,
     ) {}
 
     /**
      * @param  array<string, mixed>  $data
      */
     public function recordForInvoice(TenantInvoice $invoice, array $data): TenantPayment
+    {
+        $reference = isset($data['reference']) ? (string) $data['reference'] : null;
+        $lockName = $this->operationalCache->paymentReferenceLockKey((int) $invoice->tenant_id, $reference);
+
+        if ($lockName !== null) {
+            $result = $this->operationalCache->lock(
+                $lockName,
+                config('redis_cache.locks.payment_reference', 30),
+                fn () => $this->performRecordForInvoice($invoice, $data),
+            );
+
+            if ($result === null) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'reference' => [__('A payment with this reference is already being processed.')],
+                ]);
+            }
+
+            return $result;
+        }
+
+        return $this->performRecordForInvoice($invoice, $data);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function performRecordForInvoice(TenantInvoice $invoice, array $data): TenantPayment
     {
         $source = (string) ($data['source'] ?? $data['method'] ?? PaymentSource::MANUAL);
         if (! in_array($source, PaymentSource::all(), true)) {

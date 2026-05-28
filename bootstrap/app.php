@@ -33,9 +33,34 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function (Schedule $schedule): void {
         $minutes = max(1, (int) config('infrastructure.sync.interval_minutes', 5));
-        $schedule->command('servers:sync-telemetry')->cron("*/{$minutes} * * * *");
-        $schedule->command('billing:process-recurring')->dailyAt('06:00');
-        $schedule->command('billing:process-overdue')->dailyAt('07:00');
-        $schedule->command('billing:send-reminders')->dailyAt('08:00');
+
+        $schedule->command('servers:sync-telemetry')
+            ->cron("*/{$minutes} * * * *")
+            ->withoutOverlapping($minutes * 2)
+            ->onOneServer();
+
+        $schedule->command('billing:process-recurring')
+            ->dailyAt('06:00')
+            ->withoutOverlapping(60)
+            ->onOneServer();
+
+        $schedule->command('billing:process-overdue')
+            ->dailyAt('07:00')
+            ->withoutOverlapping(60)
+            ->onOneServer();
+
+        $schedule->command('billing:send-reminders')
+            ->dailyAt('08:00')
+            ->withoutOverlapping(60)
+            ->onOneServer();
+
+        $schedule->job(new \App\Jobs\Integrations\PollTenantIntegrationsFleetJob())
+            ->hourly()
+            ->withoutOverlapping(30)
+            ->onOneServer();
+
+        if (class_exists(\Laravel\Horizon\Horizon::class)) {
+            $schedule->command('horizon:snapshot')->everyFiveMinutes();
+        }
     })
     ->create();

@@ -17,7 +17,14 @@ use Illuminate\Support\Facades\View;
 use App\Domain\Tenancy\Repositories\EloquentTenantRepository;
 use App\Domain\Tenancy\Repositories\TenantRepositoryInterface;
 use App\Models\Tenant;
+use App\Models\TenantInvoice;
+use App\Models\TenantPayment;
+use App\Models\TenantProjectSubscription;
+use App\Models\SupportTicket;
+use App\Models\Server;
+use App\Observers\OperationalCacheInvalidationObserver;
 use App\Observers\TenantObserver;
+use App\Support\Cache\OperationalCache;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -30,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(OperationalCache::class);
         $this->app->singleton(TenantRepositoryInterface::class, EloquentTenantRepository::class);
         $this->app->singleton(ActivityLogger::class);
         $this->app->singleton(PermissionMatcher::class);
@@ -48,6 +56,14 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Tenant::observe(TenantObserver::class);
+
+        $cacheInvalidation = OperationalCacheInvalidationObserver::class;
+        Tenant::observe($cacheInvalidation);
+        TenantInvoice::observe($cacheInvalidation);
+        TenantPayment::observe($cacheInvalidation);
+        TenantProjectSubscription::observe($cacheInvalidation);
+        SupportTicket::observe($cacheInvalidation);
+        Server::observe($cacheInvalidation);
 
         RateLimiter::for('license-check', function (Request $request) {
             return Limit::perMinute(config('prady.license.rate_limit_per_minute', 120))

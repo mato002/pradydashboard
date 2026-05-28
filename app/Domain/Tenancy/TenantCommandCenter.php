@@ -4,6 +4,7 @@ namespace App\Domain\Tenancy;
 
 use App\Models\Server;
 use App\Models\Tenant;
+use App\Support\Cache\OperationalCache;
 use Carbon\Carbon;
 
 class TenantCommandCenter
@@ -14,11 +15,26 @@ class TenantCommandCenter
         private readonly OperationalDocumentInsights $documentInsights,
         private readonly TenantIntegrationInsights $integrationInsights,
         private readonly TenantSystemApiInsights $tenantSystemApiInsights,
+        private readonly OperationalCache $operationalCache,
     ) {}
     /**
      * @return array<string, mixed>
      */
     public function summary(Tenant $tenant): array
+    {
+        return $this->operationalCache->remember(
+            'tenant',
+            'command-center',
+            config('redis_cache.ttl.tenant_command_center', 120),
+            fn () => $this->computeSummary($tenant),
+            (string) $tenant->id,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function computeSummary(Tenant $tenant): array
     {
         $subscriptions = $tenant->projectSubscriptions;
         $activeProducts = $subscriptions->where('product_status', 'active')->count();

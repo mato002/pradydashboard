@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Domain\Billing\DraftInvoiceGenerator;
 use App\Domain\Billing\InvoicePaymentRecorder;
-use App\Domain\Tenancy\TenantProjectProvisioner;
+use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\Setting;
@@ -15,10 +15,12 @@ use App\Models\TenantProjectModuleSubscription;
 use App\Models\TenantProjectSubscription;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\CreatesBillableTenant;
 use Tests\TestCase;
 
 class BillingInvoicingTest extends TestCase
 {
+    use CreatesBillableTenant;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -40,22 +42,16 @@ class BillingInvoicingTest extends TestCase
     private function billableTenant(): array
     {
         $user = User::factory()->create();
-        $project = Project::query()->create([
-            'name' => 'Billing App',
-            'domain' => 'bill.test',
-            'currency' => 'KES',
-        ]);
-        $tenant = Tenant::query()->create([
-            'project_id' => $project->id,
-            'company_name' => 'Billing Co',
-            'tenant_currency' => 'KES',
-            'billing_cycle' => 'monthly',
-            'subscription_amount' => 10000,
-            'status' => 'active',
-        ]);
-        (new TenantProjectProvisioner)->syncPrimarySubscription($tenant);
-        $subscription = TenantProjectSubscription::query()->where('tenant_id', $tenant->id)->firstOrFail();
-        $subscription->update(['monthly_fee' => 10000, 'setup_fee' => 5000]);
+        [, $project, $tenant, $subscription] = $this->createTenantWithSubscription(
+            'Billing Co',
+            [
+                'tenant_currency' => 'KES',
+                'billing_cycle' => 'monthly',
+                'subscription_amount' => 10000,
+            ],
+            ['name' => 'Billing App', 'domain' => 'bill.test'],
+            ['monthly_fee' => 10000, 'setup_fee' => 5000],
+        );
 
         return [$user, $tenant, $subscription, $project];
     }
@@ -81,7 +77,7 @@ class BillingInvoicingTest extends TestCase
     {
         [$user, $tenant, $subscription, $project] = $this->billableTenant();
         $module = ProjectModule::query()->create([
-            'project_id' => $project->id,
+            'product_id' => $project->product_id,
             'name' => 'Analytics',
             'code' => 'analytics',
             'monthly_price' => 2500,
@@ -157,9 +153,20 @@ class BillingInvoicingTest extends TestCase
         [, $tenant, $subscription] = $this->billableTenant();
         $subscription->update(['monthly_fee' => 7500]);
 
+        $suspendedProduct = Product::query()->create([
+            'name' => 'Suspended',
+            'slug' => 'suspended',
+            'status' => 'active',
+        ]);
+        Project::query()->create([
+            'name' => 'Suspended',
+            'domain' => 's.test',
+            'currency' => 'KES',
+            'product_id' => $suspendedProduct->id,
+        ]);
         TenantProjectSubscription::query()->create([
             'tenant_id' => $tenant->id,
-            'project_id' => Project::query()->create(['name' => 'Suspended', 'domain' => 's.test'])->id,
+            'product_id' => $suspendedProduct->id,
             'package_name' => 'X',
             'monthly_fee' => 99999,
             'license_status' => 'suspended',

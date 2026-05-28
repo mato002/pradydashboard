@@ -3,6 +3,7 @@
 namespace App\Domain\Billing;
 
 use App\Domain\Activity\ActivityLogger;
+use App\Jobs\Billing\SendFinancialDocumentEmailJob;
 use App\Models\GeneratedDocument;
 use App\Models\TenantInvoice;
 use App\Support\ActivityLogCategory;
@@ -63,6 +64,20 @@ class DocumentDeliveryService
 
         $wasSent = in_array($invoice->delivery_status, ['sent', 'resent'], true);
         $isResend = $resend || $wasSent;
+
+        if (config('queue.default') !== 'sync') {
+            SendFinancialDocumentEmailJob::dispatch(
+                $invoice->id,
+                $document->id,
+                $recipient,
+                $isResend,
+            );
+
+            return [
+                'success' => true,
+                'message' => __('Email queued for delivery to :email.', ['email' => $recipient]),
+            ];
+        }
 
         return $this->emailDelivery->send($invoice, $document, $recipient, $isResend);
     }

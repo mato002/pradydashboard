@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\InvoiceController;
 use App\Http\Controllers\Admin\LicenseCheckLogController;
 use App\Http\Controllers\Admin\ModulePlaceholderController;
 use App\Http\Controllers\Admin\MonitoringController;
+use App\Http\Controllers\Admin\QueueOperationsController;
 use App\Http\Controllers\Admin\OperationalDocumentController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PaymentReconciliationController;
@@ -408,6 +409,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->middleware('permission:deployments.update')->name('deployments.cancel');
 
     Route::get('monitoring', [MonitoringController::class, 'index'])->middleware('permission:monitoring.view')->name('monitoring.index');
+    Route::get('monitoring/queues', [QueueOperationsController::class, 'index'])->middleware('permission:monitoring.view')->name('monitoring.queues');
+    Route::get('monitoring/failed-jobs/{uuid}/details', [QueueOperationsController::class, 'failedJobDetails'])->middleware('permission:monitoring.sync')->name('monitoring.failed-jobs.details');
+    Route::post('monitoring/failed-jobs/{uuid}/retry', [QueueOperationsController::class, 'retry'])->middleware('permission:monitoring.sync')->name('monitoring.failed-jobs.retry');
+    Route::delete('monitoring/failed-jobs/{uuid}', [QueueOperationsController::class, 'forget'])->middleware('permission:monitoring.sync')->name('monitoring.failed-jobs.forget');
 
     Route::get('backups', [BackupController::class, 'index'])->middleware('permission:backups.view')->name('backups.index');
     Route::post('backups/run', [BackupController::class, 'run'])->middleware('permission:backups.create')->name('backups.run');

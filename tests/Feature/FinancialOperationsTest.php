@@ -10,25 +10,24 @@ use App\Domain\Billing\PdfGenerator;
 use App\Domain\Billing\QuotationConverter;
 use App\Domain\Billing\RecurringBillingProcessor;
 use App\Domain\Billing\SampleFinancialDocumentSnapshot;
-use App\Domain\Tenancy\TenantProjectProvisioner;
 use App\Models\BillingAutomationRule;
 use App\Models\DocumentTemplate;
 use App\Models\InvoiceRecurringSchedule;
-use App\Models\Project;
 use App\Models\Setting;
 use App\Models\SystemActivityLog;
 use App\Models\Tenant;
 use App\Models\TenantInvoice;
 use App\Models\TenantInvoiceLineItem;
-use App\Models\TenantProjectSubscription;
 use App\Models\User;
 use Database\Seeders\DocumentTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\CreatesBillableTenant;
 use Tests\TestCase;
 
 class FinancialOperationsTest extends TestCase
 {
+    use CreatesBillableTenant;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -49,17 +48,15 @@ class FinancialOperationsTest extends TestCase
     private function billableTenant(): array
     {
         $user = User::factory()->create();
-        $project = Project::query()->create(['name' => 'Fin Ops', 'domain' => 'fin.test', 'currency' => 'KES']);
-        $tenant = Tenant::query()->create([
-            'project_id' => $project->id,
-            'company_name' => 'Fin Co',
-            'tenant_currency' => 'KES',
-            'billing_email' => 'billing@fin.test',
-            'status' => 'active',
-        ]);
-        (new TenantProjectProvisioner)->syncPrimarySubscription($tenant);
-        $subscription = TenantProjectSubscription::query()->where('tenant_id', $tenant->id)->firstOrFail();
-        $subscription->update(['monthly_fee' => 5000]);
+        [, , $tenant, $subscription] = $this->createTenantWithSubscription(
+            'Fin Co',
+            [
+                'tenant_currency' => 'KES',
+                'billing_email' => 'billing@fin.test',
+            ],
+            ['name' => 'Fin Ops', 'domain' => 'fin.test'],
+            ['monthly_fee' => 5000],
+        );
 
         return [$user, $tenant, $subscription];
     }

@@ -7,6 +7,7 @@ use App\Mail\PaymentReminderMail;
 use App\Models\BillingAutomationRule;
 use App\Models\CollectionNote;
 use App\Models\TenantInvoice;
+use App\Jobs\Billing\SendPaymentReminderJob;
 use App\Support\ActivityLogCategory;
 use App\Support\Billing\BillingDocumentType;
 use Illuminate\Support\Facades\Log;
@@ -122,7 +123,12 @@ class CollectionReminderService
                 continue;
             }
 
-            $result = $this->sendReminder($invoice);
+            if (config('queue.default') !== 'sync') {
+                SendPaymentReminderJob::dispatch($invoice->id);
+                $result = ['success' => true];
+            } else {
+                $result = $this->sendReminder($invoice);
+            }
             if ($result['success']) {
                 $counts['reminders']++;
             } else {

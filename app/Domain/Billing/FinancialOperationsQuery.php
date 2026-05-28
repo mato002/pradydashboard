@@ -16,6 +16,7 @@ use App\Models\TenantProjectSubscription;
 use App\Support\Billing\BillingDocumentType;
 use App\Support\Billing\CollectionNoteOutcome;
 use App\Support\Billing\CollectionNoteStatus;
+use App\Support\Cache\OperationalCache;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -28,12 +29,29 @@ class FinancialOperationsQuery
         private readonly BillingSummary $billingSummary,
         private readonly OverdueBillingProcessor $overdueProcessor,
         private readonly ActivityLogQuery $activityQuery,
+        private readonly OperationalCache $operationalCache,
     ) {}
 
     /**
      * @return array<string, mixed>
      */
     public function overviewKpis(RbacScopeFilter $scopeFilter): array
+    {
+        $scopeKey = $this->operationalCache->scopeFingerprint($scopeFilter);
+
+        return $this->operationalCache->remember(
+            'financial',
+            'overview-kpis',
+            config('redis_cache.ttl.financial_overview', 180),
+            fn () => $this->computeOverviewKpis($scopeFilter),
+            $scopeKey,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function computeOverviewKpis(RbacScopeFilter $scopeFilter): array
     {
         $billing = $this->billingSummary->platform($scopeFilter);
         $currency = $billing['currency'];

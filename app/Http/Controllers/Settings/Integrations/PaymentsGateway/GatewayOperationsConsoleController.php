@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings\Integrations\PaymentsGateway;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\Concerns\InteractsWithGatewayMonitoring;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\Concerns\InteractsWithPaymentsGateway;
+use App\Jobs\Webhooks\DeliverWebhookEventJob;
 use App\Services\PaymentsGateway\OperationsBulkActionService;
 use App\Services\PaymentsGateway\PaymentsGatewayClient;
 use App\Support\PaymentsGateway\GatewayFormOptions;
@@ -41,15 +42,11 @@ class GatewayOperationsConsoleController extends Controller
 
     public function redispatchWebhookDelivery(string $deliveryUuid, PaymentsGatewayClient $client): RedirectResponse
     {
-        $response = $client->redispatchWebhookDelivery($deliveryUuid);
-
-        if (! ($response['ok'] ?? false)) {
-            return $this->redirectWithGatewayFailure($response, 'settings.payments-gateway.operations-console');
-        }
+        DeliverWebhookEventJob::dispatch('', false, $deliveryUuid);
 
         return redirect()
             ->route('settings.payments-gateway.operations-console')
-            ->with('status', __('Webhook delivery queued for redispatch on Payments Gateway.'));
+            ->with('status', __('Webhook delivery redispatch queued for the Payments Gateway.'));
     }
 
     public function replayDeadLetter(string $deadLetterUuid, PaymentsGatewayClient $client): RedirectResponse

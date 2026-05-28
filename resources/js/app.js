@@ -20,6 +20,34 @@ function applyThemeClass(mode) {
 }
 
 document.addEventListener('alpine:init', () => {
+    Alpine.store('sidebar', {
+        groups: {},
+
+        init() {
+            try {
+                this.groups = JSON.parse(localStorage.getItem('prady-sidebar-groups') || '{}');
+            } catch {
+                this.groups = {};
+            }
+        },
+
+        isGroupOpen(id, defaultOpen) {
+            if (Object.prototype.hasOwnProperty.call(this.groups, id)) {
+                return this.groups[id];
+            }
+
+            return defaultOpen;
+        },
+
+        toggleGroup(id, defaultOpen) {
+            const next = !this.isGroupOpen(id, defaultOpen);
+            this.groups = { ...this.groups, [id]: next };
+            localStorage.setItem('prady-sidebar-groups', JSON.stringify(this.groups));
+        },
+    });
+
+    Alpine.store('sidebar').init();
+
     Alpine.data('pradyShell', () => ({
         sidebarOpen: false,
         sidebarCollapsed: false,

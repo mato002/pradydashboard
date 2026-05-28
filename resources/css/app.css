@@ -110,6 +110,12 @@
         @apply infra-provision-card sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto prady-scrollbar;
     }
 
+    @media (min-width: 1024px) {
+        [data-sidebar-popover] .sidebar-link-label {
+            display: inline !important;
+        }
+    }
+
     .infra-provision-meter {
         @apply h-2 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800;
     }

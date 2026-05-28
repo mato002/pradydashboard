@@ -1,0 +1,79 @@
+@props([
+    'id',
+    'label',
+    'defaultOpen' => false,
+    'icon' => null,
+])
+
+<div
+    class="relative"
+    x-data="{
+        flyout: false,
+        get open() {
+            return $store.sidebar.isGroupOpen(@js($id), @js($defaultOpen));
+        },
+        toggle() {
+            if (sidebarCollapsed && window.matchMedia('(min-width: 1024px)').matches) {
+                this.flyout = !this.flyout;
+                return;
+            }
+            $store.sidebar.toggleGroup(@js($id), @js($defaultOpen));
+        },
+        closeFlyout() { this.flyout = false; },
+    }"
+    @keydown.escape.window="closeFlyout()"
+    @sidebar-close-flyout.window="closeFlyout()"
+>
+    <button
+        type="button"
+        class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white"
+        :class="open && !sidebarCollapsed ? 'bg-white/5 text-white' : ''"
+        @click="toggle()"
+        :title="@js($label)"
+        :aria-expanded="open || flyout"
+    >
+        @if ($icon)
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10">
+                {!! $icon !!}
+            </span>
+        @endif
+        <span class="min-w-0 flex-1 truncate" :class="sidebarCollapsed ? 'lg:hidden' : ''">{{ $label }}</span>
+        <svg
+            class="h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200"
+            :class="[
+                sidebarCollapsed ? 'lg:hidden' : '',
+                open ? 'rotate-180' : '',
+            ]"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            aria-hidden="true"
+        >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+        </svg>
+    </button>
+
+    <div
+        x-show="(open && !sidebarCollapsed) || (flyout && sidebarCollapsed)"
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-100"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        @click.outside="if (sidebarCollapsed) { closeFlyout(); }"
+        x-cloak
+        data-sidebar-popover
+        :class="sidebarCollapsed
+            ? 'absolute left-full top-0 z-[60] ml-2 hidden min-w-[12.5rem] rounded-xl border border-sidebar-border bg-sidebar py-2 shadow-2xl ring-1 ring-white/10 lg:block'
+            : 'mt-0.5 space-y-0.5 pb-1'"
+    >
+        @if ($icon)
+            <p class="mb-1 hidden px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500 lg:block" :class="sidebarCollapsed ? '' : 'lg:!hidden'">{{ $label }}</p>
+        @endif
+        <div :class="sidebarCollapsed ? 'space-y-0.5 px-1.5' : ''">
+            {{ $slot }}
+        </div>
+    </div>
+</div>

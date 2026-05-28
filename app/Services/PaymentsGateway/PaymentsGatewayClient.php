@@ -620,6 +620,15 @@ class PaymentsGatewayClient
             );
         }
 
+        if ($loopbackError = $this->selfReferentialGatewayError()) {
+            return $this->failureResult(
+                status: 0,
+                error: $loopbackError,
+                responseTimeMs: 0,
+                unavailable: true,
+            );
+        }
+
         $started = microtime(true);
         $attempts = max(1, (int) config('payment_gateway.retry_attempts', 2));
         $lastError = null;
@@ -635,8 +644,16 @@ class PaymentsGatewayClient
                 };
 
                 $responseTimeMs = (int) round((microtime(true) - $started) * 1000);
+                $normalized = $this->normalizeResponse($response, $responseTimeMs, $path, $method);
 
-                return $this->normalizeResponse($response, $responseTimeMs, $path, $method);
+                if (($normalized['ok'] ?? false) || ! ($normalized['unavailable'] ?? false) || $attempt >= $attempts) {
+                    return $normalized;
+                }
+
+                $lastError = $normalized['error'] ?? __('Payments Gateway request failed.');
+                $lastStatus = (int) ($normalized['status'] ?? 0);
+
+                continue;
             } catch (ConnectionException $e) {
                 $lastError = $e->getMessage();
                 $lastStatus = 0;
@@ -666,10 +683,10 @@ class PaymentsGatewayClient
 
     private function httpClient(): PendingRequest
     {
-        $timeout = max(5, (int) config('payment_gateway.timeout', 30));
+        $timeout = max(3, min(30, (int) config('payment_gateway.timeout', 10)));
 
         return Http::timeout($timeout)
-            ->connectTimeout(min(10, $timeout))
+            ->connectTimeout(min(5, $timeout))
             ->withOptions(['allow_redirects' => true, 'http_errors' => false])
             ->acceptJson()
             ->withToken((string) config('payment_gateway.admin_token'));
@@ -678,6 +695,53 @@ class PaymentsGatewayClient
     private function url(string $path): string
     {
         return config('payment_gateway.base_url').'/'.ltrim($path, '/');
+    }
+
+    private function selfReferentialGatewayError(): ?string
+    {
+        $baseUrl = rtrim((string) config('payment_gateway.base_url'), '/');
+        $parts = parse_url($baseUrl);
+
+        if (! is_array($parts) || blank($parts['host'] ?? null)) {
+            return null;
+        }
+
+        $host = strtolower((string) $parts['host']);
+        $scheme = strtolower((string) ($parts['scheme'] ?? 'http'));
+        $port = (int) ($parts['port'] ?? ($scheme === 'https' ? 443 : 80));
+
+        if (! in_array($host, ['127.0.0.1', 'localhost', '::1'], true)) {
+            return null;
+        }
+
+        $serverPort = (int) ($_SERVER['SERVER_PORT'] ?? 0);
+        if ($serverPort > 0 && $port === $serverPort) {
+            return __('Payments Gateway URL points to this dashboard server (:url). Run payments.pradytecai.com on a different port or use the remote gateway URL.', [
+                'url' => $baseUrl,
+            ]);
+        }
+
+        $appUrl = rtrim((string) config('app.url'), '/');
+        $appParts = parse_url($appUrl);
+
+        if (! is_array($appParts) || blank($appParts['host'] ?? null)) {
+            return null;
+        }
+
+        $appHost = strtolower((string) $appParts['host']);
+        $appScheme = strtolower((string) ($appParts['scheme'] ?? 'http'));
+        $appPort = (int) ($appParts['port'] ?? ($appScheme === 'https' ? 443 : 80));
+        $sameHost = $host === $appHost
+            || (in_array($host, ['127.0.0.1', 'localhost', '::1'], true)
+                && in_array($appHost, ['127.0.0.1', 'localhost', '::1'], true));
+
+        if ($sameHost && $port === $appPort) {
+            return __('Payments Gateway URL matches APP_URL (:url). Point PAYMENTS_GATEWAY_URL at payments.pradytecai.com instead of this dashboard.', [
+                'url' => $baseUrl,
+            ]);
+        }
+
+        return null;
     }
 
     /**

@@ -59,6 +59,7 @@ use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayCallbackLo
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayGoLiveDryRunController;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayHealthController;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayIncidentInvestigationController;
+use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayLaunchConsoleController;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayOperationsConsoleController;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayProductionReadinessController;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\GatewayTransactionsController;
@@ -261,6 +262,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::get('payment-profiles/{profileUuid}/api-keys', [GatewayApiKeysController::class, 'index'])->name('payment-profiles.api-keys.index')->whereUuid('profileUuid');
                 Route::get('payment-profiles/{profileUuid}/webhook-endpoints', [WebhookEndpointsController::class, 'index'])->name('payment-profiles.webhook-endpoints.index')->whereUuid('profileUuid');
                 Route::get('operations-console', [GatewayOperationsConsoleController::class, 'index'])->name('operations-console');
+                Route::get('launch-console', [GatewayLaunchConsoleController::class, 'index'])->name('launch-console');
+                Route::get('launch-console/panels/{panel}', [GatewayLaunchConsoleController::class, 'panel'])->name('launch-console.panel');
                 Route::get('operations-console/dead-letters/{uuid}', [GatewayIncidentInvestigationController::class, 'showDeadLetter'])->name('operations-console.dead-letters.show')->whereUuid('uuid');
                 Route::get('operations-console/callback-logs/{uuid}', [GatewayIncidentInvestigationController::class, 'showCallbackLog'])->name('operations-console.callback-logs.show')->whereUuid('uuid');
                 Route::get('operations-console/webhook-deliveries/{uuid}', [GatewayIncidentInvestigationController::class, 'showWebhookDelivery'])->name('operations-console.webhook-deliveries.show')->whereUuid('uuid');
@@ -288,6 +291,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::post('operations-console/callback-logs/{callbackLogUuid}/retry', [GatewayOperationsConsoleController::class, 'retryCallback'])->name('operations-console.callback-logs.retry')->whereUuid('callbackLogUuid');
                 Route::post('operations-console/treasury-alerts/{alertUuid}/acknowledge', [GatewayOperationsConsoleController::class, 'acknowledgeAlert'])->name('operations-console.treasury-alerts.acknowledge')->whereUuid('alertUuid');
                 Route::post('operations-console/treasury-alerts/{alertUuid}/resolve', [GatewayOperationsConsoleController::class, 'resolveAlert'])->name('operations-console.treasury-alerts.resolve')->whereUuid('alertUuid');
+                Route::post('launch-console/validation-runs', [GatewayLaunchConsoleController::class, 'runValidation'])->name('launch-console.validation-runs.store');
 
                 Route::post('tenants/{tenant}/link', [TenantProfilesController::class, 'link'])->name('tenants.link');
                 Route::post('tenants/{tenant}/unlink', [TenantProfilesController::class, 'unlink'])->name('tenants.unlink');

@@ -65,16 +65,7 @@
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card dark:border-slate-800 dark:bg-slate-900/60">
-                    <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Callback URLs') }}</h3>
-                    <div class="mt-4 grid gap-4 md:grid-cols-2">
-                        @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('Validation URL'), 'name' => 'validation_url'])
-                        @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('Confirmation URL'), 'name' => 'confirmation_url'])
-                        @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('STK callback URL'), 'name' => 'stk_callback_url'])
-                        @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('B2C result URL'), 'name' => 'b2c_result_url'])
-                        @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('B2C timeout URL'), 'name' => 'b2c_timeout_url'])
-                    </div>
-                </div>
+                @include('settings.integrations.payments-gateway.partials.callback-url-fields')
 
                 <div class="flex justify-end gap-2">
                     <a href="{{ $backHref }}" class="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600">{{ __('Cancel') }}</a>

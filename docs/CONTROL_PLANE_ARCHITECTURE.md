@@ -176,6 +176,76 @@ The dashboard never persists M-Pesa credentials, payment profiles, PayBills, web
 | Test endpoint (webhook row) | `POST /api/v1/webhook-endpoints/{uuid}/test` via dashboard client; redirects back to mapping page with success or error |
 | Checklist links | Webhook/API key items anchor to `#treasury-webhooks` / `#treasury-api-keys`; readiness/dry-run items deep-link with `run=1` |
 
+**Canonical PayBill callback URLs (Phase 6K — dashboard control plane)**
+
+Safaricom must receive **public** callback URLs on payments.pradytecai.com under `/pay/*`. Internal gateway routes such as `/api/v1/callbacks/*` are not registered with Safaricom and must not appear on PayBill account records.
+
+| Callback | Canonical path (relative to `PAYMENTS_GATEWAY_URL`) |
+|----------|------------------------------------------------------|
+| C2B Validation | `/pay/c2b/validate` |
+| C2B Confirmation | `/pay/c2b/confirm` |
+| STK | `/pay/stk` |
+| B2C Result | `/pay/b2c/result` |
+| B2C Timeout | `/pay/b2c/timeout` |
+
+The dashboard derives these URLs from `config('payment_gateway.base_url')` via `App\Support\PaymentsGateway\CanonicalCallbackUrls`. No callback URL truth is stored locally — create/edit forms prefill and submit values through the existing PayBill admin API (`PaymentsGatewayClient::createPaybillAccount` / `updatePaybillAccount`).
+
+**Operator workflow — updating PayBill callback URLs**
+
+1. Open **Settings → API & Integrations → Payments Gateway → Treasury Mapping** for the linked dashboard tenant.
+2. Review **PayBill callback URL health** (canonical / missing / legacy internal / mismatched) and the canonical URL reference table.
+3. For PayBills marked **Needs URL update**, click **View/Edit** (or **Update PayBill callback URLs** in the health panel).
+4. On the PayBill form, click **Use canonical URLs** if configured values differ, or edit fields manually. Legacy `/api/v1/callbacks/*` values show an inline warning.
+5. Save — the dashboard PATCHes the PayBill on payments.pradytecai.com only; re-open the mapping page to confirm health is **Canonical**.
+6. Before go-live, resolve legacy/mismatched URLs. The mapping page shows *Update callback URLs before go-live.* beside Go-Live Dry Run links when remediation is still required.
+
+**Why internal `/api/v1/callbacks/*` is not used at Safaricom**
+
+Those routes are gateway-internal ingestion endpoints. Safaricom Daraja requires stable, publicly reachable HTTPS URLs. Phase 6J on payments.pradytecai.com exposes `/pay/*` as the canonical public surface; the dashboard control plane aligns PayBill account fields with that contract and helps operators migrate legacy values safely.
+
+**Operational Launch Console (Phase 6N — dashboard control plane)**
+
+Route: `/settings/api-integrations/payments-gateway/launch-console` (permission `payments_gateway.view`)
+
+The Launch Console is a controlled operational deployment workspace — **not** a sandbox simulator and **not** a local validation engine. All transactional truth remains on payments.pradytecai.com; the dashboard orchestrates onboarding, visibility, and remediation only.
+
+| Section | Purpose | Gateway APIs |
+|---------|---------|--------------|
+| Gateway operational status | Launch posture summary | `GET /api/v1/health`, operations summaries (`readiness/status`, queue, webhooks, callbacks, treasury alerts, reconciliation) |
+| PayBill deployment readiness | PASS / WARNING / BLOCKED checks for selected PayBill | `GET /api/v1/paybill-accounts/{uuid}`, `GET /api/v1/operations/production-readiness`, `GET /api/v1/operations/go-live-dry-run/{uuid}` + local callback URL alignment via `CanonicalCallbackUrls` (display only) |
+| Operational validation workspace | Observational validation of **existing** transaction UUIDs | `POST /api/v1/operations/validation-runs`, `GET /api/v1/operations/validation-runs/{uuid}` |
+| Validation run history | Prior runs, failed stages, strict mode, recommendations | `GET /api/v1/operations/validation-runs` |
+| Incident escalation | Failed webhooks, dead letters, unmatched reconciliation, alerts, callbacks | Existing operations console list APIs + remediation routes |
+
+**Operational launch workflow**
+
+1. Open **Launch Console** and review gateway operational status (red/yellow/green severity).
+2. Enter PayBill UUID + environment; load deployment readiness and resolve **BLOCKED** items (callback URLs, readiness, dry run).
+3. Attach existing STK/C2B/B2C transaction UUIDs and run **observational validation** (`payments_gateway.manage`). The dashboard never initiates Daraja transactions.
+4. Review validation run stages, reconciliation/webhook/callback evidence, and history.
+5. Clear incident escalation items via existing Operations Console remediation APIs before production traffic.
+6. Confirm **LIVE FINANCIAL ENVIRONMENT** banner when environment is `production`.
+
+**Controlled deployment governance**
+
+- Visibility: `payments_gateway.view`
+- Validation runs and remediation: `payments_gateway.manage`
+- Production environment shows explicit live-environment warning
+- Heavy panels (validation history, incidents) async-load via panel routes to keep initial render lightweight
+- Missing gateway APIs surface endpoint notices; no local shadow state is created
+
+**Validation lifecycle**
+
+1. Operator selects environment + PayBill and optionally attaches existing transaction UUIDs.
+2. Dashboard `POST`s observational payload to payments.pradytecai.com.
+3. Gateway executes validation suite and returns stage evidence (callback ingestion, webhook delivery, reconciliation).
+4. Dashboard displays run detail and lists prior runs from gateway history API.
+5. Failed stages drive escalation back to Operations Console remediation workflows.
+
+**Incident escalation lifecycle**
+
+Launch Console surfaces compact incident rows with links to Operations Console investigation pages. Remediation (`replay`, `retry`, `redispatch`) proxies through existing dashboard routes to gateway operations APIs — identical to Phase 7E wiring.
+
 **Webhook endpoint test lifecycle (Phase 6H)**
 
 1. Operator links dashboard tenant to gateway tenant and confirms webhook endpoint URL + secret on the mapping page.

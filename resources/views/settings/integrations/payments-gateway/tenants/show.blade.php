@@ -130,29 +130,50 @@
                                             <th class="px-3 py-2">{{ __('Shortcode') }}</th>
                                             <th class="px-3 py-2">{{ __('STK shortcode') }}</th>
                                             <th class="px-3 py-2">{{ __('Capabilities') }}</th>
+                                            <th class="px-3 py-2">{{ __('Callback URLs') }}</th>
                                             <th class="px-3 py-2">{{ __('Status') }}</th>
                                             <th class="px-3 py-2">{{ __('Actions') }}</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
                                         @forelse ($group['accounts'] as $account)
+                                            @php
+                                                $callbackHealth = $paybillCallbackHealthByUuid[$account['uuid'] ?? ''] ?? null;
+                                            @endphp
                                             <tr>
                                                 <td class="px-3 py-2">{{ $account['account_name'] ?? '—' }}</td>
                                                 <td class="px-3 py-2">{{ ucfirst((string) ($account['account_type'] ?? '—')) }}</td>
                                                 <td class="px-3 py-2">{{ $account['shortcode'] ?? '—' }}</td>
                                                 <td class="px-3 py-2">{{ $account['stk_shortcode'] ?? '—' }}</td>
                                                 <td class="px-3 py-2 text-xs">{{ $formatCapabilities($account) }}</td>
+                                                <td class="px-3 py-2">
+                                                    @if ($callbackHealth)
+                                                        <div class="flex flex-wrap items-center gap-1">
+                                                            <x-ui.status-badge :variant="$statusVariant($callbackHealth['overall_status'])">
+                                                                {{ ucfirst(str_replace('_', ' ', $callbackHealth['overall_status'])) }}
+                                                            </x-ui.status-badge>
+                                                            @if ($callbackHealth['needs_url_update'])
+                                                                <x-ui.status-badge variant="danger">{{ __('Needs URL update') }}</x-ui.status-badge>
+                                                            @endif
+                                                        </div>
+                                                    @else
+                                                        <span class="text-xs text-slate-500">—</span>
+                                                    @endif
+                                                </td>
                                                 <td class="px-3 py-2"><x-ui.status-badge :variant="$statusVariant((string) ($account['status'] ?? 'unknown'))">{{ ucfirst((string) ($account['status'] ?? 'unknown')) }}</x-ui.status-badge></td>
                                                 <td class="px-3 py-2">
                                                     <div class="flex flex-col gap-1 text-xs font-semibold">
                                                         <a href="{{ route('settings.payments-gateway.paybill-accounts.edit', $account['uuid']) }}" class="text-indigo-600 dark:text-indigo-400">{{ __('View/Edit') }}</a>
                                                         <a href="{{ route('settings.payments-gateway.production-readiness', ['paybill_account_uuid' => $account['uuid'], 'run' => 1]) }}" class="text-slate-600 dark:text-slate-300" title="{{ __('Production readiness opens in context of this PayBill.') }}">{{ __('Production Readiness') }}</a>
+                                                        @if ($callbackHealth['needs_url_update'] ?? false)
+                                                            <p class="font-normal text-amber-700 dark:text-amber-300">{{ __('Update callback URLs before go-live.') }}</p>
+                                                        @endif
                                                         <a href="{{ route('settings.payments-gateway.go-live-dry-run', ['paybill_account_uuid' => $account['uuid'], 'run' => 1]) }}" class="text-slate-600 dark:text-slate-300" title="{{ __('Go-live dry run opens in context of this PayBill.') }}">{{ __('Go-Live Dry Run') }}</a>
                                                     </div>
                                                 </td>
                                             </tr>
                                         @empty
-                                            <tr><td colspan="7" class="px-3 py-4 text-center text-slate-500">{{ __('No PayBill accounts for this profile.') }}</td></tr>
+                                            <tr><td colspan="8" class="px-3 py-4 text-center text-slate-500">{{ __('No PayBill accounts for this profile.') }}</td></tr>
                                         @endforelse
                                     </tbody>
                                 </table>
@@ -163,6 +184,8 @@
                     @endforelse
                 </div>
             </section>
+
+            @include('settings.integrations.payments-gateway.tenants.partials.callback-url-health')
 
             {{-- D. Webhook Endpoints --}}
             <section id="treasury-webhooks" class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card dark:border-slate-800 dark:bg-slate-900/60">

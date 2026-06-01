@@ -370,6 +370,30 @@ class PaymentsGatewayClient
         return $this->get('/api/v1/operations/go-live-dry-run/'.$paybillAccountUuid, $params);
     }
 
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{ok: bool, status: int, data: mixed, message: ?string, error: ?string, errors: mixed, response_time_ms: int, unavailable: bool}
+     */
+    public function listValidationRuns(array $filters = []): array
+    {
+        return $this->get('/api/v1/operations/validation-runs', $filters);
+    }
+
+    /** @return array{ok: bool, status: int, data: mixed, message: ?string, error: ?string, errors: mixed, response_time_ms: int, unavailable: bool} */
+    public function getValidationRun(string $validationRunUuid): array
+    {
+        return $this->get('/api/v1/operations/validation-runs/'.$validationRunUuid);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{ok: bool, status: int, data: mixed, message: ?string, error: ?string, errors: mixed, response_time_ms: int, unavailable: bool}
+     */
+    public function createValidationRun(array $payload): array
+    {
+        return $this->post('/api/v1/operations/validation-runs', $payload);
+    }
+
     /** @return array{ok: bool, status: int, data: mixed, message: ?string, error: ?string, errors: mixed, response_time_ms: int, unavailable: bool} */
     public function getTransactionOperationsSummary(): array
     {

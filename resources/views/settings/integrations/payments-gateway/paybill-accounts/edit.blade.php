@@ -56,15 +56,7 @@
                         </div>
                     </div>
 
-                    <div class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card dark:border-slate-800 dark:bg-slate-900/60">
-                        <div class="grid gap-4 md:grid-cols-2">
-                            @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('Validation URL'), 'name' => 'validation_url', 'value' => $account['validation_url'] ?? ''])
-                            @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('Confirmation URL'), 'name' => 'confirmation_url', 'value' => $account['confirmation_url'] ?? ''])
-                            @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('STK callback URL'), 'name' => 'stk_callback_url', 'value' => $account['stk_callback_url'] ?? ''])
-                            @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('B2C result URL'), 'name' => 'b2c_result_url', 'value' => $account['b2c_result_url'] ?? ''])
-                            @include('settings.integrations.payments-gateway.partials.form-field', ['label' => __('B2C timeout URL'), 'name' => 'b2c_timeout_url', 'value' => $account['b2c_timeout_url'] ?? ''])
-                        </div>
-                    </div>
+                    @include('settings.integrations.payments-gateway.partials.callback-url-fields')
 
                     <div class="flex flex-wrap justify-end gap-2">
                         @if (($account['status'] ?? '') === 'active')

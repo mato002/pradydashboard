@@ -3,6 +3,7 @@
         ['route' => 'settings.payments-gateway.overview', 'label' => __('Overview'), 'pattern' => 'settings.payments-gateway.overview'],
         ['route' => 'settings.payments-gateway.tenants.index', 'label' => __('Treasury Mapping'), 'pattern' => 'settings.payments-gateway.tenants.*'],
         ['route' => 'settings.payments-gateway.operations-console', 'label' => __('Operations Console'), 'pattern' => 'settings.payments-gateway.operations-console'],
+        ['route' => 'settings.payments-gateway.launch-console', 'label' => __('Launch Console'), 'pattern' => 'settings.payments-gateway.launch-console*'],
         ['route' => 'settings.payments-gateway.transactions.index', 'label' => __('Transactions'), 'pattern' => 'settings.payments-gateway.transactions.*'],
         ['route' => 'settings.payments-gateway.callback-logs.index', 'label' => __('Callback Logs'), 'pattern' => 'settings.payments-gateway.callback-logs.*'],
         ['route' => 'settings.payments-gateway.webhook-events.index', 'label' => __('Webhook Events'), 'pattern' => 'settings.payments-gateway.webhook-events.*'],

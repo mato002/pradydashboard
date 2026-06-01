@@ -10,6 +10,7 @@ use App\Services\PaymentsGateway\Exceptions\PaymentsGatewayTenantAlreadyLinkedEx
 use App\Services\PaymentsGateway\Exceptions\PaymentsGatewayTenantNotLinkedException;
 use App\Services\PaymentsGateway\PaymentsGatewayClient;
 use App\Services\PaymentsGateway\PaymentsGatewayTenantLinkService;
+use App\Support\PaymentsGateway\CanonicalCallbackUrls;
 use App\Support\PaymentsGateway\GatewayFormOptions;
 use App\Support\PaymentsGateway\TreasuryMappingPresenter;
 use Illuminate\Http\RedirectResponse;
@@ -164,12 +165,15 @@ class TenantProfilesController extends Controller
         $expectedTenantWebhookUrl = $presenter->expectedTenantWebhookUrl($tenant);
 
         $primaryPaybillUuid = $this->resolvePrimaryPaybillUuid($profiles, $paybillAccounts);
+        $paybillCallbackHealth = $presenter->buildPaybillCallbackHealthRows($paybillAccounts);
+        $paybillCallbackHealthByUuid = collect($paybillCallbackHealth)->keyBy('uuid')->all();
         $checklist = $presenter->buildChecklist($tenant, $profiles, $paybillAccounts, $webhookEndpoints, $apiKeys, $primaryPaybillUuid);
         $checklist = $presenter->attachChecklistActions(
             $checklist,
             route('settings.payments-gateway.tenants.show', $tenant),
             $primaryPaybillUuid
         );
+        $checklist = $presenter->attachCallbackUrlWarnings($checklist, $primaryPaybillUuid, $paybillCallbackHealthByUuid);
 
         return view('settings.integrations.payments-gateway.tenants.show', [
             'dashboardTenant' => $tenant,
@@ -184,6 +188,9 @@ class TenantProfilesController extends Controller
             'expectedTenantWebhookUrl' => $expectedTenantWebhookUrl,
             'checklist' => $checklist,
             'primaryPaybillUuid' => $primaryPaybillUuid,
+            'paybillCallbackHealth' => $paybillCallbackHealth,
+            'paybillCallbackHealthByUuid' => $paybillCallbackHealthByUuid,
+            'canonicalCallbackReference' => CanonicalCallbackUrls::referenceTable(),
             'linkageHealth' => $linkageHealth,
             'gatewayUnavailable' => $gatewayUnavailable,
             'gatewayMessage' => $gatewayUnavailable

@@ -8,6 +8,7 @@ use App\Http\Requests\Settings\PaymentsGateway\StoreGatewayPaybillAccountRequest
 use App\Http\Requests\Settings\PaymentsGateway\UpdateGatewayPaybillAccountRequest;
 use App\Models\Tenant;
 use App\Services\PaymentsGateway\PaymentsGatewayClient;
+use App\Support\PaymentsGateway\CanonicalCallbackUrls;
 use App\Support\PaymentsGateway\GatewayFormOptions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -59,6 +60,8 @@ class PaybillAccountsController extends Controller
             'accountTypes' => GatewayFormOptions::paybillAccountTypes(),
             'environments' => GatewayFormOptions::paymentEnvironments(),
             'statuses' => GatewayFormOptions::paybillAccountStatuses(),
+            'canonicalCallbackUrls' => CanonicalCallbackUrls::all(),
+            'callbackUrlDefaults' => CanonicalCallbackUrls::prefillDefaults(),
         ]);
     }
 
@@ -81,6 +84,8 @@ class PaybillAccountsController extends Controller
             'accountTypes' => GatewayFormOptions::paybillAccountTypes(),
             'environments' => GatewayFormOptions::paymentEnvironments(),
             'statuses' => GatewayFormOptions::paybillAccountStatuses(),
+            'canonicalCallbackUrls' => CanonicalCallbackUrls::all(),
+            'callbackUrlDefaults' => CanonicalCallbackUrls::prefillDefaults(),
         ]);
     }
 
@@ -141,6 +146,8 @@ class PaybillAccountsController extends Controller
             ? $client->extractResource($client->getPaymentProfile($profileUuid))
             : null;
 
+        $callbackUrlDefaults = CanonicalCallbackUrls::prefillDefaults(is_array($account) ? $account : []);
+
         return view('settings.integrations.payments-gateway.paybill-accounts.edit', [
             'account' => $account,
             'accountUuid' => $accountUuid,
@@ -153,6 +160,8 @@ class PaybillAccountsController extends Controller
             'gatewayContractWarning' => $this->usesLegacyGatewayIdentifiers($account)
                 ? $this->gatewayContractOutdatedMessage()
                 : null,
+            'canonicalCallbackUrls' => CanonicalCallbackUrls::all(),
+            'callbackUrlDefaults' => $callbackUrlDefaults,
         ]);
     }
 
@@ -232,6 +241,12 @@ class PaybillAccountsController extends Controller
         foreach (['consumer_key', 'consumer_secret', 'passkey', 'initiator_name', 'security_credential'] as $secretField) {
             if (blank($payload[$secretField] ?? null)) {
                 unset($payload[$secretField]);
+            }
+        }
+
+        foreach (CanonicalCallbackUrls::fieldKeys() as $callbackField) {
+            if (blank($payload[$callbackField] ?? null)) {
+                $payload[$callbackField] = CanonicalCallbackUrls::all()[$callbackField];
             }
         }
 

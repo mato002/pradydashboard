@@ -7,6 +7,64 @@ use App\Models\Tenant;
 class TreasuryMappingPresenter
 {
     /**
+     * @param  list<array<string, mixed>>  $paybillAccounts
+     * @return list<array{
+     *     uuid: string,
+     *     account_name: string,
+     *     shortcode: string|null,
+     *     overall_status: string,
+     *     needs_url_update: bool,
+     *     fields: list<array{status: string, url: string|null, label: string}>
+     * }>
+     */
+    public function buildPaybillCallbackHealthRows(array $paybillAccounts): array
+    {
+        return array_map(function (array $account): array {
+            $assessment = CanonicalCallbackUrls::assessAccount($account);
+
+            return [
+                'uuid' => (string) ($account['uuid'] ?? ''),
+                'account_name' => (string) ($account['account_name'] ?? __('Unknown account')),
+                'shortcode' => filled($account['shortcode'] ?? null) ? (string) $account['shortcode'] : null,
+                'overall_status' => $assessment['overall_status'],
+                'needs_url_update' => $assessment['needs_url_update'],
+                'fields' => array_values($assessment['fields']),
+            ];
+        }, $paybillAccounts);
+    }
+
+    /**
+     * @param  list<array{key: string, label: string, status: string, message: string|null, action_url?: string|null, action_label?: string|null}>  $checklist
+     * @return list<array{key: string, label: string, status: string, message: string|null, action_url?: string|null, action_label?: string|null}>
+     */
+    public function attachCallbackUrlWarnings(array $checklist, ?string $primaryPaybillUuid, array $paybillCallbackHealthByUuid): array
+    {
+        if (! filled($primaryPaybillUuid)) {
+            return $checklist;
+        }
+
+        $health = $paybillCallbackHealthByUuid[$primaryPaybillUuid] ?? null;
+
+        if ($health === null || ! ($health['needs_url_update'] ?? false)) {
+            return $checklist;
+        }
+
+        return array_map(function (array $item) use ($health): array {
+            if ($item['key'] !== 'go_live_dry_run') {
+                return $item;
+            }
+
+            $warning = __('Update callback URLs before go-live.');
+
+            return array_merge($item, [
+                'message' => filled($item['message'] ?? null)
+                    ? $item['message'].' '.$warning
+                    : $warning,
+            ]);
+        }, $checklist);
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $profiles
      * @param  list<array<string, mixed>>  $paybillAccounts
      * @return array<string, list<array<string, mixed>>>

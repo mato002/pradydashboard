@@ -483,15 +483,48 @@ document.addEventListener('alpine:init', () => {
         statusModalOpen: false,
         statusModalTenant: null,
         statusModalValue: 'active',
+        directoryScrollLeft: false,
+        directoryScrollRight: false,
 
         init() {
-            if (reopenTenantId === null || reopenTenantId === '') {
+            if (reopenTenantId !== null && reopenTenantId !== '') {
+                const tenant = this.directory.find((t) => String(t.id) === String(reopenTenantId));
+                if (tenant) {
+                    this.openDrawer(tenant);
+                }
+            }
+
+            this.$nextTick(() => this.bindDirectoryScroll());
+            this.$watch('filterStatus', () => {
+                this.$nextTick(() => this.updateDirectoryScroll());
+            });
+        },
+
+        bindDirectoryScroll() {
+            const el = this.$refs.directoryScroll;
+            if (!el) {
                 return;
             }
-            const tenant = this.directory.find((t) => String(t.id) === String(reopenTenantId));
-            if (tenant) {
-                this.openDrawer(tenant);
+
+            const update = () => this.updateDirectoryScroll();
+            update();
+            el.addEventListener('scroll', update, { passive: true });
+
+            const observer = new ResizeObserver(update);
+            observer.observe(el);
+            if (el.firstElementChild) {
+                observer.observe(el.firstElementChild);
             }
+        },
+
+        updateDirectoryScroll() {
+            const el = this.$refs.directoryScroll;
+            if (!el) {
+                return;
+            }
+
+            this.directoryScrollLeft = el.scrollLeft > 4;
+            this.directoryScrollRight = el.scrollLeft < el.scrollWidth - el.clientWidth - 4;
         },
 
         get filteredDirectory() {

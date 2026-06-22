@@ -177,8 +177,19 @@
                             <a href="{{ route('tenants.create') }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('New') }} →</a>
                         </div>
                     </div>
-                    <div class="prady-scrollbar overflow-x-auto">
-                        <table class="prady-table w-full min-w-[1100px]">
+                    <div
+                        class="tenant-directory-scroll-wrap"
+                        :class="{
+                            'tenant-directory-scroll-wrap--left': directoryScrollLeft,
+                            'tenant-directory-scroll-wrap--right': directoryScrollRight,
+                        }"
+                    >
+                        <div
+                            x-ref="directoryScroll"
+                            class="tenant-directory-scroll prady-scrollbar"
+                            @scroll="updateDirectoryScroll()"
+                        >
+                            <table class="prady-table prady-table--sticky-company w-full min-w-[1100px]">
                             <thead>
                                 <tr>
                                     <th>{{ __('Company') }}</th>
@@ -201,7 +212,9 @@
                                         class="cursor-pointer transition hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5"
                                         :class="selectedTenant?.id === tenant.id && drawerOpen ? 'bg-indigo-50/80 dark:bg-indigo-500/10' : ''"
                                     >
-                                        <td>
+                                        <td
+                                            :class="selectedTenant?.id === tenant.id && drawerOpen ? 'bg-indigo-50/80 dark:bg-indigo-500/10' : ''"
+                                        >
                                             <p class="font-semibold text-slate-900 dark:text-white" x-text="tenant.company"></p>
                                             <p class="text-[10px] text-slate-400" x-text="tenant.domain"></p>
                                         </td>
@@ -243,7 +256,8 @@
                                     </tr>
                                 </template>
                             </tbody>
-                        </table>
+                            </table>
+                        </div>
                     </div>
                     <div class="border-t border-slate-200/80 px-4 py-3 dark:border-slate-800/80">
                         {{ $tenants->links() }}

@@ -1,6 +1,8 @@
 <?php
 
-return [
+return array_values(array_filter([
     App\Providers\AppServiceProvider::class,
-    App\Providers\HorizonServiceProvider::class,
-];
+    class_exists(\Laravel\Horizon\HorizonApplicationServiceProvider::class)
+        ? App\Providers\HorizonServiceProvider::class
+        : null,
+]));

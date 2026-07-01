@@ -79,7 +79,7 @@
                             <h3 class="font-semibold">{{ $selectedTicket->subject }}</h3>
                             <p class="text-xs text-gray-500 capitalize">{{ $selectedTicket->category }} · {{ $selectedTicket->priority }} · {{ $selectedTicket->status }}</p>
                         </div>
-                        <a href="{{ route('support-tickets.show', $selectedTicket->id) }}" class="text-xs text-indigo-600 hover:underline">{{ __('Full view') }}</a>
+                        <a href="{{ route('support-tickets.show', $selectedTicket) }}" class="text-xs text-indigo-600 hover:underline">{{ __('Full view') }}</a>
                     </div>
                 </div>
                 @if ($selectedTicket->description)

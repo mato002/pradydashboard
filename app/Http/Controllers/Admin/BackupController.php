@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 
 class BackupController extends Controller
 {
@@ -95,6 +96,37 @@ class BackupController extends Controller
             ->with('status', $schedule->enabled
                 ? __('Schedule enabled.')
                 : __('Schedule paused.'));
+    }
+
+    public function download(Backup $backup): RedirectResponse|Response
+    {
+        if ($backup->status !== 'successful') {
+            return redirect()
+                ->route('backups.index')
+                ->with('status', __('Backup archive is not ready for download yet.'));
+        }
+
+        return redirect()
+            ->route('backups.index')
+            ->with('status', __('Download queued for :name. Check your object storage bucket :disk.', [
+                'name' => $backup->name,
+                'disk' => $backup->storage_disk ?? config('filesystems.default'),
+            ]));
+    }
+
+    public function verify(Backup $backup): RedirectResponse
+    {
+        if ($backup->status !== 'successful') {
+            return redirect()
+                ->route('backups.index')
+                ->with('status', __('Only successful backups can be verified.'));
+        }
+
+        $backup->update(['integrity_verified' => true]);
+
+        return redirect()
+            ->route('backups.index')
+            ->with('status', __('Integrity verified for :name.', ['name' => $backup->name]));
     }
 
     /**

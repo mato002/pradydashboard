@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="C:\Users\HP\Desktop\Newfolder\pradydashboard\phpunit.xml" tests="1" assertions="6" errors="0" failures="0" skipped="0" time="8.166326">
+    <testsuite name="Feature" tests="1" assertions="6" errors="0" failures="0" skipped="0" time="8.166326">
+      <testsuite name="Tests\Feature\FeatureDiscoveryCatalogProbeTest" file="C:\Users\HP\Desktop\Newfolder\pradydashboard\tests\Feature\FeatureDiscoveryCatalogProbeTest.php" tests="1" assertions="6" errors="0" failures="0" skipped="0" time="8.166326">
+        <testcase name="test_embedded_catalog_is_non_empty_and_searchable" file="C:\Users\HP\Desktop\Newfolder\pradydashboard\tests\Feature\FeatureDiscoveryCatalogProbeTest.php" line="13" class="Tests\Feature\FeatureDiscoveryCatalogProbeTest" classname="Tests.Feature.FeatureDiscoveryCatalogProbeTest" assertions="6" time="8.166326"/>
+      </testsuite>
+    </testsuite>
+  </testsuite>
+</testsuites>

@@ -137,8 +137,8 @@
                                     <td class="text-xs text-slate-500">{{ $policy['last_activity'] }}</td>
                                     <td class="text-right" @click.stop>
                                         <x-ui.row-actions-menu>
-                                            <x-ui.row-action :href="route('access-controls.restrict', $policy['tenant_id'])" method="POST">{{ __('Restrict') }}</x-ui.row-action>
-                                            <x-ui.row-action :href="route('access-controls.unlock', $policy['tenant_id'])" method="POST">{{ __('Unlock') }}</x-ui.row-action>
+                                            <x-ui.row-action :href="route('access-controls.restrict', $policy['tenant_public_id'])" method="POST">{{ __('Restrict') }}</x-ui.row-action>
+                                            <x-ui.row-action :href="route('access-controls.unlock', $policy['tenant_public_id'])" method="POST">{{ __('Unlock') }}</x-ui.row-action>
                                         </x-ui.row-actions-menu>
                                     </td>
                                 </tr>
@@ -167,19 +167,19 @@
                     </div>
                     <div class="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-4">
                         <template x-if="selected">
-                            <form method="POST" :action="`{{ url('access-controls/tenants') }}/${selectedId}/suspend`" class="inline">
+                            <form method="POST" :action="`{{ url('access-controls/tenants') }}/${selected?.tenant_public_id}/suspend`" class="inline">
                                 @csrf
                                 <button type="submit" class="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold hover:bg-rose-500">{{ __('Suspend Access') }}</button>
                             </form>
-                            <form method="POST" :action="`{{ url('access-controls/tenants') }}/${selectedId}/grace`" class="inline">
+                            <form method="POST" :action="`{{ url('access-controls/tenants') }}/${selected?.tenant_public_id}/grace`" class="inline">
                                 @csrf
                                 <button type="submit" class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold hover:bg-amber-500">{{ __('Enable Grace Period') }}</button>
                             </form>
-                            <form method="POST" :action="`{{ url('access-controls/tenants') }}/${selectedId}/unlock`" class="inline">
+                            <form method="POST" :action="`{{ url('access-controls/tenants') }}/${selected?.tenant_public_id}/unlock`" class="inline">
                                 @csrf
                                 <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold hover:bg-emerald-500">{{ __('Unlock Tenant') }}</button>
                             </form>
-                            <form method="POST" :action="`{{ url('access-controls/tenants') }}/${selectedId}/restrict`" class="inline">
+                            <form method="POST" :action="`{{ url('access-controls/tenants') }}/${selected?.tenant_public_id}/restrict`" class="inline">
                                 @csrf
                                 <button type="submit" class="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold hover:bg-violet-500">{{ __('Apply Restrictions') }}</button>
                             </form>

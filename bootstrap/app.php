@@ -4,6 +4,7 @@ use App\Http\Middleware\AuthenticateProjectApiToken;
 use App\Http\Middleware\EnsureActiveRole;
 use App\Http\Middleware\EnsurePasswordIsFresh;
 use App\Http\Middleware\EnsurePermission;
+use App\Http\Middleware\RedirectLegacyNumericPublicIds;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -27,6 +28,8 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsureActiveRole::class,
             EnsurePasswordIsFresh::class,
         ]);
+
+        $middleware->prependToGroup('web', RedirectLegacyNumericPublicIds::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

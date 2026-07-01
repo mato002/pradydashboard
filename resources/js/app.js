@@ -2,6 +2,9 @@ import './bootstrap';
 
 import Alpine from 'alpinejs';
 import { registerManualDocumentForm } from './manual-document-form';
+import { registerPdfDownloadLink } from './pdf-download-link';
+import { registerRowActionsMenu } from './row-actions-menu';
+import { createFeatureDiscoveryMixin } from './feature-discovery';
 
 window.Alpine = Alpine;
 
@@ -22,6 +25,8 @@ function applyThemeClass(mode) {
 
 document.addEventListener('alpine:init', () => {
     registerManualDocumentForm(Alpine);
+    registerPdfDownloadLink(Alpine);
+    registerRowActionsMenu(Alpine);
 
     Alpine.store('sidebar', {
         groups: {},
@@ -64,11 +69,11 @@ document.addEventListener('alpine:init', () => {
     Alpine.store('sidebar').init();
 
     Alpine.data('pradyShell', () => ({
+        ...createFeatureDiscoveryMixin(),
         sidebarOpen: false,
         theme: localStorage.getItem('prady-theme') || 'light',
         dateMenuOpen: false,
         notifOpen: false,
-        searchOpen: false,
         workspaceLoading: false,
 
         init() {
@@ -87,10 +92,15 @@ document.addEventListener('alpine:init', () => {
                 }
                 this.loadWorkspaceFromUrl(window.location.href, false);
             });
+
+            this.initFeatureDiscovery();
         },
 
         shouldHandleWorkspaceLink(link) {
             if (!link?.href || link.hasAttribute('data-prady-full-nav') || link.hasAttribute('data-tenant-full-nav')) {
+                return false;
+            }
+            if (link.closest('form[data-prady-full-nav]')) {
                 return false;
             }
             if (link.target === '_blank' || link.hasAttribute('download')) {

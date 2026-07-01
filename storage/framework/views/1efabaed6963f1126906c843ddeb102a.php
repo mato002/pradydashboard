@@ -1,0 +1,2 @@
+<?php echo $__env->make('billing.documents.prady-classic.layout-a5', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+<?php /**PATH C:\Users\HP\Desktop\Newfolder\pradydashboard\resources\views/billing/documents/prady-classic-a5.blade.php ENDPATH**/ ?>

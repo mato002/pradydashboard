@@ -133,16 +133,68 @@ class OperationalRiskScanner
      */
     public function attentionRequired(int $limit = 10): Collection
     {
-        return $this->operationalCache->remember(
+        $cached = $this->operationalCache->remember(
             'risk',
             'attention:'.$limit,
             config('redis_cache.ttl.risk_attention', 120),
-            fn () => $this->scan()
-                ->reject(fn (array $r) => $r['acknowledged'])
-                ->whereIn('severity', ['critical', 'warning'])
-                ->take($limit)
-                ->values(),
+            fn () => $this->encodeRisksForCache(
+                $this->buildAttentionRisks($limit),
+            ),
         );
+
+        if (is_array($cached)) {
+            return $this->decodeRisksFromCache($cached);
+        }
+
+        return $this->buildAttentionRisks($limit);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function buildAttentionRisks(int $limit): Collection
+    {
+        return $this->scan()
+            ->reject(fn (array $r) => $r['acknowledged'])
+            ->whereIn('severity', ['critical', 'warning'])
+            ->take($limit)
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $risks
+     * @return list<array<string, mixed>>
+     */
+    private function encodeRisksForCache(Collection $risks): array
+    {
+        return $risks
+            ->map(function (array $risk): array {
+                $dueAt = $risk['due_at'] ?? null;
+
+                return [
+                    ...$risk,
+                    'due_at' => $dueAt instanceof Carbon ? $dueAt->toIso8601String() : null,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $risks
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function decodeRisksFromCache(array $risks): Collection
+    {
+        return collect($risks)->map(function (array $risk): array {
+            $dueAt = $risk['due_at'] ?? null;
+
+            return [
+                ...$risk,
+                'due_at' => is_string($dueAt) && $dueAt !== ''
+                    ? Carbon::parse($dueAt)
+                    : null,
+            ];
+        });
     }
 
     /**
@@ -206,7 +258,7 @@ class OperationalRiskScanner
     private function scanOverdueInvoices(): Collection
     {
         return TenantInvoice::query()
-            ->with('tenant:id,company_name,hosted_project_id')
+            ->with('tenant:id,company_name,hosted_project_id,public_id')
             ->whereIn('status', ['overdue', 'pending', 'partial', 'partially_paid', 'sent'])
             ->whereNotNull('due_date')
             ->whereDate('due_date', '<', now()->toDateString())
@@ -275,7 +327,7 @@ class OperationalRiskScanner
         $threshold = now()->addDays(self::RENEWAL_WARNING_DAYS);
 
         return TenantProjectSubscription::query()
-            ->with(['tenant:id,company_name,hosted_project_id', 'product:id,name'])
+            ->with(['tenant:id,company_name,hosted_project_id,public_id', 'product:id,name'])
             ->where(function ($q) use ($threshold): void {
                 $q->where(function ($inner) use ($threshold): void {
                     $inner->whereNotNull('renewal_date')
@@ -309,7 +361,7 @@ class OperationalRiskScanner
                     tenantId: $sub->tenant_id,
                     projectId: $sub->tenant?->hosted_project_id,
                     subject: $sub,
-                    url: route('tenants.show', ['tenant' => $sub->tenant_id, 'tab' => 'projects']),
+                    url: route('tenants.show', ['tenant' => $sub->tenant ?? $sub->tenant_id, 'tab' => 'projects']),
                 );
             });
     }
@@ -343,7 +395,7 @@ class OperationalRiskScanner
         }
 
         TenantProjectInfrastructure::query()
-            ->with(['subscription.tenant', 'subscription.project', 'server'])
+            ->with(['subscription.tenant:id,company_name,hosted_project_id,public_id', 'subscription.project', 'server'])
             ->whereNotNull('ssl_expiry_date')
             ->whereDate('ssl_expiry_date', '<=', $threshold)
             ->each(function (TenantProjectInfrastructure $infra) use (&$risks, $threshold): void {
@@ -365,7 +417,7 @@ class OperationalRiskScanner
                     serverId: $infra->server_id,
                     subject: $infra,
                     url: route('tenants.show', [
-                        'tenant' => $infra->subscription?->tenant_id,
+                        'tenant' => $infra->subscription?->tenant ?? $infra->subscription?->tenant_id,
                         'tab' => 'infrastructure',
                         'subscription' => $infra->tenant_project_subscription_id,
                     ]),
@@ -383,7 +435,7 @@ class OperationalRiskScanner
         $threshold = now()->addDays(self::RENEWAL_WARNING_DAYS);
 
         return OperationalDocument::query()
-            ->with('tenant:id,company_name,hosted_project_id')
+            ->with('tenant:id,company_name,hosted_project_id,public_id')
             ->whereNotNull('expiry_date')
             ->where('status', '!=', 'archived')
             ->whereDate('expiry_date', '<=', $threshold)
@@ -406,7 +458,7 @@ class OperationalRiskScanner
                     tenantId: $doc->tenant_id,
                     projectId: $doc->project_id,
                     subject: $doc,
-                    url: route('tenants.show', ['tenant' => $doc->tenant_id, 'tab' => 'documents']),
+                    url: route('tenants.show', ['tenant' => $doc->tenant ?? $doc->tenant_id, 'tab' => 'documents']),
                 );
             });
     }
@@ -452,7 +504,7 @@ class OperationalRiskScanner
     private function scanOverdueFollowUps(): Collection
     {
         return TenantCommunication::query()
-            ->with('tenant:id,company_name,hosted_project_id')
+            ->with('tenant:id,company_name,hosted_project_id,public_id')
             ->where('follow_up_required', true)
             ->where('status', 'pending_follow_up')
             ->whereNotNull('follow_up_date')
@@ -472,7 +524,7 @@ class OperationalRiskScanner
                 tenantId: $c->tenant_id,
                 projectId: $c->tenant?->hosted_project_id,
                 subject: $c,
-                url: route('tenants.show', ['tenant' => $c->tenant_id, 'tab' => 'communications']),
+                url: route('tenants.show', ['tenant' => $c->tenant ?? $c->tenant_id, 'tab' => 'communications']),
             ));
     }
 
@@ -484,7 +536,7 @@ class OperationalRiskScanner
         $open = SupportOpsOptions::openTicketStatuses();
 
         return SupportTicket::query()
-            ->with(['tenant:id,company_name,hosted_project_id', 'assignedStaff:id,full_name'])
+            ->with(['tenant:id,company_name,hosted_project_id,public_id', 'assignedStaff:id,full_name'])
             ->whereIn('status', $open)
             ->whereNotNull('due_at')
             ->where('due_at', '<', now())
@@ -504,7 +556,7 @@ class OperationalRiskScanner
                 projectId: $t->hosted_project_id,
                 staffProfileId: $t->assigned_staff_id,
                 subject: $t,
-                url: route('support-tickets.show', $t->id),
+                url: route('support-tickets.show', $t),
             ));
     }
 
@@ -546,7 +598,7 @@ class OperationalRiskScanner
     private function scanFailedIntegrations(): Collection
     {
         return TenantProjectServiceIntegration::query()
-            ->with(['subscription.tenant', 'subscription.project'])
+            ->with(['subscription.tenant:id,company_name,hosted_project_id,public_id', 'subscription.project'])
             ->where(function ($q): void {
                 $q->where('status', 'error')
                     ->orWhere('last_test_status', 'fail');
@@ -568,7 +620,7 @@ class OperationalRiskScanner
                 projectId: $i->subscription?->project_id,
                 subject: $i,
                 url: route('tenants.show', [
-                    'tenant' => $i->subscription?->tenant_id,
+                    'tenant' => $i->subscription?->tenant ?? $i->subscription?->tenant_id,
                     'tab' => 'integrations',
                     'subscription' => $i->tenant_project_subscription_id,
                 ]),
@@ -581,7 +633,7 @@ class OperationalRiskScanner
     private function scanOutdatedDeployments(): Collection
     {
         return TenantProjectVersion::query()
-            ->with(['subscription.tenant', 'subscription.project'])
+            ->with(['subscription.tenant:id,company_name,hosted_project_id,public_id', 'subscription.project'])
             ->whereIn('update_status', ['outdated', 'critical_update_required'])
             ->get()
             ->map(fn (TenantProjectVersion $v) => $this->risk(
@@ -600,7 +652,7 @@ class OperationalRiskScanner
                 projectId: $v->subscription?->project_id,
                 subject: $v,
                 url: route('tenants.show', [
-                    'tenant' => $v->subscription?->tenant_id,
+                    'tenant' => $v->subscription?->tenant ?? $v->subscription?->tenant_id,
                     'tab' => 'versions',
                     'subscription' => $v->tenant_project_subscription_id,
                 ]),
@@ -649,7 +701,7 @@ class OperationalRiskScanner
                         tenantId: $tenant->id,
                         projectId: $sub->project_id,
                         subject: $sub,
-                        url: route('tenants.show', ['tenant' => $tenant->id, 'tab' => 'documents']),
+                        url: route('tenants.show', ['tenant' => $tenant, 'tab' => 'documents']),
                     ));
                 }
             }
@@ -727,7 +779,7 @@ class OperationalRiskScanner
     private function scanCriticalProviderNotices(): Collection
     {
         return ServerProviderNotice::query()
-            ->with('server:id,name')
+            ->with('server:id,name,public_id')
             ->where('status', 'open')
             ->whereIn('severity', ['critical', 'warning'])
             ->get()

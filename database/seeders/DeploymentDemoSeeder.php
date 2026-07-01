@@ -58,7 +58,7 @@ class DeploymentDemoSeeder extends Seeder
                 ], $project);
 
                 $deployment = ProjectDeployment::query()->create([
-                    'project_id' => $project->id,
+                    'hosted_project_id' => $project->id,
                     'version' => $version,
                     'deployed_at' => $deployedAt,
                     'notes' => json_encode($notes),
@@ -97,7 +97,7 @@ class DeploymentDemoSeeder extends Seeder
                 foreach (range(1, min(3, $row['webhooks_count'])) as $n) {
                     DeploymentWebhookEvent::query()->create([
                         'deployment_integration_id' => $integration->id,
-                        'project_id' => $project?->id,
+                        'hosted_project_id' => $project?->id,
                         'event_type' => 'push',
                         'status' => 'delivered',
                         'summary' => __('Deploy hook received for :repo', ['repo' => $row['name'].'/'.$n]),

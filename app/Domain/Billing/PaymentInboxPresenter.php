@@ -56,6 +56,7 @@ class PaymentInboxPresenter
 
                 return [
                     'invoice_id' => $invoice->id,
+                    'invoice_public_id' => $invoice->public_id,
                     'invoice_number' => $invoice->invoice_number,
                     'tenant' => $invoice->tenant?->company_name ?? $invoice->manual_client_name ?? '—',
                     'balance' => $invoice->formattedBalance(),

@@ -27,7 +27,7 @@ class SupportCommunicationsTest extends TestCase
         $user = User::factory()->create();
         $project = Project::query()->create(['name' => 'Support App', 'domain' => 'support.test']);
         $tenant = Tenant::query()->create([
-            'project_id' => $project->id,
+            'hosted_project_id' => $project->id,
             'company_name' => 'Support Co',
             'status' => 'active',
             'tenant_currency' => 'KES',

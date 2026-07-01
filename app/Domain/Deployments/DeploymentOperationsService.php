@@ -105,8 +105,8 @@ class DeploymentOperationsService
         $projectIds = $projects->pluck('id');
 
         return ProjectDeployment::query()
-            ->with('project.server')
-            ->when($projectIds->isNotEmpty(), fn ($q) => $q->whereIn('project_id', $projectIds))
+            ->with('hostedProject.server')
+            ->when($projectIds->isNotEmpty(), fn ($q) => $q->whereIn('hosted_project_id', $projectIds))
             ->orderByDesc('deployed_at')
             ->orderByDesc('created_at')
             ->limit($limit)
@@ -249,7 +249,7 @@ class DeploymentOperationsService
         for ($i = 6; $i >= 0; $i--) {
             $day = now()->subDays($i)->startOfDay();
             $count = ProjectDeployment::query()
-                ->when($projectIds->isNotEmpty(), fn ($q) => $q->whereIn('project_id', $projectIds))
+                ->when($projectIds->isNotEmpty(), fn ($q) => $q->whereIn('hosted_project_id', $projectIds))
                 ->whereDate('deployed_at', $day)
                 ->count();
             $freq[] = ['label' => $day->format('D'), 'count' => $count];
@@ -260,7 +260,7 @@ class DeploymentOperationsService
         $opsQuery = DeploymentOpsEvent::query()->where('occurred_at', '>=', $since);
         if ($projectIds->isNotEmpty()) {
             $opsQuery->where(function ($q) use ($projectIds) {
-                $q->whereIn('project_id', $projectIds)->orWhereNull('project_id');
+                $q->whereIn('hosted_project_id', $projectIds)->orWhereNull('hosted_project_id');
             });
         }
 
@@ -317,8 +317,8 @@ class DeploymentOperationsService
             'id' => 'dep-'.$d->id,
             'record_id' => $d->id,
             'deployment_id' => 'DEP-'.str_pad((string) $d->id, 5, '0', STR_PAD_LEFT),
-            'project' => $d->project?->name ?? '—',
-            'project_id' => $d->project_id,
+            'project' => $d->hostedProject?->name ?? '—',
+            'project_id' => $d->hosted_project_id,
             'environment' => $meta['environment'] ?? 'production',
             'version' => $d->version,
             'branch' => $meta['branch'] ?? 'main',
@@ -333,14 +333,14 @@ class DeploymentOperationsService
             'risk_score' => $this->riskScore($status, $meta),
             'pipeline_stages' => $pipelineStages,
             'build_logs' => $meta['build_logs'] ?? DeploymentPipelineBuilder::buildLogs(
-                $d->project,
+                $d->hostedProject,
                 $d->version,
                 $meta['environment'] ?? 'production',
                 $status
             ),
             'notes' => is_string($d->notes) && ! str_starts_with(trim($d->notes), '{') ? $d->notes : null,
             'rollback_available' => $status === 'success',
-            'project_url' => $d->project ? route('hosted-projects.show', $d->project) : '#',
+            'project_url' => $d->hostedProject ? route('hosted-projects.show', $d->hostedProject) : '#',
         ];
     }
 

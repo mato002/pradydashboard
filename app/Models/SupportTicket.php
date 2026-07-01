@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use App\Models\Concerns\HasStaffAssignments;
 use App\Support\SupportOpsOptions;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SupportTicket extends Model
 {
+    use HasPublicId;
     use HasStaffAssignments;
 
     protected $fillable = [
@@ -90,5 +92,10 @@ class SupportTicket extends Model
     public function isUrgent(): bool
     {
         return in_array($this->priority, ['high', 'urgent', 'critical'], true);
+    }
+
+    public function humanReference(): string
+    {
+        return 'TKT-'.str_pad((string) $this->id, 5, '0', STR_PAD_LEFT);
     }
 }

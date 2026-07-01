@@ -93,13 +93,13 @@
                         <td class="px-4 py-2">{{ $log->description }}</td>
                         <td class="px-4 py-2 text-xs text-slate-500">
                             @if ($log->tenant)
-                                <a href="{{ route('tenants.show', $log->tenant_id) }}" class="text-indigo-600 hover:underline">{{ $log->tenant->company_name }}</a>
+                                <a href="{{ route('tenants.show', $log->tenant) }}" class="text-indigo-600 hover:underline">{{ $log->tenant->company_name }}</a>
                             @endif
                             @if ($log->project)
-                                · <a href="{{ route('hosted-projects.show', $log->project_id) }}" class="text-indigo-600 hover:underline">{{ $log->project->name }}</a>
+                                · <a href="{{ route('hosted-projects.show', $log->project) }}" class="text-indigo-600 hover:underline">{{ $log->project->name }}</a>
                             @endif
                             @if ($log->server)
-                                · <a href="{{ route('servers.show', $log->server_id) }}" class="text-indigo-600 hover:underline">{{ $log->server->name }}</a>
+                                · <a href="{{ route('servers.show', $log->server) }}" class="text-indigo-600 hover:underline">{{ $log->server->name }}</a>
                             @endif
                         </td>
                     </tr>

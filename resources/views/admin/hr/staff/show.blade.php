@@ -55,7 +55,7 @@
                 <ul class="divide-y divide-gray-200 dark:divide-gray-800">
                     @forelse ($assignedTickets as $ticket)
                         <li class="px-4 py-3 text-sm">
-                            <a href="{{ route('support-tickets.show', $ticket->id) }}" class="font-medium text-indigo-600 hover:underline">{{ $ticket->subject }}</a>
+                            <a href="{{ route('support-tickets.show', $ticket) }}" class="font-medium text-indigo-600 hover:underline">{{ $ticket->subject }}</a>
                             <p class="text-xs text-gray-500">{{ $ticket->tenant?->company_name }} · {{ $ticket->status }}</p>
                         </li>
                     @empty

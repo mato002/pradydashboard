@@ -206,7 +206,7 @@
                                     <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-indigo-100 bg-white px-3 py-2 dark:border-indigo-900/40 dark:bg-slate-900">
                                         <div class="min-w-0 flex-1">
                                             <div class="flex flex-wrap items-center gap-2">
-                                                <a href="{{ route('invoices.show', $sug['invoice_id']) }}" class="font-mono text-xs font-semibold text-indigo-600 hover:underline">{{ $sug['invoice_number'] }}</a>
+                                                <a href="{{ route('invoices.show', $sug['invoice_public_id']) }}" class="font-mono text-xs font-semibold text-indigo-600 hover:underline">{{ $sug['invoice_number'] }}</a>
                                                 <span class="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">{{ $sug['score'] }} {{ __('pts') }}</span>
                                             </div>
                                             <p class="text-xs text-slate-600">{{ $sug['tenant'] }} · {{ __('Balance') }} {{ $sug['balance'] }} · {{ __('Due') }} {{ $sug['due_date'] }}</p>

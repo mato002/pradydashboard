@@ -32,7 +32,7 @@ class SupportTicketsController extends Controller
 
         $dbTickets = app(\App\Domain\Rbac\RbacScopeFilter::class)
             ->applyTenantForeignScope(SupportTicket::query())
-            ->with(['tenant:id,company_name', 'assignedStaff:id,full_name', 'project:id,name'])
+            ->with(['tenant:id,company_name,public_id', 'assignedStaff:id,full_name', 'project:id,name,public_id'])
             ->latest('opened_at')
             ->latest('updated_at')
             ->limit(50)
@@ -173,21 +173,19 @@ class SupportTicketsController extends Controller
         $ticket = SupportTicket::query()->create($data);
 
         return redirect()
-            ->route('support-tickets.show', $ticket->id)
+            ->route('support-tickets.show', $ticket)
             ->with('status', __('Ticket created successfully.'));
     }
 
-    public function show(string $reference): View
+    public function show(SupportTicket $ticket): View
     {
-        $ticket = SupportTicket::query()
-            ->with([
-                'tenant:id,company_name',
-                'project:id,name',
+        $ticket->load([
+                'tenant:id,company_name,public_id',
+                'project:id,name,public_id',
                 'assignedStaff',
                 'comments.staffProfile',
                 'comments.user',
-            ])
-            ->findOrFail($reference);
+            ]);
 
         $profile = $this->mapTicketRow($ticket);
         $profile['description'] = $ticket->description;
@@ -211,24 +209,22 @@ class SupportTicketsController extends Controller
         ));
     }
 
-    public function edit(string $reference): View
+    public function edit(SupportTicket $ticket): View
     {
-        $ticket = SupportTicket::query()->findOrFail($reference);
         $profile = $this->mapTicketRow($ticket);
 
         return view('admin.support-tickets.edit', [
             'ticket' => $ticket,
             'profile' => $profile,
-            'reference' => (string) $ticket->id,
-            'tenants' => Tenant::query()->orderBy('company_name')->get(['id', 'company_name']),
-            'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
+            'reference' => $ticket->public_id,
+            'tenants' => Tenant::query()->orderBy('company_name')->get(['id', 'company_name', 'public_id']),
+            'projects' => Project::query()->orderBy('name')->get(['id', 'name', 'public_id']),
             'isDemo' => false,
         ]);
     }
 
-    public function update(Request $request, string $reference): RedirectResponse
+    public function update(Request $request, SupportTicket $ticket): RedirectResponse
     {
-        $ticket = SupportTicket::query()->findOrFail($reference);
         $ticket->update($this->validated($request));
 
         if (in_array($ticket->status, ['resolved', 'closed'], true) && ! $ticket->closed_at) {
@@ -236,13 +232,12 @@ class SupportTicketsController extends Controller
         }
 
         return redirect()
-            ->route('support-tickets.show', $ticket->id)
+            ->route('support-tickets.show', $ticket)
             ->with('status', __('Ticket updated.'));
     }
 
-    public function destroy(string $reference): RedirectResponse
+    public function destroy(SupportTicket $ticket): RedirectResponse
     {
-        $ticket = SupportTicket::query()->findOrFail($reference);
         $ticket->delete();
 
         return redirect()->route('support-tickets.index')->with('status', __('Ticket deleted.'));
@@ -273,7 +268,8 @@ class SupportTicketsController extends Controller
     private function mapTicketRow(SupportTicket $ticket): array
     {
         return [
-            'id' => 'TKT-'.str_pad((string) $ticket->id, 5, '0', STR_PAD_LEFT),
+            'id' => $ticket->humanReference(),
+            'public_id' => $ticket->public_id,
             'db_id' => $ticket->id,
             'tenant' => $ticket->tenant?->company_name ?? __('Unassigned tenant'),
             'project' => $ticket->project?->name,

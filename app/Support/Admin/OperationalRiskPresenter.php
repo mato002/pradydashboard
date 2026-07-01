@@ -2,6 +2,10 @@
 
 namespace App\Support\Admin;
 
+use App\Models\Server;
+use App\Models\Tenant;
+use App\Support\PublicId\PublicIdResolver;
+
 use App\Support\OperationalRiskCategory;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -440,11 +444,14 @@ class OperationalRiskPresenter
         }
 
         if (! empty($risk['tenant_id'])) {
-            $actions[] = [
-                'id' => 'tenant',
-                'label' => __('Open tenant'),
-                'href' => route('tenants.show', $risk['tenant_id']),
-            ];
+            $tenant = PublicIdResolver::resolve(Tenant::class, $risk['tenant_id']);
+            if ($tenant !== null) {
+                $actions[] = [
+                    'id' => 'tenant',
+                    'label' => __('Open tenant'),
+                    'href' => route('tenants.show', $tenant),
+                ];
+            }
         }
 
         if (str_starts_with((string) $risk['key'], 'invoice_overdue:') && ! empty($risk['url'])) {
@@ -458,20 +465,26 @@ class OperationalRiskPresenter
         }
 
         if (! empty($risk['server_id'])) {
-            $actions[] = [
-                'id' => 'server',
-                'label' => __('Open server'),
-                'href' => route('servers.show', $risk['server_id']),
-            ];
+            $server = PublicIdResolver::resolve(Server::class, $risk['server_id']);
+            if ($server !== null) {
+                $actions[] = [
+                    'id' => 'server',
+                    'label' => __('Open server'),
+                    'href' => route('servers.show', $server),
+                ];
+            }
         }
 
         if (str_starts_with((string) $risk['key'], 'telemetry_stale:') && ! empty($risk['server_id'])) {
-            $actions[] = [
-                'id' => 'sync',
-                'label' => __('Retry sync'),
-                'href' => route('servers.sync-telemetry', $risk['server_id']),
-                'method' => 'POST',
-            ];
+            $server = PublicIdResolver::resolve(Server::class, $risk['server_id']);
+            if ($server !== null) {
+                $actions[] = [
+                    'id' => 'sync',
+                    'label' => __('Retry sync'),
+                    'href' => route('servers.sync-telemetry', $server),
+                    'method' => 'POST',
+                ];
+            }
         }
 
         if (! ($risk['acknowledged'] ?? false)) {

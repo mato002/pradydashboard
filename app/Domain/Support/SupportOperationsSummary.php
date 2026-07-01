@@ -21,18 +21,27 @@ class SupportOperationsSummary
      */
     public function platform(): array
     {
-        return $this->operationalCache->remember(
+        $counts = $this->operationalCache->remember(
             'support',
             'platform-summary',
             config('redis_cache.ttl.support_summary', 120),
-            fn () => $this->computePlatformSummary(),
+            fn () => $this->computePlatformCounts(),
         );
+
+        if (! is_array($counts)) {
+            $counts = $this->computePlatformCounts();
+        }
+
+        return [
+            ...$counts,
+            'recent_communications' => $this->recentCommunications(),
+        ];
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, int>
      */
-    private function computePlatformSummary(): array
+    private function computePlatformCounts(): array
     {
         $openStatuses = SupportOpsOptions::openTicketStatuses();
 
@@ -58,20 +67,25 @@ class SupportOperationsSummary
             ->whereHas('supportTickets', fn ($q) => $q->whereIn('status', $openStatuses))
             ->count();
 
-        $recentCommunications = TenantCommunication::query()
-            ->with(['tenant:id,company_name', 'staffProfile:id,full_name'])
-            ->orderByDesc('communication_date')
-            ->limit(8)
-            ->get();
-
         return [
             'open_tickets' => $openTickets,
             'urgent_tickets' => $urgentTickets,
             'overdue_tickets' => $overdueTickets,
             'overdue_follow_ups' => $overdueFollowUps,
             'tenants_with_open_issues' => $tenantsWithOpenIssues,
-            'recent_communications' => $recentCommunications,
         ];
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, TenantCommunication>
+     */
+    private function recentCommunications(): Collection
+    {
+        return TenantCommunication::query()
+            ->with(['tenant:id,company_name,public_id', 'staffProfile:id,full_name'])
+            ->orderByDesc('communication_date')
+            ->limit(8)
+            ->get();
     }
 
     /**
@@ -120,7 +134,7 @@ class SupportOperationsSummary
         $openStatuses = SupportOpsOptions::openTicketStatuses();
 
         $openTickets = SupportTicket::query()
-            ->with(['tenant:id,company_name', 'assignedStaff'])
+            ->with(['tenant:id,company_name,public_id', 'assignedStaff'])
             ->where('hosted_project_id', $projectId)
             ->whereIn('status', $openStatuses)
             ->orderByDesc('opened_at')
@@ -141,7 +155,7 @@ class SupportOperationsSummary
     public function forStaff(int $staffId): Collection
     {
         return SupportTicket::query()
-            ->with(['tenant:id,company_name', 'project:id,name'])
+            ->with(['tenant:id,company_name,public_id', 'project:id,name,public_id'])
             ->where('assigned_staff_id', $staffId)
             ->whereIn('status', SupportOpsOptions::openTicketStatuses())
             ->orderByDesc('opened_at')
@@ -154,7 +168,7 @@ class SupportOperationsSummary
     public function followUpsForStaff(int $staffId): Collection
     {
         return TenantCommunication::query()
-            ->with('tenant:id,company_name')
+            ->with('tenant:id,company_name,public_id')
             ->where('staff_profile_id', $staffId)
             ->where('follow_up_required', true)
             ->where('status', 'pending_follow_up')

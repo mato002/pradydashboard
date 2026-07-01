@@ -323,10 +323,14 @@ class TenantController extends Controller
             $noticeStatuses = SupportOpsOptions::noticeStatuses();
 
             if ($tab === 'support' && $request->filled('ticket')) {
-                $selectedTicket = SupportTicket::query()
+                $ticketRef = $request->query('ticket');
+                $ticketQuery = SupportTicket::query()
                     ->with(['comments.staffProfile', 'comments.user', 'assignedStaff', 'project'])
-                    ->where('tenant_id', $tenant->id)
-                    ->find($request->query('ticket'));
+                    ->where('tenant_id', $tenant->id);
+
+                $selectedTicket = SupportTicket::isLegacyNumericId($ticketRef)
+                    ? $ticketQuery->whereKey((int) $ticketRef)->first()
+                    : $ticketQuery->where('public_id', $ticketRef)->first();
             }
         }
 

@@ -43,7 +43,7 @@ class TenantSupportTicketController extends Controller
         );
 
         return redirect()
-            ->route('tenants.show', ['tenant' => $tenant, 'tab' => 'support', 'ticket' => $ticket->id])
+            ->route('tenants.show', ['tenant' => $tenant, 'tab' => 'support', 'ticket' => $ticket->public_id])
             ->with('status', __('Support ticket created.'));
     }
 
@@ -72,7 +72,7 @@ class TenantSupportTicketController extends Controller
         }
 
         return redirect()
-            ->route('tenants.show', ['tenant' => $tenant, 'tab' => 'support', 'ticket' => $ticket->id])
+            ->route('tenants.show', ['tenant' => $tenant, 'tab' => 'support', 'ticket' => $ticket->public_id])
             ->with('status', __('Ticket updated.'));
     }
 
@@ -109,7 +109,7 @@ class TenantSupportTicketController extends Controller
         );
 
         return redirect()
-            ->route('tenants.show', ['tenant' => $tenant, 'tab' => 'support', 'ticket' => $ticket->id])
+            ->route('tenants.show', ['tenant' => $tenant, 'tab' => 'support', 'ticket' => $ticket->public_id])
             ->with('status', __('Ticket marked resolved.'));
     }
 

@@ -140,7 +140,7 @@
                                     >
                                         <td class="font-mono text-xs font-semibold">
                                             <a
-                                                :href="'{{ url('support-tickets') }}/' + (ticket.db_id ?? ticket.id)"
+                                                :href="'{{ url('support-tickets') }}/' + (ticket.public_id ?? ticket.db_id ?? ticket.id)"
                                                 @click.stop
                                                 class="text-indigo-600 hover:underline dark:text-indigo-400"
                                                 x-text="ticket.id"

@@ -124,8 +124,15 @@
                                             </td>
                                             <td class="text-right" @click.stop>
                                                 <x-ui.row-actions-menu>
-                                                    <x-ui.row-action>{{ __('View Usage') }}</x-ui.row-action>
-                                                    <x-ui.row-action danger>{{ __('Suspend') }}</x-ui.row-action>
+                                                    @if ($sub->tenant)
+                                                        <x-ui.row-action :href="route('tenants.show', ['tenant' => $sub->tenant, 'tab' => 'monitoring'])">{{ __('View Usage') }}</x-ui.row-action>
+                                                        <x-ui.row-action
+                                                            :href="route('access-controls.suspend', $sub->tenant)"
+                                                            method="POST"
+                                                            :confirm="__('Suspend :tenant?', ['tenant' => $sub->tenant->company_name])"
+                                                            danger
+                                                        >{{ __('Suspend') }}</x-ui.row-action>
+                                                    @endif
                                                 </x-ui.row-actions-menu>
                                             </td>
                                         </tr>

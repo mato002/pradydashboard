@@ -72,6 +72,7 @@
             </div>
             <div class="flex flex-wrap gap-2">
                 <a href="{{ route('invoices.preview', $invoice) }}" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">{{ __('Preview document') }}</a>
+                <x-billing.pdf-download-link :url="route('invoices.pdf', $invoice)" />
 
                 @if ($isQuotation && $invoice->approval_status !== 'approved' && ! $invoice->isCancelled())
                     <form method="post" action="{{ route('invoices.quotations.approve', $invoice) }}">@csrf

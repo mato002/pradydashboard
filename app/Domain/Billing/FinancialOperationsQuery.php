@@ -325,6 +325,7 @@ class FinancialOperationsQuery
             ->map(fn (Collection $group) => [
                 'tenant' => $group->first()?->tenant?->company_name ?? __('Unknown'),
                 'tenant_id' => $group->first()?->tenant_id,
+                'tenant_public_id' => $group->first()?->tenant?->public_id,
                 'balance' => $group->sum(fn (TenantInvoice $inv) => $inv->balanceDue()),
                 'invoice_count' => $group->count(),
                 'max_days_overdue' => $group->max(fn (TenantInvoice $inv) => $inv->due_date?->diffInDays(now()->startOfDay()) ?? 0),

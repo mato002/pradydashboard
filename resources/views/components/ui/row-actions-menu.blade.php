@@ -1,23 +1,19 @@
 @props(['align' => 'right'])
 
-@php
-    $panelAlign = $align === 'left'
-        ? 'left-0 origin-top-left'
-        : 'right-0 origin-top-right';
-@endphp
-
 <div
     class="relative inline-flex justify-end"
     @click.stop
-    x-data="{ open: false }"
-    @keydown.escape.window="open = false"
+    x-data="rowActionsMenu()"
+    @click.outside="close()"
+    @keydown.escape.window="close()"
 >
     <button
         type="button"
-        @click="open = !open"
+        x-ref="trigger"
+        @click="toggle()"
         class="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-500 ring-1 ring-transparent transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-        :class="open ? 'bg-slate-100 text-slate-700 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-200' : ''"
-        :aria-expanded="open"
+        :class="isOpen() ? 'bg-slate-100 text-slate-700 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-200' : ''"
+        :aria-expanded="isOpen()"
         aria-haspopup="menu"
     >
         <span class="sr-only">{{ __('Actions') }}</span>
@@ -25,7 +21,7 @@
     </button>
 
     <div
-        x-show="open"
+        x-show="isOpen()"
         x-cloak
         x-transition:enter="transition ease-out duration-150"
         x-transition:enter-start="opacity-0 scale-95"
@@ -33,11 +29,11 @@
         x-transition:leave="transition ease-in duration-100"
         x-transition:leave-start="opacity-100 scale-100"
         x-transition:leave-end="opacity-0 scale-95"
-        @click.outside="open = false"
-        class="absolute z-50 mt-1 min-w-[11rem] overflow-hidden rounded-xl border border-slate-200/90 bg-white py-1 shadow-lg ring-1 ring-black/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 {{ $panelAlign }}"
+        :style="panelStyle"
+        class="overflow-hidden rounded-xl border border-slate-200/90 bg-white py-1 shadow-lg ring-1 ring-black/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10"
         role="menu"
     >
-        <div @click="open = false">
+        <div @click="close()">
             {{ $slot }}
         </div>
     </div>

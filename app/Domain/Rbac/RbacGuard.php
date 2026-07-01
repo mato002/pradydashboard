@@ -21,8 +21,8 @@ class RbacGuard
             return true;
         }
 
-        $activeRecord = $this->activeRoleService->getActiveRecord($user);
         $assignment = $this->activeRoleService->getActiveAssignment($user);
+        $activeRecord = $this->activeRoleService->getActiveRecord($user);
 
         if (! $assignment || ! $activeRecord) {
             return false;

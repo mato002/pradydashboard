@@ -14,7 +14,7 @@ class DeploymentOpsEvent extends Model
     public const TYPE_SCALING = 'scaling';
 
     protected $fillable = [
-        'project_id',
+        'hosted_project_id',
         'server_id',
         'project_deployment_id',
         'type',
@@ -31,9 +31,25 @@ class DeploymentOpsEvent extends Model
         ];
     }
 
+    public function hostedProject(): BelongsTo
+    {
+        return $this->belongsTo(HostedProject::class, 'hosted_project_id');
+    }
+
+    /** @deprecated Use hostedProject() */
     public function project(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->hostedProject();
+    }
+
+    public function getProjectIdAttribute(): ?int
+    {
+        return $this->hosted_project_id;
+    }
+
+    public function setProjectIdAttribute(?int $value): void
+    {
+        $this->attributes['hosted_project_id'] = $value;
     }
 
     public function server(): BelongsTo

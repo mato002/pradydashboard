@@ -6,8 +6,19 @@
 ])
 
 @php
+    use App\Support\Discovery\FeatureRegistry;
+
     $docTitle = $documentTitle
         ?? ($heading ? $heading.' — '.config('app.name', 'Prady Dashboard') : config('app.name', 'Prady Dashboard'));
+
+    $featureDiscoveryCatalog = auth()->check()
+        ? app(FeatureRegistry::class)->indexForClient()
+        : [];
+
+    $featureDiscoveryPayload = [
+        'searchUrl' => route('feature-discovery.search', [], false),
+        'catalog' => $featureDiscoveryCatalog,
+    ];
 @endphp
 
 <!DOCTYPE html>
@@ -29,9 +40,23 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" />
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @auth
+            <script>
+                window.__pradyFeatureDiscovery = @json($featureDiscoveryPayload);
+            </script>
+        @endauth
     </head>
     <body class="h-full font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
-        <div x-data="pradyShell()" class="relative min-h-full">
+        <div
+            x-data="pradyShell()"
+            class="relative min-h-full"
+            @auth
+                data-feature-discovery-url="{{ route('feature-discovery.search', [], false) }}"
+            @endauth
+            @keydown.escape.window="if (paletteOpen) closePalette()"
+            @keydown.ctrl.k.window.prevent="openPalette()"
+            @keydown.meta.k.window.prevent="openPalette()"
+        >
             <div
                 x-show="sidebarOpen"
                 x-transition.opacity
@@ -105,13 +130,13 @@
                             </svg>
                         </button>
 
-                        <div class="hidden min-w-0 flex-1 flex-col md:flex">
+                        <div class="hidden min-w-0 shrink sm:block md:max-w-[9rem] lg:max-w-xs xl:max-w-sm">
                             @if (isset($headerSlot) && trim((string) $headerSlot) !== '')
-                                <div class="min-w-0 text-slate-900 dark:text-white [&_h1]:truncate [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:tracking-tight [&_h2]:truncate [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:tracking-tight">
+                                <div class="min-w-0 text-slate-900 dark:text-white [&_h1]:truncate [&_h1]:text-base [&_h1]:font-semibold [&_h1]:tracking-tight [&_h2]:truncate [&_h2]:text-base [&_h2]:font-semibold [&_h2]:tracking-tight sm:[&_h1]:text-lg sm:[&_h2]:text-lg">
                                     {!! $headerSlot !!}
                                 </div>
                             @elseif ($heading)
-                                <h1 id="prady-page-heading" class="truncate text-lg font-semibold tracking-tight text-slate-900 dark:text-white">{{ $heading }}</h1>
+                                <h1 id="prady-page-heading" class="truncate text-base font-semibold tracking-tight text-slate-900 dark:text-white sm:text-lg">{{ $heading }}</h1>
                             @endif
                             <p id="prady-page-subheading" class="truncate text-xs text-slate-500 dark:text-slate-400">
                                 @auth
@@ -122,7 +147,36 @@
                             </p>
                         </div>
 
+                        @auth
+                            <div class="hidden min-w-0 flex-1 md:block">
+                                <button
+                                    type="button"
+                                    class="relative flex w-full min-w-0 max-w-xl items-center rounded-xl border border-slate-200/80 bg-slate-50/80 py-2 pl-9 pr-14 text-left text-sm text-slate-500 transition hover:border-indigo-300 hover:bg-white lg:mx-auto lg:max-w-2xl xl:pr-16 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-400 dark:hover:border-indigo-700 dark:hover:bg-slate-900"
+                                    @click="openPalette()"
+                                    aria-label="{{ __('Open feature finder') }}"
+                                >
+                                    <x-ui.icon name="magnifying-glass" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                    <span class="truncate lg:hidden">{{ __('Search features…') }}</span>
+                                    <span class="hidden truncate lg:inline">{{ __('Search tenants, invoices, servers, settings, features…') }}</span>
+                                    <span class="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 xl:flex">
+                                        <kbd class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:border-slate-600 dark:bg-slate-800">Ctrl</kbd>
+                                        <kbd class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:border-slate-600 dark:bg-slate-800">K</kbd>
+                                    </span>
+                                </button>
+                            </div>
+                        @endauth
+
                         <div class="ml-auto flex items-center gap-1 sm:gap-2">
+                            @auth
+                                <button
+                                    type="button"
+                                    class="inline-flex rounded-xl border border-transparent p-2 text-slate-500 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-800 md:hidden dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:hover:text-white"
+                                    @click="openPalette()"
+                                    aria-label="{{ __('Open feature finder') }}"
+                                >
+                                    <x-ui.icon name="magnifying-glass" class="h-5 w-5" />
+                                </button>
+                            @endauth
                             <x-role-switcher />
                             <div class="relative hidden sm:block" x-data="{ open: false }">
                                 <button
@@ -145,14 +199,6 @@
                                     <button type="button" class="block w-full px-3 py-2 text-left text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ __('Quarter to date') }}</button>
                                 </div>
                             </div>
-
-                            <button
-                                type="button"
-                                class="hidden rounded-xl border border-transparent p-2 text-slate-500 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-800 sm:inline-flex dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:hover:text-white"
-                                title="{{ __('Search') }}"
-                            >
-                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z" /></svg>
-                            </button>
 
                             <button
                                 type="button"
@@ -232,6 +278,10 @@
                     </footer>
                 </div>
             </div>
+
+            @auth
+                <x-command-palette />
+            @endauth
         </div>
     </body>
 </html>

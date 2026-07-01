@@ -3,23 +3,23 @@
 namespace Tests\Feature;
 
 use App\Domain\Billing\ManualDocumentCreator;
+use App\Domain\Billing\ManualDocumentPreviewBuilder;
 use App\Domain\Billing\QuotationConverter;
-use App\Domain\Tenancy\TenantProjectProvisioner;
 use App\Models\BillingAutomationRule;
 use App\Models\DocumentTemplate;
-use App\Models\Project;
 use App\Models\Setting;
 use App\Models\SystemActivityLog;
-use App\Models\Tenant;
 use App\Models\TenantInvoice;
 use App\Models\User;
 use App\Support\Billing\BillingDocumentType;
 use Database\Seeders\DocumentTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\CreatesBillableTenant;
 use Tests\TestCase;
 
 class ManualFinancialDocumentTest extends TestCase
 {
+    use CreatesBillableTenant;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -40,16 +40,12 @@ class ManualFinancialDocumentTest extends TestCase
     private function userAndTenant(): array
     {
         $user = User::factory()->create();
-        $project = Project::query()->create(['name' => 'Manual Co', 'domain' => 'manual.test', 'currency' => 'KES']);
-        $tenant = Tenant::query()->create([
-            'project_id' => $project->id,
+        [, , $tenant] = $this->createTenantWithSubscription('Manual Tenant Ltd', [
             'company_name' => 'Manual Tenant Ltd',
             'billing_email' => 'bill@manual.test',
             'billing_contact_name' => 'Jane Doe',
             'tenant_currency' => 'KES',
-            'status' => 'active',
         ]);
-        (new TenantProjectProvisioner)->syncPrimarySubscription($tenant);
 
         return [$user, $tenant];
     }
@@ -246,6 +242,39 @@ class ManualFinancialDocumentTest extends TestCase
         );
     }
 
+    public function test_linked_receipt_rejects_invoice_from_other_tenant(): void
+    {
+        [$user, $tenantA] = $this->userAndTenant();
+        [, , $tenantB] = $this->createTenantWithSubscription('Other Tenant Ltd', [
+            'company_name' => 'Other Tenant Ltd',
+            'billing_email' => 'bill@other.test',
+        ]);
+
+        $invoiceB = app(ManualDocumentCreator::class)->create(array_merge([
+            'document_type' => BillingDocumentType::INVOICE,
+            'tenant_id' => $tenantB->id,
+            'issue_date' => now()->toDateString(),
+            'currency' => 'KES',
+        ], $this->linePayload()));
+
+        $this->actingAs($user)
+            ->post(route('invoices.manual.store'), [
+                'document_type' => BillingDocumentType::RECEIPT,
+                'tenant_id' => $tenantA->id,
+                'linked_invoice_id' => $invoiceB->id,
+                'amount_received' => 1000,
+                'payment_method' => 'mpesa',
+                'payment_date' => now()->toDateString(),
+                'issue_date' => now()->toDateString(),
+                'currency' => 'KES',
+            ])
+            ->assertSessionHasErrors('linked_invoice_id');
+
+        $this->assertFalse(
+            TenantInvoice::query()->where('document_type', 'receipt')->where('linked_invoice_id', $invoiceB->id)->exists()
+        );
+    }
+
     public function test_standalone_receipt_without_tenant(): void
     {
         $receipt = app(ManualDocumentCreator::class)->create([
@@ -273,16 +302,16 @@ class ManualFinancialDocumentTest extends TestCase
             ->get(route('invoices.create', ['type' => 'invoice']))
             ->assertOk()
             ->assertSee(__('Save as draft'))
-            ->assertSee(__('Document template'))
+            ->assertDontSee(__('Document template'))
             ->assertSee(__('No tenant selected'))
             ->assertSee(__('Live total preview'))
             ->assertSee('id="manual-document-create-layout"', false)
             ->assertSee('manual-document-create-layout', false)
             ->assertSee('manual-document-create-preview', false)
             ->assertSee('id="manual-document-preview"', false)
+            ->assertSee('manual-document-preview-frame', false)
             ->assertSee(__('Preview only — final totals calculated on save'))
-            ->assertSee('preview-a5', false)
-            ->assertSee('INVOICE', false);
+            ->assertSee('prady-header-image', false);
     }
 
     public function test_create_proforma_shows_prady_classic_template_and_preview(): void
@@ -293,7 +322,7 @@ class ManualFinancialDocumentTest extends TestCase
             ->get(route('invoices.create', ['type' => 'proforma']))
             ->assertOk()
             ->assertSee('Prady Classic A5 Proforma', false)
-            ->assertSee('data-preview-layout="prady_classic_a5"', false)
+            ->assertSee('manual-document-preview-frame', false)
             ->assertSee('PROFORMA INVOICE', false);
     }
 
@@ -380,5 +409,43 @@ class ManualFinancialDocumentTest extends TestCase
         $this->assertSame(10000.0, (float) $invoice->subtotal);
         $this->assertSame(1600.0, (float) $invoice->tax_amount);
         $this->assertSame(11600.0, (float) $invoice->total);
+    }
+
+    public function test_pdf_filename_replaces_slashes_for_download(): void
+    {
+        $invoice = new TenantInvoice(['invoice_number' => '001/26']);
+
+        $this->assertSame('001-26.pdf', $invoice->pdfFilename());
+    }
+
+    public function test_linked_receipt_preview_shows_partial_payment_totals(): void
+    {
+        [, $tenant] = $this->userAndTenant();
+        $invoice = app(ManualDocumentCreator::class)->create(array_merge([
+            'document_type' => BillingDocumentType::INVOICE,
+            'tenant_id' => $tenant->id,
+            'issue_date' => now()->toDateString(),
+            'currency' => 'KES',
+        ], $this->linePayload()));
+
+        $snapshot = app(ManualDocumentPreviewBuilder::class)->build([
+            'document_type' => BillingDocumentType::RECEIPT,
+            'linked_invoice_id' => $invoice->id,
+            'amount_received' => 4500,
+            'payment_date' => now()->toDateString(),
+            'issue_date' => now()->toDateString(),
+            'currency' => 'KES',
+        ]);
+
+        $this->assertSame(4500.0, $snapshot['totals']['paid']);
+        $this->assertSame(11600.0 - 4500.0, $snapshot['totals']['balance']);
+        $this->assertSame($invoice->invoice_number, $snapshot['conversion_links']['linked_invoice_number']);
+    }
+
+    public function test_document_number_year_suffix_matches_current_year(): void
+    {
+        $service = app(\App\Domain\Billing\DocumentIdentityService::class);
+
+        $this->assertSame(now()->format('y'), $service->yearSuffix());
     }
 }

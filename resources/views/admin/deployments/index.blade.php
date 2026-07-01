@@ -134,16 +134,10 @@
                                     <td class="text-slate-500">{{ $dep['deployed_at_human'] }}</td>
                                     <td class="text-right" @click.stop>
                                         @if (!empty($dep['record_id']))
-                                            <div class="flex justify-end gap-1">
-                                                <form method="POST" action="{{ route('deployments.rollback', $dep['record_id']) }}">
-                                                    @csrf
-                                                    <button type="submit" class="rounded px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-500/30">{{ __('Rollback') }}</button>
-                                                </form>
-                                                <form method="POST" action="{{ route('deployments.redeploy', $dep['record_id']) }}">
-                                                    @csrf
-                                                    <button type="submit" class="rounded px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700 ring-1 ring-cyan-500/30">{{ __('Redeploy') }}</button>
-                                                </form>
-                                            </div>
+                                            <x-ui.row-actions-menu>
+                                                <x-ui.row-action :href="route('deployments.rollback', $dep['record_id'])" method="POST">{{ __('Rollback') }}</x-ui.row-action>
+                                                <x-ui.row-action :href="route('deployments.redeploy', $dep['record_id'])" method="POST">{{ __('Redeploy') }}</x-ui.row-action>
+                                            </x-ui.row-actions-menu>
                                         @endif
                                     </td>
                                 </tr>

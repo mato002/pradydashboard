@@ -74,7 +74,12 @@
                         @endphp
                         <x-ui.status-badge :variant="$docVariant">{{ $invoice->documentTypeLabel() }}</x-ui.status-badge>
                     </td>
-                    <td><x-ui.status-badge :variant="$invoice->statusVariant()">{{ $invoice->statusLabel() }}</x-ui.status-badge></td>
+                    <td>
+                        <x-ui.status-badge :variant="$invoice->statusVariant()">{{ $invoice->statusLabel() }}</x-ui.status-badge>
+                        @if ($invoice->lifecycleLabel())
+                            <x-ui.status-badge :variant="$invoice->lifecycleVariant()" class="ml-1">{{ $invoice->lifecycleLabel() }}</x-ui.status-badge>
+                        @endif
+                    </td>
                     <td class="text-right font-mono text-xs tabular-nums">{{ $invoice->formattedAmount() }}</td>
                     <td class="text-right font-mono text-xs tabular-nums">{{ \App\Models\TenantInvoice::formatMoney((float) $invoice->amount_paid, $invoice->currency) }}</td>
                     <td class="text-right font-mono text-xs tabular-nums">{{ $invoice->formattedBalance() }}</td>
@@ -84,15 +89,13 @@
                     </td>
                     <td class="max-w-[80px] truncate text-xs text-slate-500" title="{{ $invoice->generated_by }}">{{ $invoice->generated_by ?? '—' }}</td>
                     <td class="text-xs font-medium {{ $invoice->agingColor() }}">{{ $invoice->agingLabel() }}</td>
-                    <td class="text-right">
-                        <div class="inline-flex gap-1">
-                            <a href="{{ route('invoices.preview', $invoice) }}" title="{{ __('Preview') }}" class="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">👁</a>
-                            <a href="{{ route('invoices.pdf', $invoice) }}" title="{{ __('PDF') }}" class="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">📄</a>
-                            <form method="post" action="{{ route('invoices.email', $invoice) }}" class="inline">@csrf
-                                <button type="submit" title="{{ __('Email') }}" class="rounded p-1 text-slate-500 hover:bg-slate-100">✉</button>
-                            </form>
-                            <a href="{{ route('invoices.show', $invoice) }}" class="rounded p-1 text-indigo-600 text-xs font-semibold">{{ __('Open') }}</a>
-                        </div>
+                    <td class="text-right" @click.stop>
+                        <x-ui.row-actions-menu>
+                            <x-ui.row-action :href="route('invoices.preview', $invoice)">{{ __('Preview') }}</x-ui.row-action>
+                            <x-billing.pdf-download-link :url="route('invoices.pdf', $invoice)" variant="menu" :label="__('Download PDF')" />
+                            <x-ui.row-action :href="route('invoices.email', $invoice)" method="POST">{{ __('Email') }}</x-ui.row-action>
+                            <x-ui.row-action :href="route('invoices.show', $invoice)">{{ __('Open') }}</x-ui.row-action>
+                        </x-ui.row-actions-menu>
                     </td>
                 </tr>
             @empty

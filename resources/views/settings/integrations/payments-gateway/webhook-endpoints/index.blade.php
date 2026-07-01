@@ -44,24 +44,15 @@
                             <td class="px-4 py-3"><x-ui.status-badge :variant="$statusVariant((string) ($endpoint['status'] ?? 'unknown'))">{{ ucfirst((string) ($endpoint['status'] ?? 'unknown')) }}</x-ui.status-badge></td>
                             <td class="px-4 py-3 tabular-nums">{{ $endpoint['failure_count'] ?? 0 }}</td>
                             @permission('payments_gateway.manage')
-                            <td class="px-4 py-3">
-                                <div class="flex flex-wrap gap-2">
-                                    <a href="{{ route('settings.payments-gateway.webhook-endpoints.edit', $endpoint['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('Edit') }}</a>
+                            <td class="px-4 py-3 text-right" @click.stop>
+                                <x-ui.row-actions-menu>
+                                    <x-ui.row-action :href="route('settings.payments-gateway.webhook-endpoints.edit', $endpoint['uuid'])">{{ __('Edit') }}</x-ui.row-action>
                                     @if (in_array(strtolower((string) ($endpoint['status'] ?? '')), ['active', 'enabled'], true))
-                                        @include('settings.integrations.payments-gateway.partials.action-form', [
-                                            'action' => route('settings.payments-gateway.webhook-endpoints.disable', $endpoint['uuid']),
-                                            'label' => __('Disable'),
-                                            'confirm' => __('Disable this webhook endpoint?'),
-                                            'variant' => 'danger',
-                                        ])
+                                        <x-ui.row-action :href="route('settings.payments-gateway.webhook-endpoints.disable', $endpoint['uuid'])" method="POST" :confirm="__('Disable this webhook endpoint?')" danger>{{ __('Disable') }}</x-ui.row-action>
                                     @else
-                                        @include('settings.integrations.payments-gateway.partials.action-form', [
-                                            'action' => route('settings.payments-gateway.webhook-endpoints.enable', $endpoint['uuid']),
-                                            'label' => __('Enable'),
-                                            'confirm' => __('Enable this webhook endpoint?'),
-                                        ])
+                                        <x-ui.row-action :href="route('settings.payments-gateway.webhook-endpoints.enable', $endpoint['uuid'])" method="POST" :confirm="__('Enable this webhook endpoint?')">{{ __('Enable') }}</x-ui.row-action>
                                     @endif
-                                </div>
+                                </x-ui.row-actions-menu>
                             </td>
                             @endpermission
                         </tr>

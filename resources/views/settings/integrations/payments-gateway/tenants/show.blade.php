@@ -96,13 +96,13 @@
                                     <td class="px-3 py-2"><x-ui.status-badge :variant="$statusVariant((string) ($profile['status'] ?? 'unknown'))">{{ ucfirst((string) ($profile['status'] ?? 'unknown')) }}</x-ui.status-badge></td>
                                     <td class="px-3 py-2 text-xs">{{ $formatPaybillLabel($collectionAccount) }}</td>
                                     <td class="px-3 py-2 text-xs">{{ $formatPaybillLabel($disbursementAccount) }}</td>
-                                    <td class="px-3 py-2">
-                                        <div class="flex flex-col gap-1">
-                                            <a href="{{ route('settings.payments-gateway.payment-profiles.show', $profile['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View profile') }}</a>
+                                    <td class="px-3 py-2 text-right" @click.stop>
+                                        <x-ui.row-actions-menu>
+                                            <x-ui.row-action :href="route('settings.payments-gateway.payment-profiles.show', $profile['uuid'])">{{ __('View profile') }}</x-ui.row-action>
                                             @permission('payments_gateway.manage')
-                                            <a href="{{ route('settings.payments-gateway.tenants.paybill-accounts.create', [$dashboardTenant, $profile['uuid']]) }}" class="text-xs font-semibold text-slate-600 dark:text-slate-300">{{ __('Add PayBill') }}</a>
+                                                <x-ui.row-action :href="route('settings.payments-gateway.tenants.paybill-accounts.create', [$dashboardTenant, $profile['uuid']])">{{ __('Add PayBill') }}</x-ui.row-action>
                                             @endpermission
-                                        </div>
+                                        </x-ui.row-actions-menu>
                                     </td>
                                 </tr>
                             @empty
@@ -161,15 +161,15 @@
                                                     @endif
                                                 </td>
                                                 <td class="px-3 py-2"><x-ui.status-badge :variant="$statusVariant((string) ($account['status'] ?? 'unknown'))">{{ ucfirst((string) ($account['status'] ?? 'unknown')) }}</x-ui.status-badge></td>
-                                                <td class="px-3 py-2">
-                                                    <div class="flex flex-col gap-1 text-xs font-semibold">
-                                                        <a href="{{ route('settings.payments-gateway.paybill-accounts.edit', $account['uuid']) }}" class="text-indigo-600 dark:text-indigo-400">{{ __('View/Edit') }}</a>
-                                                        <a href="{{ route('settings.payments-gateway.production-readiness', ['paybill_account_uuid' => $account['uuid'], 'run' => 1]) }}" class="text-slate-600 dark:text-slate-300" title="{{ __('Production readiness opens in context of this PayBill.') }}">{{ __('Production Readiness') }}</a>
-                                                        @if ($callbackHealth['needs_url_update'] ?? false)
-                                                            <p class="font-normal text-amber-700 dark:text-amber-300">{{ __('Update callback URLs before go-live.') }}</p>
-                                                        @endif
-                                                        <a href="{{ route('settings.payments-gateway.go-live-dry-run', ['paybill_account_uuid' => $account['uuid'], 'run' => 1]) }}" class="text-slate-600 dark:text-slate-300" title="{{ __('Go-live dry run opens in context of this PayBill.') }}">{{ __('Go-Live Dry Run') }}</a>
-                                                    </div>
+                                                <td class="px-3 py-2 text-right" @click.stop>
+                                                    <x-ui.row-actions-menu>
+                                                        <x-ui.row-action :href="route('settings.payments-gateway.paybill-accounts.edit', $account['uuid'])">{{ __('View/Edit') }}</x-ui.row-action>
+                                                        <x-ui.row-action :href="route('settings.payments-gateway.production-readiness', ['paybill_account_uuid' => $account['uuid'], 'run' => 1])">{{ __('Production Readiness') }}</x-ui.row-action>
+                                                        <x-ui.row-action :href="route('settings.payments-gateway.go-live-dry-run', ['paybill_account_uuid' => $account['uuid'], 'run' => 1])">{{ __('Go-Live Dry Run') }}</x-ui.row-action>
+                                                    </x-ui.row-actions-menu>
+                                                    @if ($callbackHealth['needs_url_update'] ?? false)
+                                                        <p class="mt-1 text-left text-[10px] font-normal text-amber-700 dark:text-amber-300">{{ __('Update callback URLs before go-live.') }}</p>
+                                                    @endif
                                                 </td>
                                             </tr>
                                         @empty
@@ -247,8 +247,10 @@
                                     <td class="px-3 py-2">{{ $apiKey['name'] ?? $apiKey['label'] ?? '—' }}</td>
                                     <td class="px-3 py-2">{{ $apiKey['payment_profile_name'] ?? '—' }}</td>
                                     <td class="px-3 py-2"><x-ui.status-badge :variant="$statusVariant((string) ($apiKey['status'] ?? 'unknown'))">{{ ucfirst((string) ($apiKey['status'] ?? 'unknown')) }}</x-ui.status-badge></td>
-                                    <td class="px-3 py-2">
-                                        <a href="{{ route('settings.payments-gateway.payment-profiles.api-keys.index', $apiKey['payment_profile_uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('Manage keys') }}</a>
+                                    <td class="px-3 py-2 text-right" @click.stop>
+                                        <x-ui.row-actions-menu>
+                                            <x-ui.row-action :href="route('settings.payments-gateway.payment-profiles.api-keys.index', $apiKey['payment_profile_uuid'])">{{ __('Manage keys') }}</x-ui.row-action>
+                                        </x-ui.row-actions-menu>
                                     </td>
                                 </tr>
                             @empty

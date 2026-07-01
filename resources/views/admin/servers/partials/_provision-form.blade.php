@@ -59,8 +59,8 @@
                     x-on:input.debounce.400ms="verifyHostname()"
                 />
                 <p class="mt-1 flex items-center gap-1.5 text-[11px]" x-show="hostnameStatus" x-cloak>
-                    <span x-show="hostnameStatus === 'valid'" class="text-emerald-600 dark:text-emerald-400">✓ {{ __('Hostname format verified') }}</span>
-                    <span x-show="hostnameStatus === 'invalid'" class="text-rose-600 dark:text-rose-400">✗ {{ __('Invalid FQDN pattern') }}</span>
+                    <span x-show="hostnameStatus === 'valid'" class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><x-ui.icon name="check" /> {{ __('Hostname format verified') }}</span>
+                    <span x-show="hostnameStatus === 'invalid'" class="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400"><x-ui.icon name="xmark" /> {{ __('Invalid FQDN pattern') }}</span>
                 </p>
             </div>
             <input type="hidden" name="provider" x-model="form.provider" />
@@ -168,7 +168,7 @@
     <div class="space-y-4 p-4 sm:p-5">
         <template x-if="connectionStatus === 'ok'">
             <div class="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
-                <p class="font-semibold">✓ {{ __('Live probe succeeded') }}</p>
+                <p class="inline-flex items-center gap-1 font-semibold"><x-ui.icon name="check" class="text-emerald-600" /> {{ __('Live probe succeeded') }}</p>
                 <ul class="mt-1 list-inside list-disc text-[11px]" x-show="probeMessages.length">
                     <template x-for="msg in probeMessages" :key="msg"><li x-text="msg"></li></template>
                 </ul>
@@ -176,7 +176,7 @@
         </template>
         <template x-if="connectionStatus === 'fail'">
             <div class="rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-800 dark:text-rose-200">
-                <p class="font-semibold">✗ {{ __('Probe could not collect telemetry') }}</p>
+                <p class="inline-flex items-center gap-1 font-semibold"><x-ui.icon name="xmark" class="text-rose-600" /> {{ __('Probe could not collect telemetry') }}</p>
                 <ul class="mt-1 list-inside list-disc text-[11px]">
                     <template x-for="msg in probeMessages" :key="msg"><li x-text="msg"></li></template>
                 </ul>

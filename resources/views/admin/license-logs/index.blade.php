@@ -30,7 +30,13 @@
                                 {{ $log->access_level ?? $log->decision }}
                             </x-ui.status-badge>
                         </td>
-                        <td>{{ $log->allowed ? '✓' : '✗' }}</td>
+                        <td>
+                            @if ($log->allowed)
+                                <x-ui.icon name="check" class="text-emerald-600" />
+                            @else
+                                <x-ui.icon name="xmark" class="text-rose-600" />
+                            @endif
+                        </td>
                         <td class="font-mono text-[10px] text-slate-400">{{ $log->ip_address ?? '—' }}</td>
                     </tr>
                 @empty

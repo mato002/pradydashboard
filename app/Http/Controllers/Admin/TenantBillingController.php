@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Activity\ActivityLogger;
 use App\Domain\Billing\BillingSummary;
 use App\Domain\Billing\DraftInvoiceGenerator;
+use App\Domain\Billing\StatementGenerator;
 use App\Http\Controllers\Concerns\AuthorizesRbacScope;
 use App\Http\Controllers\Controller;
 use App\Support\ActivityLogCategory;
@@ -78,5 +79,24 @@ class TenantBillingController extends Controller
         return redirect()
             ->route('invoices.show', $invoice)
             ->with('status', __('Draft invoice :number created.', ['number' => $invoice->invoice_number]));
+    }
+
+    public function generateStatement(Request $request, Tenant $tenant, StatementGenerator $generator): RedirectResponse
+    {
+        $this->authorizeTenantRbac($tenant, 'update');
+
+        $data = $request->validate([
+            'period_start' => ['nullable', 'date'],
+            'period_end' => ['nullable', 'date', 'after_or_equal:period_start'],
+        ]);
+
+        $start = ! empty($data['period_start']) ? \Illuminate\Support\Carbon::parse($data['period_start']) : null;
+        $end = ! empty($data['period_end']) ? \Illuminate\Support\Carbon::parse($data['period_end']) : null;
+
+        $statement = $generator->generate($tenant, $start, $end);
+
+        return redirect()
+            ->route('invoices.preview', $statement)
+            ->with('status', __('Statement :number generated.', ['number' => $statement->invoice_number]));
     }
 }

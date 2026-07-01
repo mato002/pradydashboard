@@ -101,9 +101,11 @@
                                 <td class="px-3 py-2 tabular-nums">{{ ($item['currency'] ?? 'KES').' '.number_format((float) ($item['amount'] ?? 0), 2) }}</td>
                                 <td class="px-3 py-2"><x-ui.status-badge :variant="$statusVariant((string) ($item['status'] ?? 'unknown'))">{{ ucfirst((string) ($item['status'] ?? 'unknown')) }}</x-ui.status-badge></td>
                                 <td class="px-3 py-2 text-xs">{{ $formatTimestamp($item['created_at'] ?? null) }}</td>
-                                <td class="px-3 py-2">
+                                <td class="px-3 py-2 text-right" @click.stop>
                                     @if (filled($item['uuid'] ?? null))
-                                        <a href="{{ route('settings.payments-gateway.transactions.show', $item['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View') }}</a>
+                                        <x-ui.row-actions-menu>
+                                            <x-ui.row-action :href="route('settings.payments-gateway.transactions.show', $item['uuid'])">{{ __('View') }}</x-ui.row-action>
+                                        </x-ui.row-actions-menu>
                                     @else
                                         —
                                     @endif
@@ -333,11 +335,15 @@
                                 <td class="px-3 py-2"><x-ui.status-badge :variant="$statusVariant((string) ($alert['severity'] ?? 'unknown'))">{{ ucfirst((string) ($alert['severity'] ?? 'unknown')) }}</x-ui.status-badge></td>
                                 <td class="px-3 py-2 text-xs">{{ ucfirst((string) ($alert['category'] ?? '—')) }}</td>
                                 <td class="px-3 py-2"><x-ui.status-badge :variant="$statusVariant((string) ($alert['status'] ?? 'open'))">{{ ucfirst((string) ($alert['status'] ?? 'open')) }}</x-ui.status-badge></td>
-                                <td class="px-3 py-2 text-xs">
+                                <td class="px-3 py-2 text-right" @click.stop>
                                     @if (filled($alert['acknowledge_url'] ?? null))
-                                        <a href="{{ $alert['acknowledge_url'] }}" class="font-semibold text-indigo-600 dark:text-indigo-400">{{ __('Acknowledge') }}</a>
+                                        <x-ui.row-actions-menu>
+                                            <x-ui.row-action :href="$alert['acknowledge_url']">{{ __('Acknowledge') }}</x-ui.row-action>
+                                        </x-ui.row-actions-menu>
                                     @elseif (filled($alert['resolve_url'] ?? null))
-                                        <a href="{{ $alert['resolve_url'] }}" class="font-semibold text-indigo-600 dark:text-indigo-400">{{ __('Resolve') }}</a>
+                                        <x-ui.row-actions-menu>
+                                            <x-ui.row-action :href="$alert['resolve_url']">{{ __('Resolve') }}</x-ui.row-action>
+                                        </x-ui.row-actions-menu>
                                     @else
                                         —
                                     @endif

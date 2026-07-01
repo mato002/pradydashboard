@@ -15,17 +15,44 @@ class ReceiptGenerator
     public function __construct(
         private readonly InvoiceNumberGenerator $numberGenerator,
         private readonly DocumentFinalizer $documentFinalizer,
+        private readonly DocumentTemplateResolver $templateResolver,
         private readonly InvoiceEmailDelivery $emailDelivery,
         private readonly ActivityLogger $activityLogger,
     ) {}
 
     public function generateForPayment(TenantInvoice $invoice, TenantPayment $payment): TenantInvoice
     {
+        $existingForPayment = TenantInvoice::query()
+            ->where('document_type', BillingDocumentType::RECEIPT)
+            ->where('tenant_payment_id', $payment->id)
+            ->first();
+
+        if ($existingForPayment) {
+            return $existingForPayment;
+        }
+
+        $existing = TenantInvoice::query()
+            ->where('document_type', BillingDocumentType::RECEIPT)
+            ->where('linked_invoice_id', $invoice->id)
+            ->latest('id')
+            ->first();
+
+        if ($existing) {
+            if (! $existing->tenant_payment_id) {
+                $existing->update(['tenant_payment_id' => $payment->id]);
+            }
+
+            return $existing;
+        }
+
         return DB::transaction(function () use ($invoice, $payment): TenantInvoice {
+            $templateId = $this->templateResolver->defaultReceiptTemplateId();
+
             $receipt = TenantInvoice::query()->create([
                 'tenant_id' => $invoice->tenant_id,
                 'tenant_project_subscription_id' => $invoice->tenant_project_subscription_id,
                 'linked_invoice_id' => $invoice->id,
+                'tenant_payment_id' => $payment->id,
                 'invoice_number' => $this->numberGenerator->next(BillingDocumentType::RECEIPT),
                 'document_type' => BillingDocumentType::RECEIPT,
                 'currency' => $invoice->currency,
@@ -45,6 +72,7 @@ class ReceiptGenerator
                     'ref' => $payment->reference ?? $payment->transaction_id ?? '—',
                 ]),
                 'payment_method' => $payment->method,
+                'document_template_id' => $templateId,
                 'generated_by' => 'billing:auto-receipt',
             ]);
 
@@ -69,9 +97,9 @@ class ReceiptGenerator
             }
 
             $this->activityLogger->log(
-                'receipt.generated',
+                'receipt.issued',
                 ActivityLogCategory::BILLING,
-                __('Receipt :number generated for invoice :inv', [
+                __('Receipt :number issued for invoice :inv', [
                     'number' => $receipt->invoice_number,
                     'inv' => $invoice->invoice_number,
                 ]),

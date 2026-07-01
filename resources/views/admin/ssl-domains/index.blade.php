@@ -147,19 +147,19 @@
                                             </td>
                                             <td>
                                                 @if ($domain->auto_renew)
-                                                    <span class="text-emerald-600 dark:text-emerald-400">✓</span>
+                                                    <span class="text-emerald-600 dark:text-emerald-400"><x-ui.icon name="check" /></span>
                                                 @else
                                                     <span class="text-slate-400">—</span>
                                                 @endif
                                             </td>
                                             <td class="text-xs text-slate-500">{{ $domain->server?->name ?? '—' }}</td>
-                                            <td class="text-right">
-                                                <div class="inline-flex gap-1 opacity-70 group-hover:opacity-100">
-                                                            <button type="button" title="{{ __('View Certificate') }}" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-emerald-600 dark:hover:bg-slate-800"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3.75-6H6.75A2.25 2.25 0 0 0 4.5 9.75v7.5a2.25 2.25 0 0 0 2.25 2.25h7.5a2.25 2.25 0 0 0 2.25-2.25v-7.5a2.25 2.25 0 0 0-2.25-2.25h-.75M9 12.75h.008v.008H9v-.008Z" /></svg></button>
-                                                            <button type="button" title="{{ __('Configure Routing') }}" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg></button>
-                                                            <button type="button" title="{{ __('Force Renewal') }}" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" /></svg></button>
-                                                        </div>
-                                                    </td>
+                                            <td class="text-right" @click.stop>
+                                                <x-ui.row-actions-menu>
+                                                    <x-ui.row-action>{{ __('View Certificate') }}</x-ui.row-action>
+                                                    <x-ui.row-action>{{ __('Configure Routing') }}</x-ui.row-action>
+                                                    <x-ui.row-action>{{ __('Force Renewal') }}</x-ui.row-action>
+                                                </x-ui.row-actions-menu>
+                                            </td>
                                         </tr>
                                     @endforeach
                                 </tbody>

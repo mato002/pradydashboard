@@ -1,6 +1,7 @@
 import './bootstrap';
 
 import Alpine from 'alpinejs';
+import { registerManualDocumentForm } from './manual-document-form';
 
 window.Alpine = Alpine;
 
@@ -20,6 +21,8 @@ function applyThemeClass(mode) {
 }
 
 document.addEventListener('alpine:init', () => {
+    registerManualDocumentForm(Alpine);
+
     Alpine.store('sidebar', {
         groups: {},
         collapsed: false,

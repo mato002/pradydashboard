@@ -21,20 +21,17 @@
                             default => 'neutral',
                         }">{{ ucfirst((string) ($item['status'] ?? 'unknown')) }}</x-ui.status-badge>
                     </td>
-                    <td class="px-3 py-2">
-                        <div class="flex flex-wrap items-center gap-2">
+                    <td class="px-3 py-2 text-right" @click.stop>
+                        <x-ui.row-actions-menu>
                             @if (filled($item['uuid'] ?? null))
-                                <a href="{{ route('settings.payments-gateway.webhook-deliveries.show', $item['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View') }}</a>
+                                <x-ui.row-action :href="route('settings.payments-gateway.webhook-deliveries.show', $item['uuid'])">{{ __('View') }}</x-ui.row-action>
                             @endif
                             @permission('payments_gateway.manage')
                                 @if (filled($item['uuid'] ?? null))
-                                    <form method="post" action="{{ route('settings.payments-gateway.webhook-deliveries.redispatch', $item['uuid']) }}" onsubmit="return confirm(@js(__('Redispatch this webhook delivery?')))">
-                                        @csrf
-                                        <button type="submit" class="text-xs font-semibold text-amber-700 dark:text-amber-300">{{ __('Redispatch') }}</button>
-                                    </form>
+                                    <x-ui.row-action :href="route('settings.payments-gateway.webhook-deliveries.redispatch', $item['uuid'])" method="POST" :confirm="__('Redispatch this webhook delivery?')">{{ __('Redispatch') }}</x-ui.row-action>
                                 @endif
                             @endpermission
-                        </div>
+                        </x-ui.row-actions-menu>
                     </td>
                 </tr>
             @empty

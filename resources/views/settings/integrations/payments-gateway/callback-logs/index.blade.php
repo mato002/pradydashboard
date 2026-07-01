@@ -58,7 +58,11 @@
                                 <td class="px-4 py-3 tabular-nums">{{ number_format((float) ($item['amount'] ?? 0), 2) }}</td>
                                 <td class="px-4 py-3">{{ $item['phone_number'] ?? '—' }}</td>
                                 <td class="px-4 py-3 text-xs">{{ filled($item['received_at'] ?? null) ? \Illuminate\Support\Carbon::parse($item['received_at'])->format('M j, H:i') : '—' }}</td>
-                                <td class="px-4 py-3"><a href="{{ route('settings.payments-gateway.callback-logs.show', $item['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View') }}</a></td>
+                                <td class="px-4 py-3 text-right" @click.stop>
+                                    <x-ui.row-actions-menu>
+                                        <x-ui.row-action :href="route('settings.payments-gateway.callback-logs.show', $item['uuid'])">{{ __('View') }}</x-ui.row-action>
+                                    </x-ui.row-actions-menu>
+                                </td>
                             </tr>
                         @empty
                             <tr><td colspan="10" class="px-4 py-8 text-center text-slate-500">{{ $gatewayUnavailable ? __('No data while Payments Gateway is unavailable.') : __('No callback logs found.') }}</td></tr>

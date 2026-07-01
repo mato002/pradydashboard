@@ -42,8 +42,8 @@
                 x-on:input.debounce.400ms="verifyHostname()"
             />
             <p class="mt-1 text-[11px]" x-show="hostnameStatus" x-cloak>
-                <span x-show="hostnameStatus === 'valid'" class="text-emerald-600">✓ {{ __('Valid FQDN') }}</span>
-                <span x-show="hostnameStatus === 'invalid'" class="text-rose-600">✗ {{ __('Invalid hostname') }}</span>
+                <span x-show="hostnameStatus === 'valid'" class="inline-flex items-center gap-1 text-emerald-600"><x-ui.icon name="check" /> {{ __('Valid FQDN') }}</span>
+                <span x-show="hostnameStatus === 'invalid'" class="inline-flex items-center gap-1 text-rose-600"><x-ui.icon name="xmark" /> {{ __('Invalid hostname') }}</span>
             </p>
         </div>
         <input type="hidden" name="provider" x-model="form.provider" />

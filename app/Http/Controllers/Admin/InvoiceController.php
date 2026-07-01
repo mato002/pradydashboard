@@ -11,9 +11,11 @@ use App\Domain\Billing\DocumentDeliveryService;
 use App\Domain\Billing\DocumentFinalizer;
 use App\Domain\Billing\DocumentRenderer;
 use App\Domain\Billing\DocumentSnapshotBuilder;
+use App\Domain\Billing\DocumentTemplateResolver;
 use App\Domain\Billing\DraftInvoiceGenerator;
 use App\Domain\Billing\FinancialOperationsQuery;
 use App\Domain\Billing\ManualDocumentCreator;
+use App\Domain\Billing\ManualDocumentPreviewBuilder;
 use App\Domain\Billing\OverdueBillingProcessor;
 use App\Domain\Billing\PaymentInboxPresenter;
 use App\Domain\Billing\PaymentReconciliationQuery;
@@ -25,6 +27,7 @@ use App\Domain\Billing\SampleFinancialDocumentSnapshot;
 use App\Domain\Rbac\RbacScopeFilter;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ManualFinancialDocumentRequest;
+use App\Http\Requests\ManualDocumentPreviewRequest;
 use App\Http\Requests\PromiseToPayRequest;
 use App\Http\Requests\SendFinancialDocumentRequest;
 use App\Http\Requests\StoreCollectionNoteRequest;
@@ -142,12 +145,12 @@ class InvoiceController extends Controller
 
         $scopeFilter = app(RbacScopeFilter::class);
         $tenants = $this->operations->filterTenants($scopeFilter);
-        $templates = DocumentTemplate::query()
-            ->where('type', $documentType)
-            ->where('active', true)
-            ->orderByDesc('is_default')
-            ->orderBy('name')
-            ->get();
+        $templateResolver = app(DocumentTemplateResolver::class);
+        $defaultTemplate = null;
+        $defaultTemplateId = $templateResolver->defaultTemplateId($documentType);
+        if ($defaultTemplateId) {
+            $defaultTemplate = DocumentTemplate::query()->find($defaultTemplateId);
+        }
 
         $openInvoices = TenantInvoice::query()
             ->whereIn('document_type', [BillingDocumentType::INVOICE, BillingDocumentType::PROFORMA])
@@ -160,34 +163,71 @@ class InvoiceController extends Controller
             ->get(['id', 'invoice_number', 'tenant_id', 'total', 'currency']);
 
         $billing = app(BillingSettings::class);
+        $issuer = app(\App\Domain\Billing\DocumentIssuerResolver::class)->resolve();
+        $initialPreviewHtml = '';
+        $initialPreviewPaperSize = 'A5';
+
+        if ($defaultTemplate) {
+            $previewBuilder = app(ManualDocumentPreviewBuilder::class);
+            $renderer = app(DocumentRenderer::class);
+            $initialPreviewHtml = $renderer->render(
+                $defaultTemplate,
+                $previewBuilder->build([
+                    'document_type' => $documentType,
+                    'issue_date' => now()->toDateString(),
+                    'currency' => $billing->defaultCurrency(),
+                    'manual_client_name' => '',
+                    'line_items' => [[
+                        'description' => '',
+                        'quantity' => 1,
+                        'unit_price' => 0,
+                        'discount' => 0,
+                        'tax_rate' => 0,
+                        'item_type' => 'custom',
+                    ]],
+                ]),
+            );
+            $initialPreviewPaperSize = strtoupper((string) $defaultTemplate->paper_size);
+        }
 
         return view('admin.invoices.create', [
             'documentType' => $documentType,
             'tenants' => $tenants,
-            'templates' => $templates,
-            'templatesMeta' => $templates->map(fn (DocumentTemplate $t) => [
-                'id' => $t->id,
-                'name' => $t->name,
-                'style' => $t->style,
-                'paper_size' => $t->paper_size,
-                'is_default' => $t->is_default,
-                'branding' => $t->branding ?? [],
+            'defaultTemplate' => $defaultTemplate,
+            'openInvoicesPicker' => $openInvoices->map(fn (TenantInvoice $inv) => [
+                'id' => $inv->id,
+                'tenant_id' => $inv->tenant_id,
+                'label' => sprintf(
+                    '%s — %s %s',
+                    $inv->invoice_number,
+                    $inv->currency,
+                    number_format((float) $inv->total, 2),
+                ),
             ])->values()->all(),
-            'openInvoices' => $openInvoices,
             'lineItemTypes' => ManualDocumentCreator::LINE_ITEM_TYPES,
             'defaultCurrency' => $billing->defaultCurrency(),
             'previewCompany' => [
-                'display_name' => $billing->companyLegalName() ?: config('app.name'),
-                'tax_pin' => $billing->taxPin(),
+                'display_name' => $issuer['display_name'] ?? $billing->tradingName(),
+                'legal_name' => $issuer['legal_name'] ?? $billing->companyLegalName(),
+                'tax_pin' => $issuer['pin'] ?? $billing->taxPin(),
+                'tagline' => $issuer['tagline'] ?? $billing->issuerTagline(),
+                'phone' => $issuer['phone'] ?? $billing->issuerPhone(),
+                'email' => $issuer['email'] ?? $billing->issuerEmail(),
+                'website' => $issuer['website'] ?? $billing->issuerWebsite(),
+                'address' => $issuer['address'] ?? $billing->issuerAddress(),
                 'footer_text' => $billing->invoiceFooterNotes(),
                 'payment_instructions' => $billing->paymentInstructions(),
             ],
             'paymentOptions' => [
                 'bank_name' => $billing->bankName(),
+                'bank_account_name' => $billing->bankAccountName(),
                 'bank_account_number' => $billing->bankAccountNumber(),
+                'bank_branch' => $billing->bankBranch(),
                 'mpesa_paybill' => $billing->mpesaPaybill(),
                 'paybill_account_number' => $billing->paybillAccountNumber(),
             ],
+            'initialPreviewHtml' => $initialPreviewHtml,
+            'initialPreviewPaperSize' => $initialPreviewPaperSize,
         ]);
     }
 
@@ -205,6 +245,33 @@ class InvoiceController extends Controller
         return redirect()
             ->route('invoices.preview', $invoice)
             ->with('status', __('Document :number created. Review the preview below.', ['number' => $invoice->invoice_number]));
+    }
+
+    public function previewManualDocument(
+        ManualDocumentPreviewRequest $request,
+        ManualDocumentPreviewBuilder $previewBuilder,
+        DocumentRenderer $renderer,
+        DocumentTemplateResolver $templateResolver,
+    ): JsonResponse {
+        $data = $request->validated();
+        $templateId = $templateResolver->defaultTemplateId($data['document_type']);
+        if (! $templateId) {
+            abort(422, __('No active template configured for this document type.'));
+        }
+
+        $template = DocumentTemplate::query()
+            ->whereKey($templateId)
+            ->where('type', $data['document_type'])
+            ->where('active', true)
+            ->firstOrFail();
+
+        $snapshot = $previewBuilder->build($data);
+        $html = $renderer->render($template, $snapshot);
+
+        return response()->json([
+            'html' => $html,
+            'paper_size' => $template->paper_size,
+        ]);
     }
 
     public function tenantBillingProfile(Tenant $tenant): JsonResponse
@@ -479,7 +546,7 @@ class InvoiceController extends Controller
 
     public function show(TenantInvoice $invoice, BillingSettings $billingSettings): View
     {
-        $invoice->load(['tenant', 'lineItems', 'payments', 'projectSubscription.project', 'generatedDocuments', 'collectionNotes']);
+        $invoice->load(['tenant', 'lineItems', 'payments', 'projectSubscription.project', 'generatedDocuments', 'collectionNotes', 'linkedInvoice', 'convertedInvoice']);
 
         return view('admin.invoices.show', [
             'invoice' => $invoice,
@@ -491,7 +558,6 @@ class InvoiceController extends Controller
     }
 
     public function preview(
-        Request $request,
         TenantInvoice $invoice,
         DocumentRenderer $renderer,
         DocumentSnapshotBuilder $builder,
@@ -499,33 +565,29 @@ class InvoiceController extends Controller
     ): View {
         $invoice->load(['tenant', 'lineItems', 'projectSubscription.project', 'payments', 'generatedDocuments']);
 
-        $template = $this->resolvePreviewTemplate($request, $invoice, $finalizer);
-        $previewHtml = $renderer->render($template, $builder->build($invoice));
-
-        $templates = DocumentTemplate::query()
-            ->where('type', $invoice->document_type ?? 'invoice')
-            ->where('active', true)
-            ->orderByDesc('is_default')
-            ->orderBy('name')
-            ->get();
-
+        $template = $finalizer->resolveTemplate($invoice);
         $persistedDocument = $invoice->generatedDocuments()->latest('id')->first();
+
+        $usePersistedSnapshot = $invoice->isFinalized()
+            && $persistedDocument
+            && filled($persistedDocument->html_snapshot);
+
+        $previewHtml = $usePersistedSnapshot
+            ? $persistedDocument->html_snapshot
+            : $renderer->render($template, $builder->build($invoice));
 
         return view('admin.invoices.preview', [
             'invoice' => $invoice,
             'previewHtml' => $previewHtml,
-            'selectedTemplate' => $template,
-            'templates' => $templates,
+            'documentTemplate' => $template,
             'persistedDocument' => $persistedDocument,
             'defaultRecipient' => $invoice->defaultRecipientEmail(),
         ]);
     }
 
-    public function downloadPdf(Request $request, TenantInvoice $invoice, DocumentDeliveryService $delivery): Response|RedirectResponse|\Symfony\Component\HttpFoundation\StreamedResponse
+    public function downloadPdf(TenantInvoice $invoice, DocumentDeliveryService $delivery): Response|RedirectResponse|\Symfony\Component\HttpFoundation\StreamedResponse
     {
-        $templateId = $request->filled('template_id') ? $request->integer('template_id') : null;
-
-        return $delivery->downloadPdfResponse($invoice, $templateId);
+        return $delivery->downloadPdfResponse($invoice);
     }
 
     public function emailDocument(
@@ -551,24 +613,23 @@ class InvoiceController extends Controller
         return back()->with('status', __('Document finalized and PDF prepared.'));
     }
 
-    public function regeneratePdf(Request $request, TenantInvoice $invoice, DocumentFinalizer $finalizer): RedirectResponse
+    public function regeneratePdf(TenantInvoice $invoice, DocumentFinalizer $finalizer): RedirectResponse
     {
-        $request->validate([
-            'document_template_id' => ['nullable', 'integer', 'exists:document_templates,id'],
-        ]);
-
-        $template = null;
-        if ($request->filled('document_template_id')) {
-            $template = DocumentTemplate::query()
-                ->whereKey($request->integer('document_template_id'))
-                ->where('active', true)
-                ->where('type', $invoice->document_type ?? 'invoice')
-                ->firstOrFail();
+        if (! $invoice->canRegenerate()) {
+            return back()->with('error', $invoice->regenerateBlockedReason() ?? __('This document cannot be regenerated.'));
         }
 
-        $finalizer->regenerate($invoice->fresh(), $template);
+        try {
+            $finalizer->regenerate($invoice->fresh());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
-        return back()->with('status', __('Document regenerated.'));
+        $message = $invoice->wasEmailed()
+            ? __('Document regenerated. A new revision was saved; previously emailed PDFs remain historical records.')
+            : __('Document regenerated.');
+
+        return back()->with('status', $message);
     }
 
     public function markSent(TenantInvoice $invoice, DocumentDeliveryService $delivery): RedirectResponse
@@ -588,21 +649,28 @@ class InvoiceController extends Controller
 
     public function cancel(TenantInvoice $invoice): RedirectResponse
     {
-        if ($invoice->status === 'paid') {
-            return back()->with('error', __('Paid invoices cannot be cancelled.'));
-        }
+        if (! $invoice->canCancel()) {
+            if ($invoice->isPaid()) {
+                return back()->with('error', __('Paid invoices cannot be cancelled.'));
+            }
 
-        if ($invoice->isFinalized()) {
-            return back()->with('error', __('Finalized documents cannot be cancelled. Create a credit note instead.'));
+            if ($invoice->isFinalized()) {
+                return back()->with('error', __('Finalized documents cannot be cancelled. Create a credit note instead.'));
+            }
+
+            return back()->with('error', __('This document cannot be cancelled.'));
         }
 
         $old = ['status' => $invoice->status];
         $invoice->update(['status' => 'cancelled']);
 
         $this->activityLogger->log(
-            'invoice.cancelled',
+            'document.cancelled',
             ActivityLogCategory::BILLING,
-            __('Invoice :number cancelled', ['number' => $invoice->invoice_number]),
+            __(':type :number cancelled', [
+                'type' => $invoice->documentTypeLabel(),
+                'number' => $invoice->invoice_number,
+            ]),
             $invoice,
             $old,
             ['status' => 'cancelled'],
@@ -613,7 +681,7 @@ class InvoiceController extends Controller
 
     public function recordPayment(RecordPaymentRequest $request, TenantInvoice $invoice, PaymentRecorderService $recorder): RedirectResponse
     {
-        if (in_array($invoice->status, ['cancelled', 'void', 'paid'], true)) {
+        if (! $invoice->canRecordPayment()) {
             return back()->with('error', __('Cannot record payment on this invoice.'));
         }
 
@@ -647,21 +715,5 @@ class InvoiceController extends Controller
         );
 
         return back()->with('status', __('Invoice marked as paid.'));
-    }
-
-    private function resolvePreviewTemplate(Request $request, TenantInvoice $invoice, DocumentFinalizer $finalizer): DocumentTemplate
-    {
-        if ($request->filled('template_id')) {
-            $t = DocumentTemplate::query()
-                ->whereKey($request->integer('template_id'))
-                ->where('active', true)
-                ->where('type', $invoice->document_type ?? 'invoice')
-                ->first();
-            if ($t) {
-                return $t;
-            }
-        }
-
-        return $finalizer->resolveTemplate($invoice);
     }
 }

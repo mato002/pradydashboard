@@ -119,7 +119,7 @@
                         @foreach ($readiness as $item)
                             <li class="flex items-start gap-2 text-sm">
                                 <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] {{ $item['done'] ? 'bg-emerald-500/20 text-emerald-600' : 'bg-slate-200 text-slate-400 dark:bg-slate-700' }}">
-                                    @if ($item['done']) ✓ @endif
+                                    @if ($item['done']) <x-ui.icon name="check" class="text-emerald-600" /> @endif
                                 </span>
                                 <span class="{{ $item['done'] ? 'text-slate-800 dark:text-slate-200' : 'text-slate-500' }}">{{ $item['label'] }}</span>
                             </li>

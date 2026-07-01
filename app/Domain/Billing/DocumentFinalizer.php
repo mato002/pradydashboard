@@ -8,6 +8,7 @@ use App\Models\DocumentTemplate;
 use App\Models\GeneratedDocument;
 use App\Models\TenantInvoice;
 use App\Support\ActivityLogCategory;
+use App\Support\Billing\BillingDocumentType;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -91,9 +92,33 @@ class DocumentFinalizer
 
     public function regenerate(TenantInvoice $invoice, ?DocumentTemplate $template = null): GeneratedDocument
     {
+        $reason = $invoice->regenerateBlockedReason();
+        if ($reason !== null) {
+            throw new \InvalidArgumentException($reason);
+        }
+
         $invoice->increment('revision_number');
 
-        return $this->finalize($invoice, $template, null, true);
+        $document = $this->finalize($invoice, $template, null, true);
+
+        $action = $invoice->document_type === BillingDocumentType::STATEMENT
+            ? 'statement.regenerated'
+            : 'document.regenerated';
+
+        $this->activityLogger->log(
+            $action,
+            ActivityLogCategory::BILLING,
+            __(':type :number regenerated (revision :rev)', [
+                'type' => $invoice->document_type ?? 'invoice',
+                'number' => $invoice->invoice_number,
+                'rev' => $invoice->revision_number,
+            ]),
+            $invoice,
+            null,
+            ['generated_document_id' => $document->id, 'revision_number' => $invoice->revision_number],
+        );
+
+        return $document;
     }
 
     public function ensurePdf(GeneratedDocument $document, TenantInvoice $invoice): GeneratedDocument

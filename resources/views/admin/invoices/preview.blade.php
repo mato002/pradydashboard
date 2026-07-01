@@ -11,22 +11,19 @@
     @endif
 
     <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div class="flex flex-wrap items-center gap-2">
-            <a href="{{ route('invoices.show', $invoice) }}" class="text-sm text-indigo-600 hover:underline">{{ __('Back to invoice') }}</a>
-            <form method="get" action="{{ route('invoices.preview', $invoice) }}" class="flex flex-wrap items-center gap-2">
-                <label class="text-xs font-medium text-slate-600 dark:text-slate-400">{{ __('Template') }}</label>
-                <select name="template_id" onchange="this.form.submit()" class="rounded-lg border-slate-300 text-sm dark:border-slate-600 dark:bg-slate-900">
-                    @foreach ($templates as $tpl)
-                        <option value="{{ $tpl->id }}" @selected($selectedTemplate->id === $tpl->id)>
-                            {{ $tpl->name }}@if ($tpl->is_default) ({{ __('default') }})@endif — {{ $tpl->paper_size }}
-                        </option>
-                    @endforeach
-                </select>
-            </form>
-        </div>
+        <a href="{{ route('invoices.show', $invoice) }}" class="text-sm text-indigo-600 hover:underline">{{ __('Back to invoice') }}</a>
         <form method="post" action="{{ route('invoices.regenerate', $invoice) }}" class="inline flex items-center gap-2">@csrf
-            <input type="hidden" name="document_template_id" value="{{ $selectedTemplate->id }}">
-            <button type="submit" class="rounded-lg border border-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:text-amber-200">{{ __('Save PDF snapshot') }}</button>
+            @if ($invoice->canRegenerate())
+                <button
+                    type="submit"
+                    class="rounded-lg border border-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:text-amber-200"
+                    @if ($invoice->wasEmailed()) onclick="return confirm(@js(__('This document was already emailed. Regenerating creates a new revision. Continue?')))" @endif
+                >
+                    {{ __('Save PDF snapshot') }}
+                </button>
+            @else
+                <span class="text-xs text-slate-500">{{ $invoice->regenerateBlockedReason() }}</span>
+            @endif
         </form>
     </div>
 
@@ -48,17 +45,11 @@
                 ])
             @endif
 
-            @if ($persistedDocument && (int) $persistedDocument->document_template_id !== (int) $selectedTemplate->id)
-                <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
-                    {{ __('Saved snapshot uses a different template. Choose “Save PDF snapshot” to store this layout.') }}
-                </p>
-            @endif
-
             <div class="invoice-document-split-preview-mobile lg:hidden">
                 <p class="mb-2 text-xs font-medium text-slate-500">{{ __('Document preview') }}</p>
                 <x-billing.document-preview-frame
                     :html="$previewHtml"
-                    :paper-size="$selectedTemplate->paper_size"
+                    :paper-size="$documentTemplate->paper_size"
                     :title="__('Preview')"
                 />
             </div>
@@ -69,7 +60,7 @@
                 <p class="mb-2 hidden text-xs font-medium text-slate-500 lg:block">{{ __('Document preview') }}</p>
                 <x-billing.document-preview-frame
                     :html="$previewHtml"
-                    :paper-size="$selectedTemplate->paper_size"
+                    :paper-size="$documentTemplate->paper_size"
                     :title="__('Preview')"
                 />
             </div>

@@ -99,7 +99,7 @@
             <x-ui.kpi-card :title="__('System Uptime')" :value="$kpis['system_uptime'] !== null ? $kpis['system_uptime'].'%' : __('Pending sync')" :animate="false" :sublabel="__('Synced fleet reachability')" :points="$spark('mon-uptime')" tone="emerald">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg></x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Active Alerts')" :value="$kpis['active_alerts']" :trend="$kpis['active_alerts'] > 0 ? '!' : '✓'" :sublabel="__('Open incidents')" :points="$spark('mon-alerts')" tone="rose">
+            <x-ui.kpi-card :title="__('Active Alerts')" :value="$kpis['active_alerts']" :trend="$kpis['active_alerts'] > 0 ? '!' : 'check'" :sublabel="__('Open incidents')" :points="$spark('mon-alerts')" tone="rose">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9-.75a9 9 0 1118 0 9 9 0 01-18 0zm-9 3.75h.008v.008H12v-.008z" /></svg></x-slot>
             </x-ui.kpi-card>
             <x-ui.kpi-card :title="__('Error Rate')" :value="$kpis['error_rate'] !== null ? $kpis['error_rate'].'%' : __('Unknown')" :animate="false" :sublabel="__('5xx + timeouts — not instrumented')" :points="[]" tone="amber">

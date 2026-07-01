@@ -13,6 +13,7 @@ class ProformaConverter
 {
     public function __construct(
         private readonly InvoiceNumberGenerator $numberGenerator,
+        private readonly DocumentTemplateResolver $templateResolver,
         private readonly ActivityLogger $activityLogger,
     ) {}
 
@@ -20,6 +21,14 @@ class ProformaConverter
     {
         if ($proforma->document_type !== BillingDocumentType::PROFORMA) {
             throw new \InvalidArgumentException(__('Only proforma invoices can be converted.'));
+        }
+
+        if (in_array($proforma->status, ['cancelled', 'void'], true)) {
+            throw new \InvalidArgumentException(__('Cancelled proforma invoices cannot be converted.'));
+        }
+
+        if ($proforma->isExpired()) {
+            throw new \InvalidArgumentException(__('Expired proforma invoices cannot be converted.'));
         }
 
         if ($proforma->converted_invoice_id) {
@@ -36,8 +45,8 @@ class ProformaConverter
                 'document_type' => BillingDocumentType::INVOICE,
                 'currency' => $proforma->currency,
                 'subtotal' => $proforma->subtotal,
-                'discount_amount' => $proforma->discount_amount,
-                'tax_amount' => $proforma->tax_amount,
+                'discount_amount' => (float) ($proforma->discount_amount ?? 0),
+                'tax_amount' => (float) ($proforma->tax_amount ?? 0),
                 'total' => $proforma->total,
                 'amount_due' => $proforma->amount_due,
                 'amount_paid' => 0,
@@ -51,7 +60,7 @@ class ProformaConverter
                 'manual_client_email' => $proforma->manual_client_email,
                 'manual_client_phone' => $proforma->manual_client_phone,
                 'manual_client_address' => $proforma->manual_client_address,
-                'document_template_id' => $proforma->document_template_id,
+                'document_template_id' => $this->templateResolver->defaultInvoiceTemplateId() ?? $proforma->document_template_id,
                 'created_source' => 'proforma_conversion',
                 'generated_by' => auth()->user()?->email,
             ]);

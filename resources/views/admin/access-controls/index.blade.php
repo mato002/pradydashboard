@@ -135,17 +135,11 @@
                                     <td><x-ui.status-badge :variant="$enforcementVariant($policy['enforcement_status'])">{{ $policy['enforcement_status'] }}</x-ui.status-badge></td>
                                     <td class="text-xs tabular-nums text-slate-500">{{ $policy['expiry'] }}</td>
                                     <td class="text-xs text-slate-500">{{ $policy['last_activity'] }}</td>
-                                    <td class="text-right">
-                                        <div class="flex justify-end gap-1" @click.stop>
-                                            <form method="POST" action="{{ route('access-controls.restrict', $policy['tenant_id']) }}">
-                                                @csrf
-                                                <button type="submit" class="rounded-lg px-2 py-1 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-500/30 hover:bg-amber-500/10 dark:text-amber-300">{{ __('Restrict') }}</button>
-                                            </form>
-                                            <form method="POST" action="{{ route('access-controls.unlock', $policy['tenant_id']) }}">
-                                                @csrf
-                                                <button type="submit" class="rounded-lg px-2 py-1 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-500/30 hover:bg-emerald-500/10 dark:text-emerald-300">{{ __('Unlock') }}</button>
-                                            </form>
-                                        </div>
+                                    <td class="text-right" @click.stop>
+                                        <x-ui.row-actions-menu>
+                                            <x-ui.row-action :href="route('access-controls.restrict', $policy['tenant_id'])" method="POST">{{ __('Restrict') }}</x-ui.row-action>
+                                            <x-ui.row-action :href="route('access-controls.unlock', $policy['tenant_id'])" method="POST">{{ __('Unlock') }}</x-ui.row-action>
+                                        </x-ui.row-actions-menu>
                                     </td>
                                 </tr>
                             @endforeach
@@ -212,7 +206,7 @@
                                     @foreach ($moduleMatrix['keys'] as $key)
                                         <td class="text-center">
                                             @if ($row['modules'][$key] ?? false)
-                                                <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/25 dark:text-emerald-300">✓</span>
+                                                <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/25 dark:text-emerald-300"><x-ui.icon name="check" class="text-xs" /></span>
                                             @else
                                                 <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-rose-500/10 text-rose-500 ring-1 ring-rose-500/20">✕</span>
                                             @endif

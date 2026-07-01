@@ -76,8 +76,10 @@
                                 <td class="px-4 py-3 text-xs">{{ $formatDate($account['last_oauth_check_at'] ?? null) }}</td>
                                 <td class="px-4 py-3 text-xs">{{ $formatDate($account['last_transaction_at'] ?? null) }}</td>
                                 @permission('payments_gateway.manage')
-                                <td class="px-4 py-3">
-                                    <a href="{{ route('settings.payments-gateway.paybill-accounts.edit', $account['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('Edit') }}</a>
+                                <td class="px-4 py-3 text-right" @click.stop>
+                                    <x-ui.row-actions-menu>
+                                        <x-ui.row-action :href="route('settings.payments-gateway.paybill-accounts.edit', $account['uuid'])">{{ __('Edit') }}</x-ui.row-action>
+                                    </x-ui.row-actions-menu>
                                 </td>
                                 @endpermission
                             </tr>

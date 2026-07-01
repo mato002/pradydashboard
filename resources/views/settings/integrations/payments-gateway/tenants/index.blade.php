@@ -75,20 +75,17 @@
                                         {{ ucfirst((string) $tenant['gateway_health']) }}
                                     </x-ui.status-badge>
                                 </td>
-                                <td class="px-4 py-3">
-                                    <div class="flex flex-col gap-1">
-                                        <a href="{{ route('settings.payments-gateway.tenants.show', $tenant['id']) }}" class="text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
+                                <td class="px-4 py-3 text-right" @click.stop>
+                                    <x-ui.row-actions-menu>
+                                        <x-ui.row-action :href="route('settings.payments-gateway.tenants.show', $tenant['id'])">
                                             {{ $tenant['linked'] ? __('Treasury mapping') : __('View tenant') }}
-                                        </a>
+                                        </x-ui.row-action>
                                         @permission('payments_gateway.manage')
                                             @if (! $tenant['linked'])
-                                                <form method="post" action="{{ route('settings.payments-gateway.tenants.link', $tenant['id']) }}" onsubmit="return confirm(@js(__('Link this tenant to Payments Gateway?')))">
-                                                    @csrf
-                                                    <button type="submit" class="text-left text-xs font-semibold text-emerald-600 dark:text-emerald-400">{{ __('Link existing tenant') }}</button>
-                                                </form>
+                                                <x-ui.row-action :href="route('settings.payments-gateway.tenants.link', $tenant['id'])" method="POST" :confirm="__('Link this tenant to Payments Gateway?')">{{ __('Link existing tenant') }}</x-ui.row-action>
                                             @endif
                                         @endpermission
-                                    </div>
+                                    </x-ui.row-actions-menu>
                                 </td>
                             </tr>
                         @empty

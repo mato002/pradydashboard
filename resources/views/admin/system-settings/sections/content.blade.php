@@ -80,11 +80,26 @@
 @elseif ($activeSection === 'billing')
     <div class="grid gap-4 sm:grid-cols-2">
         <div class="sm:col-span-2">{!! $input('company_legal_name', __('Company legal name')) !!}</div>
+        {!! $input('trading_name', __('Trading name')) !!}
         {!! $input('tax_pin', __('Tax PIN')) !!}
+        {!! $input('issuer_tagline', __('Tagline')) !!}
+        {!! $input('issuer_phone', __('Issuer phone')) !!}
+        {!! $input('issuer_email', __('Issuer email')) !!}
+        {!! $input('issuer_website', __('Website')) !!}
+        <div class="sm:col-span-2">{!! $input('issuer_address', __('Address / location')) !!}</div>
+        <div class="sm:col-span-2">{!! $input('logo_url', __('Logo URL')) !!}</div>
         {!! $toggle('vat_registered', __('VAT registered')) !!}
         {!! $input('tax_rate', __('VAT / tax rate %')) !!}
         {!! $input('default_currency', __('Default currency')) !!}
-        {!! $input('invoice_prefix', __('Invoice prefix')) !!}
+        {!! $input('invoice_prefix', __('Invoice prefix (legacy numbering)')) !!}
+        {!! $input('numbering_style', __('Numbering style (short or legacy)')) !!}
+        {!! $input('number_sequence_padding', __('Sequence padding (0 = none)'), 'number') !!}
+        {!! $input('bank_name', __('Bank name')) !!}
+        {!! $input('bank_account_name', __('Account name')) !!}
+        {!! $input('bank_account_number', __('Account number')) !!}
+        {!! $input('bank_branch', __('Bank branch')) !!}
+        {!! $input('mpesa_paybill', __('M-Pesa Paybill')) !!}
+        {!! $input('paybill_account_number', __('Paybill account / reference')) !!}
         <div class="sm:col-span-2">{!! $input('payment_instructions', __('Payment instructions')) !!}</div>
         {!! $input('default_payment_terms', __('Default payment terms')) !!}
         <div class="sm:col-span-2">{!! $input('invoice_footer_notes', __('Invoice footer notes')) !!}</div>

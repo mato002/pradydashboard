@@ -13,6 +13,7 @@ class QuotationConverter
 {
     public function __construct(
         private readonly InvoiceNumberGenerator $numberGenerator,
+        private readonly DocumentTemplateResolver $templateResolver,
         private readonly DocumentFinalizer $documentFinalizer,
         private readonly ActivityLogger $activityLogger,
     ) {}
@@ -25,6 +26,14 @@ class QuotationConverter
 
         if ($quotation->approval_status !== 'approved') {
             throw new \InvalidArgumentException(__('Quotation must be approved before conversion.'));
+        }
+
+        if (in_array($quotation->status, ['cancelled', 'void'], true)) {
+            throw new \InvalidArgumentException(__('Cancelled quotations cannot be converted.'));
+        }
+
+        if ($quotation->isExpired()) {
+            throw new \InvalidArgumentException(__('Expired quotations cannot be converted.'));
         }
 
         if ($quotation->converted_invoice_id) {
@@ -41,8 +50,8 @@ class QuotationConverter
                 'document_type' => BillingDocumentType::INVOICE,
                 'currency' => $quotation->currency,
                 'subtotal' => $quotation->subtotal,
-                'discount_amount' => $quotation->discount_amount,
-                'tax_amount' => $quotation->tax_amount,
+                'discount_amount' => (float) ($quotation->discount_amount ?? 0),
+                'tax_amount' => (float) ($quotation->tax_amount ?? 0),
                 'total' => $quotation->total,
                 'amount_due' => $quotation->amount_due,
                 'amount_paid' => 0,
@@ -56,7 +65,7 @@ class QuotationConverter
                 'manual_client_email' => $quotation->manual_client_email,
                 'manual_client_phone' => $quotation->manual_client_phone,
                 'manual_client_address' => $quotation->manual_client_address,
-                'document_template_id' => $quotation->document_template_id,
+                'document_template_id' => $this->templateResolver->defaultInvoiceTemplateId() ?? $quotation->document_template_id,
                 'source_quotation_id' => $quotation->id,
                 'generated_by' => auth()->user()?->email,
             ]);

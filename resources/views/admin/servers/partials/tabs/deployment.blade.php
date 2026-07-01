@@ -25,7 +25,7 @@
                 <span class="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold"
                     :class="pipelineStage('{{ $step['id'] }}') === 'done' ? 'bg-emerald-500 text-white' : (pipelineStage('{{ $step['id'] }}') === 'active' ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-500 dark:bg-slate-700')"
                 >
-                    <span x-show="pipelineStage('{{ $step['id'] }}') === 'done'">✓</span>
+                    <span x-show="pipelineStage('{{ $step['id'] }}') === 'done'"><x-ui.icon name="check" class="text-emerald-600" /></span>
                     <span x-show="pipelineStage('{{ $step['id'] }}') !== 'done'">{{ strtoupper(substr($step['id'], 0, 1)) }}</span>
                 </span>
                 <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-200">{{ $step['label'] }}</span>

@@ -76,7 +76,7 @@ class FinancialDocumentMail extends Mailable
 
         return [
             Attachment::fromStorageDisk('local', $this->pdfPath)
-                ->as($this->invoice->invoice_number.'.pdf')
+                ->as($this->invoice->pdfFilename())
                 ->withMime('application/pdf'),
         ];
     }

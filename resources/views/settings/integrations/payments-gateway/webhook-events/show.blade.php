@@ -81,7 +81,11 @@
                                         <td class="px-4 py-3"><x-ui.status-badge :variant="$statusVariant((string) ($delivery['delivery_status'] ?? 'unknown'))">{{ ucfirst((string) ($delivery['delivery_status'] ?? 'unknown')) }}</x-ui.status-badge></td>
                                         <td class="px-4 py-3 tabular-nums">{{ $delivery['response_status'] ?? '—' }}</td>
                                         <td class="px-4 py-3 tabular-nums">{{ $delivery['response_time_ms'] ?? '—' }}</td>
-                                        <td class="px-4 py-3"><a href="{{ route('settings.payments-gateway.webhook-deliveries.show', $delivery['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View') }}</a></td>
+                                        <td class="px-4 py-3 text-right" @click.stop>
+                                            <x-ui.row-actions-menu>
+                                                <x-ui.row-action :href="route('settings.payments-gateway.webhook-deliveries.show', $delivery['uuid'])">{{ __('View') }}</x-ui.row-action>
+                                            </x-ui.row-actions-menu>
+                                        </td>
                                     </tr>
                                 @empty
                                     <tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">{{ __('No deliveries recorded for this event.') }}</td></tr>

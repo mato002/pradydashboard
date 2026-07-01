@@ -463,18 +463,11 @@
                                 </td>
                                 <td class="whitespace-nowrap px-4 py-3 text-xs text-slate-500">{{ $job->failed_at_human }}</td>
                                 @permission('monitoring.sync')
-                                    <td class="px-4 py-3">
-                                        <div class="flex justify-end gap-2">
-                                            <form method="post" action="{{ route('monitoring.failed-jobs.retry', $job->uuid) }}">
-                                                @csrf
-                                                <button type="submit" class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500">{{ __('Retry') }}</button>
-                                            </form>
-                                            <form method="post" action="{{ route('monitoring.failed-jobs.forget', $job->uuid) }}" onsubmit="return confirm(@js(__('Remove this failed job record?')))">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-300">{{ __('Forget') }}</button>
-                                            </form>
-                                        </div>
+                                    <td class="px-4 py-3 text-right" @click.stop>
+                                        <x-ui.row-actions-menu>
+                                            <x-ui.row-action :href="route('monitoring.failed-jobs.retry', $job->uuid)" method="POST">{{ __('Retry') }}</x-ui.row-action>
+                                            <x-ui.row-action :href="route('monitoring.failed-jobs.forget', $job->uuid)" method="DELETE" :confirm="__('Remove this failed job record?')" danger>{{ __('Forget') }}</x-ui.row-action>
+                                        </x-ui.row-actions-menu>
                                     </td>
                                 @endpermission
                             </tr>

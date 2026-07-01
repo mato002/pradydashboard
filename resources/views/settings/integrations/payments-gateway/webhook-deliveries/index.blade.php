@@ -51,16 +51,13 @@
                                 <td class="px-4 py-3 tabular-nums">{{ $item['response_status'] ?? '—' }}</td>
                                 <td class="px-4 py-3 tabular-nums">{{ $item['response_time_ms'] ?? '—' }}</td>
                                 <td class="px-4 py-3 text-xs">{{ filled($item['delivered_at'] ?? null) ? \Illuminate\Support\Carbon::parse($item['delivered_at'])->format('M j, H:i') : '—' }}</td>
-                                <td class="px-4 py-3">
-                                    <div class="flex flex-col gap-1">
-                                        <a href="{{ route('settings.payments-gateway.webhook-deliveries.show', $item['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View') }}</a>
+                                <td class="px-4 py-3 text-right" @click.stop>
+                                    <x-ui.row-actions-menu>
+                                        <x-ui.row-action :href="route('settings.payments-gateway.webhook-deliveries.show', $item['uuid'])">{{ __('View') }}</x-ui.row-action>
                                         @permission('payments_gateway.manage')
-                                        <form method="post" action="{{ route('settings.payments-gateway.webhook-deliveries.redispatch', $item['uuid']) }}" onsubmit="return confirm(@js(__('Redispatch this webhook delivery?')))">
-                                            @csrf
-                                            <button type="submit" class="text-left text-xs font-semibold text-slate-600 dark:text-slate-300">{{ __('Redispatch') }}</button>
-                                        </form>
+                                            <x-ui.row-action :href="route('settings.payments-gateway.webhook-deliveries.redispatch', $item['uuid'])" method="POST" :confirm="__('Redispatch this webhook delivery?')">{{ __('Redispatch') }}</x-ui.row-action>
                                         @endpermission
-                                    </div>
+                                    </x-ui.row-actions-menu>
                                 </td>
                             </tr>
                         @empty

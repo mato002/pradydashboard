@@ -32,7 +32,7 @@
                                         @foreach (array_slice($permissions['actions'], 0, 5) as $action)
                                             <td class="py-2 text-center">
                                                 @if ($row['grants'][$action] ?? false)
-                                                    <span class="text-emerald-600">✓</span>
+                                                    <span class="text-emerald-600"><x-ui.icon name="check" /></span>
                                                 @else
                                                     <span class="text-slate-300">—</span>
                                                 @endif

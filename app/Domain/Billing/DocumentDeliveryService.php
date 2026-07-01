@@ -65,37 +65,33 @@ class DocumentDeliveryService
         $wasSent = in_array($invoice->delivery_status, ['sent', 'resent'], true);
         $isResend = $resend || $wasSent;
 
-        if (config('queue.default') !== 'sync') {
+        if (config('queue.default') === 'sync') {
+            SendFinancialDocumentEmailJob::dispatchAfterResponse(
+                $invoice->id,
+                $document->id,
+                $recipient,
+                $isResend,
+            );
+        } else {
             SendFinancialDocumentEmailJob::dispatch(
                 $invoice->id,
                 $document->id,
                 $recipient,
                 $isResend,
             );
-
-            return [
-                'success' => true,
-                'message' => __('Email queued for delivery to :email.', ['email' => $recipient]),
-            ];
         }
 
-        return $this->emailDelivery->send($invoice, $document, $recipient, $isResend);
+        return [
+            'success' => true,
+            'message' => config('queue.default') === 'sync'
+                ? __('Email will be sent to :email shortly.', ['email' => $recipient])
+                : __('Email queued for delivery to :email.', ['email' => $recipient]),
+        ];
     }
 
-    public function downloadPdfResponse(TenantInvoice $invoice, ?int $templateId = null): StreamedResponse|\Illuminate\Http\RedirectResponse
+    public function downloadPdfResponse(TenantInvoice $invoice): StreamedResponse|\Illuminate\Http\RedirectResponse
     {
-        if ($templateId) {
-            $template = \App\Models\DocumentTemplate::query()
-                ->whereKey($templateId)
-                ->where('active', true)
-                ->where('type', $invoice->document_type ?? 'invoice')
-                ->first();
-            if ($template) {
-                $this->finalizer->regenerate($invoice->fresh(['lineItems', 'tenant', 'projectSubscription.project']), $template);
-            }
-        }
-
-        $document = $this->ensurePdf($invoice->fresh());
+        $document = $this->ensurePdf($invoice->fresh(['lineItems', 'tenant', 'projectSubscription.project', 'linkedInvoice']));
 
         if (! $document->pdf_path || ! Storage::disk('local')->exists($document->pdf_path)) {
             return back()->with('error', __('PDF not available. Install dompdf/dompdf and try finalizing again.'));
@@ -115,7 +111,7 @@ class DocumentDeliveryService
 
         return Storage::disk('local')->download(
             $document->pdf_path,
-            $invoice->invoice_number.'.pdf',
+            $invoice->pdfFilename(),
         );
     }
 

@@ -102,7 +102,7 @@
                 <template x-for="item in readinessChecklist" :key="item.label">
                     <li class="flex items-start gap-2 text-sm">
                         <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px]" :class="item.done ? 'bg-emerald-500/20 text-emerald-600' : 'bg-slate-200 text-slate-400 dark:bg-slate-700'">
-                            <span x-show="item.done">✓</span>
+                            <span x-show="item.done"><x-ui.icon name="check" class="text-emerald-600" /></span>
                         </span>
                         <span :class="item.done ? 'text-slate-800 dark:text-slate-200' : 'text-slate-500'" x-text="item.label"></span>
                     </li>

@@ -3,7 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Domain\Billing\ManualDocumentCreator;
+use App\Models\TenantInvoice;
 use App\Support\Billing\BillingDocumentType;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -40,9 +42,13 @@ class ManualFinancialDocumentRequest extends FormRequest
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'currency' => ['required', 'string', 'max:8'],
             'notes' => ['nullable', 'string', 'max:5000'],
-            'document_template_id' => ['nullable', 'integer', 'exists:document_templates,id'],
             'amount_paid' => ['nullable', 'numeric', 'min:0'],
-            'linked_invoice_id' => ['nullable', 'integer', 'exists:tenant_invoices,id'],
+            'linked_invoice_id' => [
+                'nullable',
+                'integer',
+                'exists:tenant_invoices,id',
+                $this->linkedInvoiceBelongsToTenantRule(),
+            ],
             'amount_received' => ['nullable', 'numeric', 'min:0.01'],
             'payment_method' => ['nullable', 'string', 'max:80'],
             'payment_reference' => ['nullable', 'string', 'max:120'],
@@ -70,5 +76,23 @@ class ManualFinancialDocumentRequest extends FormRequest
         }
 
         return $rules;
+    }
+
+    private function linkedInvoiceBelongsToTenantRule(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            if (! $value || ! $this->filled('tenant_id')) {
+                return;
+            }
+
+            $invoice = TenantInvoice::query()->find((int) $value);
+            if (! $invoice) {
+                return;
+            }
+
+            if ((int) $invoice->tenant_id !== (int) $this->input('tenant_id')) {
+                $fail(__('The selected invoice does not belong to this tenant.'));
+            }
+        };
     }
 }

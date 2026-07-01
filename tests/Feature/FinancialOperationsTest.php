@@ -236,7 +236,11 @@ class FinancialOperationsTest extends TestCase
         $html = app(DocumentRenderer::class)->render($template, SampleFinancialDocumentSnapshot::proforma());
 
         $this->assertStringNotContainsString('[cite:', $html);
-        $this->assertStringContainsString('Prady Technologies', $html);
+        $this->assertTrue(
+            str_contains($html, 'prady-header-image') || str_contains($html, 'pc-header-fallback'),
+            'Expected brand header image or CSS fallback header.',
+        );
+        $this->assertStringContainsString('PROFORMA', $html);
     }
 
     public function test_proforma_pdf_generation_uses_a5_paper_template(): void

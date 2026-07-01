@@ -14,8 +14,12 @@ class BillingSettings
     {
         $defaults = (new PlatformSettingsService)->defaults('billing');
         $stored = Setting::getJson('platform.billing');
+        $envOverrides = array_filter(
+            config('billing', []),
+            static fn ($value) => $value !== null && $value !== '',
+        );
 
-        return array_merge($defaults, $stored);
+        return array_merge($defaults, $stored, $envOverrides);
     }
 
     public function defaultCurrency(): string
@@ -43,9 +47,61 @@ class BillingSettings
         return (string) ($this->all()['company_legal_name'] ?? '');
     }
 
+    public function tradingName(): string
+    {
+        return (string) ($this->all()['trading_name'] ?? '');
+    }
+
     public function taxPin(): string
     {
         return (string) ($this->all()['tax_pin'] ?? '');
+    }
+
+    public function issuerPhone(): string
+    {
+        return (string) ($this->all()['issuer_phone'] ?? '');
+    }
+
+    public function issuerEmail(): string
+    {
+        return (string) ($this->all()['issuer_email'] ?? '');
+    }
+
+    public function issuerWebsite(): string
+    {
+        return (string) ($this->all()['issuer_website'] ?? '');
+    }
+
+    public function issuerAddress(): string
+    {
+        return (string) ($this->all()['issuer_address'] ?? '');
+    }
+
+    public function issuerTagline(): string
+    {
+        return (string) ($this->all()['issuer_tagline'] ?? '');
+    }
+
+    public function logoUrl(): ?string
+    {
+        $url = trim((string) ($this->all()['logo_url'] ?? ''));
+
+        return $url !== '' ? $url : null;
+    }
+
+    public function bankAccountName(): string
+    {
+        return (string) ($this->all()['bank_account_name'] ?? '');
+    }
+
+    public function usesLegacyNumbering(): bool
+    {
+        return ($this->all()['numbering_style'] ?? 'short') === 'legacy';
+    }
+
+    public function numberSequencePadding(): int
+    {
+        return max(0, (int) ($this->all()['number_sequence_padding'] ?? 0));
     }
 
     public function paymentInstructions(): string

@@ -161,8 +161,8 @@
                                             <td class="text-xs text-slate-500" x-text="user.last_activity"></td>
                                             <td class="font-mono text-[11px] text-slate-500" x-text="user.last_ip"></td>
                                             <td>
-                                                <span x-show="user.mfa" class="text-emerald-600">✓</span>
-                                                <span x-show="!user.mfa" class="text-rose-500">✗</span>
+                                                <span x-show="user.mfa" class="text-emerald-600"><x-ui.icon name="check" /></span>
+                                                <span x-show="!user.mfa" class="text-rose-500"><x-ui.icon name="xmark" /></span>
                                             </td>
                                             <td class="tabular-nums text-sm font-medium" x-text="user.sessions"></td>
                                             <td class="text-right">
@@ -225,7 +225,7 @@
                                         @foreach ($permissions['actions'] as $action)
                                             <td class="px-1 py-2 text-center">
                                                 @if ($row['grants'][$action] ?? false)
-                                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-600">✓</span>
+                                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-600"><x-ui.icon name="check" class="text-xs" /></span>
                                                 @else
                                                     <span class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 text-slate-300 dark:bg-slate-800">—</span>
                                                 @endif

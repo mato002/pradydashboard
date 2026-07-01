@@ -62,14 +62,11 @@
                             <td class="px-4 py-3 text-xs">{{ filled($key['last_used_at'] ?? null) ? \Illuminate\Support\Carbon::parse($key['last_used_at'])->diffForHumans() : '—' }}</td>
                             <td class="px-4 py-3 text-xs">{{ filled($key['expires_at'] ?? null) ? \Illuminate\Support\Carbon::parse($key['expires_at'])->format('M j, Y H:i') : '—' }}</td>
                             @permission('payments_gateway.manage')
-                            <td class="px-4 py-3">
+                            <td class="px-4 py-3 text-right" @click.stop>
                                 @if (($key['status'] ?? '') !== 'revoked')
-                                    @include('settings.integrations.payments-gateway.partials.action-form', [
-                                        'action' => route('settings.payments-gateway.payment-profiles.api-keys.revoke', [$profileUuid, $key['uuid']]),
-                                        'label' => __('Revoke'),
-                                        'confirm' => __('Revoke this gateway API key? Integrations using it will stop working.'),
-                                        'variant' => 'danger',
-                                    ])
+                                    <x-ui.row-actions-menu>
+                                        <x-ui.row-action :href="route('settings.payments-gateway.payment-profiles.api-keys.revoke', [$profileUuid, $key['uuid']])" method="POST" :confirm="__('Revoke this gateway API key? Integrations using it will stop working.')" danger>{{ __('Revoke') }}</x-ui.row-action>
+                                    </x-ui.row-actions-menu>
                                 @else
                                     —
                                 @endif

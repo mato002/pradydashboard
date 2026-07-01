@@ -88,7 +88,7 @@
             <x-ui.kpi-card :title="__('Avg Disk')" :value="$kpis['avgDisk'].'%'" :animate="false" :sublabel="__('Block storage')" :points="$utilizationTrends['disk']" tone="amber">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" /></svg></x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Active Alerts')" :value="$kpis['activeAlerts']" :trend="$kpis['activeAlerts'] > 0 ? '!' : '✓'" :sublabel="__('WARNING + CRITICAL')" :points="$spark('sh-alerts')" tone="rose">
+            <x-ui.kpi-card :title="__('Active Alerts')" :value="$kpis['activeAlerts']" :trend="$kpis['activeAlerts'] > 0 ? '!' : 'check'" :sublabel="__('WARNING + CRITICAL')" :points="$spark('sh-alerts')" tone="rose">
                 <x-slot name="icon"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9-.75a9 9 0 1118 0 9 9 0 01-18 0zm-9 3.75h.008v.008H12v-.008z" /></svg></x-slot>
             </x-ui.kpi-card>
         </div>

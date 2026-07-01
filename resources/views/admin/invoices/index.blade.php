@@ -15,16 +15,14 @@
                 <h2 class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">{{ __('Financial Operations Command Center') }}</h2>
                 <p class="mt-1 max-w-2xl text-sm text-slate-500">{{ __('Subscriptions, invoicing, collections, documents, and automation — real data only.') }}</p>
             </div>
-            <div class="flex flex-wrap gap-2">
-                <a href="{{ route('invoices.create', ['type' => 'invoice']) }}" class="rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow">{{ __('Create Invoice') }}</a>
-                <a href="{{ route('invoices.create', ['type' => 'proforma']) }}" class="rounded-xl border border-teal-600 px-3 py-2.5 text-sm font-semibold text-teal-700 dark:text-teal-300">{{ __('Create Proforma') }}</a>
-                <a href="{{ route('invoices.create', ['type' => 'quotation']) }}" class="rounded-xl border border-violet-600 px-3 py-2.5 text-sm font-semibold text-violet-700 dark:text-violet-300">{{ __('Create Quotation') }}</a>
-                <a href="{{ route('invoices.create', ['type' => 'receipt']) }}" class="rounded-xl border border-emerald-600 px-3 py-2.5 text-sm font-semibold text-emerald-700 dark:text-emerald-300">{{ __('Create Receipt') }}</a>
-                <form method="POST" action="{{ route('invoices.generate') }}">@csrf
-                    <button type="submit" class="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg">{{ __('Run billing cycle') }}</button>
-                </form>
-                <a href="{{ route('invoices.index', ['tab' => 'collections']) }}" class="rounded-xl border border-amber-600 px-4 py-2.5 text-sm font-semibold text-amber-800 dark:text-amber-200">{{ __('Collections') }}</a>
-            </div>
+            <x-ui.page-actions-menu :label="__('Actions')">
+                <x-ui.row-action href="{{ route('invoices.create', ['type' => 'invoice']) }}">{{ __('Create Invoice') }}</x-ui.row-action>
+                <x-ui.row-action href="{{ route('invoices.create', ['type' => 'proforma']) }}">{{ __('Create Proforma') }}</x-ui.row-action>
+                <x-ui.row-action href="{{ route('invoices.create', ['type' => 'quotation']) }}">{{ __('Create Quotation') }}</x-ui.row-action>
+                <x-ui.row-action href="{{ route('invoices.create', ['type' => 'receipt']) }}">{{ __('Create Receipt') }}</x-ui.row-action>
+                <x-ui.row-action href="{{ route('invoices.generate') }}" method="POST">{{ __('Run billing cycle') }}</x-ui.row-action>
+                <x-ui.row-action href="{{ route('invoices.index', ['tab' => 'collections']) }}">{{ __('Collections') }}</x-ui.row-action>
+            </x-ui.page-actions-menu>
         </div>
 
         @include('admin.invoices.partials.nav')

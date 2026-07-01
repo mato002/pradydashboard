@@ -3,7 +3,6 @@
 namespace App\Domain\Billing;
 
 use App\Domain\Activity\ActivityLogger;
-use App\Models\DocumentTemplate;
 use App\Models\Tenant;
 use App\Models\TenantInvoice;
 use App\Models\TenantInvoiceLineItem;
@@ -28,6 +27,7 @@ class ManualDocumentCreator
         private readonly InvoicePaymentRecorder $paymentRecorder,
         private readonly ReceiptGenerator $receiptGenerator,
         private readonly ActivityLogger $activityLogger,
+        private readonly DocumentTemplateResolver $templateResolver,
     ) {}
 
     /**
@@ -149,6 +149,12 @@ class ManualDocumentCreator
         if ($source->document_type === BillingDocumentType::RECEIPT) {
             throw ValidationException::withMessages([
                 'linked_invoice_id' => [__('Cannot link a receipt to another receipt.')],
+            ]);
+        }
+
+        if (! empty($data['tenant_id']) && (int) $source->tenant_id !== (int) $data['tenant_id']) {
+            throw ValidationException::withMessages([
+                'linked_invoice_id' => [__('The selected invoice does not belong to this tenant.')],
             ]);
         }
 
@@ -352,23 +358,7 @@ class ManualDocumentCreator
      */
     private function resolveTemplateId(string $documentType, array $data): ?int
     {
-        if (! empty($data['document_template_id'])) {
-            $id = (int) $data['document_template_id'];
-            $exists = DocumentTemplate::query()
-                ->whereKey($id)
-                ->where('type', $documentType)
-                ->where('active', true)
-                ->exists();
-            if ($exists) {
-                return $id;
-            }
-        }
-
-        return DocumentTemplate::query()
-            ->where('type', $documentType)
-            ->where('active', true)
-            ->orderByDesc('is_default')
-            ->value('id');
+        return $this->templateResolver->defaultTemplateId($documentType);
     }
 
     private function logCreated(TenantInvoice $invoice): void

@@ -34,8 +34,10 @@
                             <td class="px-3 py-2"><x-ui.status-badge :variant="$severityVariant($mapped)">{{ strtoupper((string) ($item['overall_status'] ?? 'unknown')) }}</x-ui.status-badge></td>
                             <td class="px-3 py-2 text-xs">{{ $item['duration_ms'] ?? $item['duration_seconds'] ?? '—' }}</td>
                             <td class="px-3 py-2 text-xs">{{ ! empty($item['strict_mode']) ? __('Yes') : __('No') }}</td>
-                            <td class="px-3 py-2">
-                                <a href="{{ route('settings.payments-gateway.launch-console', array_filter(['validation_run_uuid' => $item['uuid'] ?? null, 'paybill_account_uuid' => $item['paybill_account_uuid'] ?? null, 'environment' => $item['environment'] ?? null])) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View') }}</a>
+                            <td class="px-3 py-2 text-right" @click.stop>
+                                <x-ui.row-actions-menu>
+                                    <x-ui.row-action :href="route('settings.payments-gateway.launch-console', array_filter(['validation_run_uuid' => $item['uuid'] ?? null, 'paybill_account_uuid' => $item['paybill_account_uuid'] ?? null, 'environment' => $item['environment'] ?? null]))">{{ __('View') }}</x-ui.row-action>
+                                </x-ui.row-actions-menu>
                             </td>
                         </tr>
                     @empty

@@ -65,7 +65,11 @@
                                 <td class="px-4 py-3">{{ $item['phone_number'] ?? '—' }}</td>
                                 <td class="px-4 py-3 font-mono text-xs">{{ $item['internal_reference'] ?? '—' }}</td>
                                 <td class="px-4 py-3 text-xs">{{ filled($item['created_at'] ?? null) ? \Illuminate\Support\Carbon::parse($item['created_at'])->format('M j, H:i') : '—' }}</td>
-                                <td class="px-4 py-3"><a href="{{ route('settings.payments-gateway.transactions.show', $item['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View') }}</a></td>
+                                <td class="px-4 py-3 text-right" @click.stop>
+                                    <x-ui.row-actions-menu>
+                                        <x-ui.row-action :href="route('settings.payments-gateway.transactions.show', $item['uuid'])">{{ __('View') }}</x-ui.row-action>
+                                    </x-ui.row-actions-menu>
+                                </td>
                             </tr>
                         @empty
                             <tr><td colspan="13" class="px-4 py-8 text-center text-slate-500">{{ $gatewayUnavailable ? __('No data while Payments Gateway is unavailable.') : __('No transactions found.') }}</td></tr>

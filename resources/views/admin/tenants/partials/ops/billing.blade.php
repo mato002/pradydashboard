@@ -46,6 +46,12 @@
             </button>
         </form>
     @endif
+    <form method="post" action="{{ route('tenants.billing.generate-statement', $tenant) }}">
+        @csrf
+        <button type="submit" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200">
+            {{ __('Generate account statement') }}
+        </button>
+    </form>
 </div>
 
 <div class="grid gap-6 lg:grid-cols-2">

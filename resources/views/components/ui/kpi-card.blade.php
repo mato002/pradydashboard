@@ -57,12 +57,25 @@
                     <p class="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{{ $value }}</p>
                 @endif
                 @if ($trend)
-                    @php $trendUp = str_starts_with(ltrim($trend), '+'); @endphp
+                    @php
+                        $trendUp = str_starts_with(ltrim((string) $trend), '+');
+                        $trendIcon = match ($trend) {
+                            'check', '✓' => 'check',
+                            'xmark', '✗' => 'xmark',
+                            default => null,
+                        };
+                    @endphp
                     <span @class([
-                        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1',
-                        'bg-emerald-500/10 text-emerald-700 ring-emerald-500/15 dark:text-emerald-300' => $trendUp,
-                        'bg-rose-500/10 text-rose-700 ring-rose-500/15 dark:text-rose-300' => ! $trendUp,
-                    ])>{{ $trend }}</span>
+                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1',
+                        'bg-emerald-500/10 text-emerald-700 ring-emerald-500/15 dark:text-emerald-300' => $trendUp || $trendIcon === 'check',
+                        'bg-rose-500/10 text-rose-700 ring-rose-500/15 dark:text-rose-300' => ! $trendUp && $trendIcon !== 'check',
+                    ])>
+                        @if ($trendIcon)
+                            <x-ui.icon :name="$trendIcon" class="text-[10px]" />
+                        @else
+                            {{ $trend }}
+                        @endif
+                    </span>
                 @endif
             </div>
             @if ($sublabel)

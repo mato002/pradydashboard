@@ -192,6 +192,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('tenants.billing-profile.update');
     Route::post('tenants/{tenant}/billing/generate-draft', [TenantBillingController::class, 'generateDraft'])
         ->name('tenants.billing.generate-draft');
+    Route::post('tenants/{tenant}/billing/generate-statement', [TenantBillingController::class, 'generateStatement'])
+        ->name('tenants.billing.generate-statement');
     Route::patch('tenants/{tenant}/status', [TenantController::class, 'updateStatus'])
         ->name('tenants.status.update')
         ->middleware('permission:tenants.update');
@@ -441,6 +443,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('invoices', [InvoiceController::class, 'index'])->middleware('permission:invoices.view')->name('invoices.index');
     Route::get('invoices/create', [InvoiceController::class, 'create'])->middleware('permission:invoices.generate')->name('invoices.create');
     Route::post('invoices/manual', [InvoiceController::class, 'store'])->middleware('permission:invoices.generate')->name('invoices.manual.store');
+    Route::post('invoices/manual/preview', [InvoiceController::class, 'previewManualDocument'])->middleware('permission:invoices.generate')->name('invoices.manual.preview');
     Route::post('invoices/payments/record', [PaymentReconciliationController::class, 'store'])->middleware('permission:invoices.record_payment')->name('invoices.payments.record');
     Route::get('invoices/payments/{payment}/suggestions', [PaymentReconciliationController::class, 'suggestions'])->middleware('permission:invoices.view')->name('invoices.payments.suggestions');
     Route::post('invoices/payments/{payment}/match', [PaymentReconciliationController::class, 'match'])->middleware('permission:invoices.record_payment')->name('invoices.payments.match');

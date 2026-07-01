@@ -175,18 +175,12 @@
                                             <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ $payment->gatewayLabel() }}</span>
                                         </td>
                                         <td class="text-xs text-slate-500">{{ $payment->paid_at?->format('M j, Y H:i') ?? $payment->created_at?->format('M j, Y') }}</td>
-                                        <td class="text-right">
-                                            <div class="inline-flex gap-1 opacity-70 transition group-hover:opacity-100">
-                                                <button type="button" title="{{ __('View Receipt') }}" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-emerald-600 dark:hover:bg-slate-800">
-                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75H7.5m-1.5-3H21M3.75 19.5h15A2.25 2.25 0 0 0 21 17.25V9.75A2.25 2.25 0 0 0 18.75 7.5h-15A2.25 2.25 0 0 0 2.25 9.75v7.75A2.25 2.25 0 0 0 4.5 19.5Z" /></svg>
-                                                </button>
-                                                <button type="button" title="{{ __('Allocate') }}" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800">
-                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
-                                                </button>
-                                                <button type="button" title="{{ __('Refund') }}" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-violet-600 dark:hover:bg-slate-800">
-                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 010 12h-3" /></svg>
-                                                </button>
-                                            </div>
+                                        <td class="text-right" @click.stop>
+                                            <x-ui.row-actions-menu>
+                                                <x-ui.row-action>{{ __('View Receipt') }}</x-ui.row-action>
+                                                <x-ui.row-action>{{ __('Allocate') }}</x-ui.row-action>
+                                                <x-ui.row-action>{{ __('Refund') }}</x-ui.row-action>
+                                            </x-ui.row-actions-menu>
                                         </td>
                                     </tr>
                                 @empty

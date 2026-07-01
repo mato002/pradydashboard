@@ -53,14 +53,14 @@
                                     </x-ui.status-badge>
                                 </td>
                                 <td class="px-4 py-3 max-w-xs truncate text-xs text-slate-600 dark:text-slate-300">{{ $profile['tenant_webhook_url'] ?? '—' }}</td>
-                                <td class="px-4 py-3">
-                                    <div class="flex flex-col gap-1">
-                                        <a href="{{ route('settings.payments-gateway.payment-profiles.show', $profile['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View profile') }}</a>
+                                <td class="px-4 py-3 text-right" @click.stop>
+                                    <x-ui.row-actions-menu>
+                                        <x-ui.row-action :href="route('settings.payments-gateway.payment-profiles.show', $profile['uuid'])">{{ __('View profile') }}</x-ui.row-action>
                                         @permission('payments_gateway.manage')
-                                        <a href="{{ route('settings.payments-gateway.payment-profiles.edit', $profile['uuid']) }}" class="text-xs font-semibold text-slate-600 dark:text-slate-300">{{ __('Edit') }}</a>
+                                            <x-ui.row-action :href="route('settings.payments-gateway.payment-profiles.edit', $profile['uuid'])">{{ __('Edit') }}</x-ui.row-action>
                                         @endpermission
-                                        <a href="{{ route('settings.payments-gateway.payment-profiles.paybill-accounts.index', $profile['uuid']) }}" class="text-xs font-semibold text-slate-600 dark:text-slate-300">{{ __('View PayBills') }}</a>
-                                    </div>
+                                        <x-ui.row-action :href="route('settings.payments-gateway.payment-profiles.paybill-accounts.index', $profile['uuid'])">{{ __('View PayBills') }}</x-ui.row-action>
+                                    </x-ui.row-actions-menu>
                                 </td>
                             </tr>
                         @empty

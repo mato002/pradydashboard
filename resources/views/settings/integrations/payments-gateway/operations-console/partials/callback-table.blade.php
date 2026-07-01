@@ -21,9 +21,11 @@
                             default => 'neutral',
                         }">{{ ucfirst((string) ($item['processing_status'] ?? $item['status'] ?? 'unknown')) }}</x-ui.status-badge>
                     </td>
-                    <td class="px-3 py-2">
+                    <td class="px-3 py-2 text-right" @click.stop>
                         @if (filled($item['uuid'] ?? null))
-                            <a href="{{ route('settings.payments-gateway.callback-logs.show', $item['uuid']) }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{{ __('View') }}</a>
+                            <x-ui.row-actions-menu>
+                                <x-ui.row-action :href="route('settings.payments-gateway.callback-logs.show', $item['uuid'])">{{ __('View') }}</x-ui.row-action>
+                            </x-ui.row-actions-menu>
                         @else
                             —
                         @endif

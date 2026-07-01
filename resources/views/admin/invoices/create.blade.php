@@ -12,26 +12,53 @@
         default => 'info',
     };
     $heading = __('Create :type', ['type' => $typeLabels[$documentType] ?? __('Document')]);
+    $defaultLineItem = [
+        'description' => '',
+        'quantity' => 1,
+        'unit_price' => 0,
+        'discount' => 0,
+        'tax_rate' => 0,
+        'item_type' => 'custom',
+    ];
+    $initialLineItems = old('line_items');
+    if (! is_array($initialLineItems) || $initialLineItems === []) {
+        $initialLineItems = [$defaultLineItem];
+    }
 @endphp
 
 <x-dashboard-layout :heading="$heading" :subheading="__('Manual financial document')">
-    @php
-        $defaultTemplateId = old('document_template_id', $templates->firstWhere('is_default')?->id ?? $templates->first()?->id);
-    @endphp
-
     <div
         x-data="manualDocumentForm(@js([
             'documentType' => $documentType,
             'currency' => old('currency', $defaultCurrency),
-            'lineItems' => old('line_items', [['description' => '', 'quantity' => 1, 'unit_price' => 0, 'discount' => 0, 'tax_rate' => 0, 'item_type' => 'custom']]),
+            'lineItems' => $initialLineItems,
             'tenantProfileBase' => url('/invoices/tenants'),
             'oldTenantId' => old('tenant_id', ''),
             'oldSubscriptionId' => old('tenant_project_subscription_id', ''),
-            'oldTemplateId' => $defaultTemplateId,
-            'templates' => $templatesMeta,
+            'clientName' => old('manual_client_name', ''),
+            'clientEmail' => old('manual_client_email', ''),
+            'clientPhone' => old('manual_client_phone', ''),
+            'clientAddress' => old('manual_client_address', ''),
+            'issueDate' => old('issue_date', now()->toDateString()),
+            'dueDate' => old('due_date', ''),
+            'paymentDate' => old('payment_date', now()->toDateString()),
+            'notes' => old('notes', ''),
+            'linkedInvoiceId' => old('linked_invoice_id', ''),
+            'receiptAmount' => old('amount_received', 0),
+            'receiptLineDesc' => old('line_description', __('Payment received')),
+            'amountPaid' => old('amount_paid', 0),
             'previewCompany' => $previewCompany,
             'paymentOptions' => $paymentOptions,
             'numberPrefix' => \App\Support\Billing\BillingDocumentType::numberPrefix($documentType),
+            'previewUrl' => route('invoices.manual.preview'),
+            'initialPreviewHtml' => $initialPreviewHtml ?? '',
+            'initialPreviewPaperSize' => $initialPreviewPaperSize ?? 'A5',
+            'openInvoices' => $openInvoicesPicker ?? [],
+            'typeLabels' => $typeLabels,
+            'i18n' => [
+                'clientName' => __('Client name'),
+                'paymentReceived' => __('Payment received'),
+            ],
         ]))"
     >
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -70,38 +97,6 @@
         @csrf
         <input type="hidden" name="document_type" value="{{ $documentType }}">
 
-        {{-- Document template --}}
-        <div class="rounded-2xl border-2 border-indigo-200 bg-indigo-50/40 p-5 shadow-sm dark:border-indigo-900/60 dark:bg-indigo-950/30">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Document template') }}</h3>
-                    <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">{{ __('Layout used for preview and PDF. You can change it after saving.') }}</p>
-                </div>
-                @if ($templates->isNotEmpty())
-                    <span class="rounded-full bg-white px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-200 dark:bg-slate-900 dark:text-indigo-300 dark:ring-indigo-800">
-                        {{ trans_choice(':count template|:count templates', $templates->count(), ['count' => $templates->count()]) }}
-                    </span>
-                @endif
-            </div>
-            @if ($templates->isEmpty())
-                <p class="mt-3 text-sm text-amber-800 dark:text-amber-200">{{ __('No active templates for this document type. Add one under Templates tab.') }}</p>
-            @else
-                <select
-                    name="document_template_id"
-                    x-model="templateId"
-                    class="mt-4 w-full rounded-lg border-indigo-200 bg-white text-sm font-medium dark:border-indigo-800 dark:bg-slate-950"
-                >
-                    @foreach ($templates as $tpl)
-                        <option value="{{ $tpl->id }}" @selected(old('document_template_id', $templates->firstWhere('is_default')?->id) == $tpl->id)>
-                            {{ $tpl->name }}
-                            @if ($tpl->is_default) — {{ __('Default') }} @endif
-                            ({{ strtoupper($tpl->paper_size) }})
-                        </option>
-                    @endforeach
-                </select>
-            @endif
-        </div>
-
         {{-- Client / tenant --}}
         <div class="rounded-2xl border bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Client') }}</h3>
@@ -110,7 +105,7 @@
                 <select
                     name="tenant_id"
                     x-model="tenantId"
-                    @change="loadTenant()"
+                    @change="onTenantChange()"
                     class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950"
                 >
                     <option value="">{{ __('— No tenant (manual client) —') }}</option>
@@ -238,12 +233,13 @@
                         <label class="text-xs text-slate-500">{{ __('Link to invoice (optional)') }}</label>
                         <select name="linked_invoice_id" x-model="linkedInvoiceId" class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950">
                             <option value="">{{ __('Standalone receipt') }}</option>
-                            @foreach ($openInvoices as $inv)
-                                <option value="{{ $inv->id }}" @selected(old('linked_invoice_id') == $inv->id)>
-                                    {{ $inv->invoice_number }} — {{ $inv->currency }} {{ number_format($inv->total, 2) }}
-                                </option>
-                            @endforeach
+                            <template x-for="inv in filteredOpenInvoices()" :key="inv.id">
+                                <option :value="inv.id" x-text="inv.label"></option>
+                            </template>
                         </select>
+                        <p x-show="tenantId && filteredOpenInvoices().length === 0" x-cloak class="mt-1 text-xs text-slate-500">
+                            {{ __('No open invoices for this tenant.') }}
+                        </p>
                     </div>
                     <div>
                         <label class="text-xs text-slate-500">{{ __('Amount received') }} *</label>
@@ -284,7 +280,7 @@
                 </div>
 
                 <div class="overflow-x-auto">
-                    <table class="min-w-[720px] w-full text-left text-sm">
+                    <table class="line-items-table min-w-[720px] w-full text-left text-sm">
                         <thead class="border-b border-slate-100 bg-slate-50/80 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950/50">
                             <tr>
                                 <th class="w-8 px-3 py-2">#</th>
@@ -325,17 +321,11 @@
                                         <input type="number" step="0.01" min="0" :name="'line_items['+index+'][tax_rate]'" x-model.number="line.tax_rate" class="w-full rounded border-slate-300 text-right text-sm dark:bg-slate-950">
                                     </td>
                                     <td class="px-3 py-2 text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-300" x-text="formatMoney(lineTotal(line))"></td>
-                                    <td class="px-3 py-2 text-right">
-                                        <div class="inline-flex gap-1">
-                                            <button type="button" @click="duplicateLine(index)" title="{{ __('Duplicate') }}" class="rounded border px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800">⧉</button>
-                                            <button
-                                                type="button"
-                                                @click="removeLine(index)"
-                                                :disabled="lines.length <= 1"
-                                                title="{{ __('Remove') }}"
-                                                class="rounded border border-rose-200 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-30 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950"
-                                            >{{ __('Remove') }}</button>
-                                        </div>
+                                    <td class="px-3 py-2 text-right" @click.stop>
+                                        <x-ui.row-actions-menu>
+                                            <x-ui.row-action @click="duplicateLine(index)">{{ __('Duplicate') }}</x-ui.row-action>
+                                            <x-ui.row-action @click="removeLine(index)" x-bind:disabled="lines.length <= 1" danger>{{ __('Remove') }}</x-ui.row-action>
+                                        </x-ui.row-actions-menu>
                                     </td>
                                 </tr>
                             </template>
@@ -400,7 +390,7 @@
     <div class="manual-document-create-preview">
         @include('admin.invoices.partials.manual-document-preview', [
             'documentType' => $documentType,
-            'templates' => $templates,
+            'defaultTemplate' => $defaultTemplate,
             'typeLabels' => $typeLabels,
             'typeBadgeVariant' => $typeBadgeVariant,
             'previewMode' => 'desktop',
@@ -411,7 +401,7 @@
     <div class="manual-document-create-preview-mobile lg:hidden">
         @include('admin.invoices.partials.manual-document-preview', [
             'documentType' => $documentType,
-            'templates' => $templates,
+            'defaultTemplate' => $defaultTemplate,
             'typeLabels' => $typeLabels,
             'typeBadgeVariant' => $typeBadgeVariant,
             'previewMode' => 'mobile',
@@ -419,215 +409,18 @@
     </div>
     </div>
 
-    <script>
-        function manualDocumentForm(config) {
-            const profileUrlBase = (config.tenantProfileBase || '').replace(/\/$/, '');
-            const templates = config.templates || [];
-            const defaultTemplateId = templates.length
-                ? String(config.oldTemplateId || templates.find(t => t.is_default)?.id || templates[0].id)
-                : '';
-            return {
-                documentType: config.documentType,
-                currency: config.currency,
-                templates,
-                previewCompany: config.previewCompany || {},
-                paymentOptions: config.paymentOptions || {},
-                numberPrefix: config.numberPrefix || 'INV',
-                templateId: defaultTemplateId,
-                tenantId: String(config.oldTenantId || ''),
-                subscriptionId: String(config.oldSubscriptionId || ''),
-                clientName: @json(old('manual_client_name', '')),
-                clientEmail: @json(old('manual_client_email', '')),
-                clientPhone: @json(old('manual_client_phone', '')),
-                clientAddress: @json(old('manual_client_address', '')),
-                issueDate: @json(old('issue_date', now()->toDateString())),
-                dueDate: @json(old('due_date', '')),
-                paymentDate: @json(old('payment_date', now()->toDateString())),
-                notes: @json(old('notes', '')),
-                linkedInvoiceId: @json(old('linked_invoice_id', '')),
-                receiptAmount: parseFloat(@json(old('amount_received', 0))) || 0,
-                receiptLineDesc: @json(old('line_description', __('Payment received'))),
-                amountPaid: parseFloat(@json(old('amount_paid', 0))) || 0,
-                previewOpen: false,
-                previewZoom: 1,
-                tenantProfile: null,
-                profileLoading: false,
-                subscriptions: [],
-                lines: config.lineItems.map((l, i) => ({
-                    _key: 'line-' + i + '-' + Date.now(),
-                    description: l.description || '',
-                    quantity: parseFloat(l.quantity) || 1,
-                    unit_price: parseFloat(l.unit_price) || 0,
-                    discount: parseFloat(l.discount) || 0,
-                    tax_rate: parseFloat(l.tax_rate) || 0,
-                    item_type: l.item_type || 'custom',
-                })),
-                selectedTemplate() {
-                    if (!this.templates.length) return null;
-                    return this.templates.find(t => String(t.id) === String(this.templateId)) || this.templates[0];
-                },
-                previewLayout() {
-                    const style = this.selectedTemplate()?.style || '';
-                    if (style === 'prady_classic_a5') return 'prady_classic_a5';
-                    if (style === 'thermal_receipt') return 'thermal_receipt';
-                    return 'generic';
-                },
-                previewBranding() {
-                    return this.selectedTemplate()?.branding || {};
-                },
-                documentTypeBadge() {
-                    const labels = { invoice: @json(__('Invoice')), proforma: @json(__('Proforma')), quotation: @json(__('Quotation')), receipt: @json(__('Receipt')) };
-                    return labels[this.documentType] || this.documentType;
-                },
-                documentPreviewTitle() {
-                    const titles = {
-                        invoice: 'INVOICE',
-                        proforma: 'PROFORMA INVOICE',
-                        quotation: 'QUOTATION',
-                        receipt: 'RECEIPT',
-                    };
-                    return titles[this.documentType] || 'DOCUMENT';
-                },
-                previewDocNumber() {
-                    return this.numberPrefix + '-DRAFT-0000';
-                },
-                previewIssueDate() {
-                    return this.issueDate || '—';
-                },
-                previewDueDate() {
-                    return this.dueDate || '';
-                },
-                previewPaymentDate() {
-                    return this.paymentDate || this.issueDate || '';
-                },
-                previewClientName() {
-                    if (this.tenantId && this.tenantProfile?.company_name) {
-                        return this.tenantProfile.company_name;
-                    }
-                    const name = (this.clientName || '').trim();
-                    return name || @json(__('Client name'));
-                },
-                previewClientAttention() {
-                    if (this.tenantId && this.tenantProfile?.billing_contact_name) {
-                        const c = this.tenantProfile.billing_contact_name;
-                        if (c && c !== this.previewClientName()) return c;
-                    }
-                    return '';
-                },
-                previewClientEmail() {
-                    if (this.tenantId) return this.tenantProfile?.billing_email || '';
-                    return (this.clientEmail || '').trim();
-                },
-                previewClientPhone() {
-                    if (this.tenantId) return this.tenantProfile?.billing_phone || '';
-                    return (this.clientPhone || '').trim();
-                },
-                previewClientAddress() {
-                    if (this.tenantId) return this.tenantProfile?.billing_address || '';
-                    return (this.clientAddress || '').trim();
-                },
-                receiptLineDescription() {
-                    return (this.receiptLineDesc || '').trim() || @json(__('Payment received'));
-                },
-                formatQty(qty) {
-                    const n = parseFloat(qty) || 0;
-                    return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 });
-                },
-                formatAmount(amount) {
-                    const n = parseFloat(amount) || 0;
-                    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                },
-                lineSubtotal(line) {
-                    return Math.max(0, (line.quantity * line.unit_price) - line.discount);
-                },
-                lineTax(line) {
-                    return Math.round(this.lineSubtotal(line) * (line.tax_rate / 100) * 100) / 100;
-                },
-                lineTotal(line) {
-                    return Math.round((this.lineSubtotal(line) + this.lineTax(line)) * 100) / 100;
-                },
-                totals() {
-                    let subtotal = 0, discount = 0, tax = 0;
-                    this.lines.forEach(line => {
-                        const sub = this.lineSubtotal(line);
-                        subtotal += sub;
-                        discount += Math.max(0, parseFloat(line.discount) || 0);
-                        tax += this.lineTax(line);
-                    });
-                    subtotal = Math.round(subtotal * 100) / 100;
-                    tax = Math.round(tax * 100) / 100;
-                    return {
-                        subtotal,
-                        discount: Math.round(discount * 100) / 100,
-                        tax,
-                        total: Math.round((subtotal + tax) * 100) / 100,
-                    };
-                },
-                formatMoney(amount) {
-                    const n = parseFloat(amount) || 0;
-                    return (this.currency || 'KES') + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                },
-                addLine() {
-                    this.lines.push({
-                        _key: 'line-' + Date.now() + '-' + Math.random().toString(36).slice(2),
-                        description: '',
-                        quantity: 1,
-                        unit_price: 0,
-                        discount: 0,
-                        tax_rate: 0,
-                        item_type: 'custom',
-                    });
-                },
-                duplicateLine(index) {
-                    const src = this.lines[index];
-                    this.lines.splice(index + 1, 0, {
-                        _key: 'line-' + Date.now() + '-' + Math.random().toString(36).slice(2),
-                        description: src.description,
-                        quantity: src.quantity,
-                        unit_price: src.unit_price,
-                        discount: src.discount,
-                        tax_rate: src.tax_rate,
-                        item_type: src.item_type,
-                    });
-                },
-                removeLine(i) {
-                    if (this.lines.length > 1) this.lines.splice(i, 1);
-                },
-                async loadTenant() {
-                    if (!this.tenantId) {
-                        this.tenantProfile = null;
-                        this.subscriptions = [];
-                        this.subscriptionId = '';
-                        return;
-                    }
-                    this.profileLoading = true;
-                    try {
-                        const res = await fetch(profileUrlBase + this.tenantId + '/billing-profile');
-                        if (!res.ok) throw new Error('profile');
-                        const data = await res.json();
-                        this.tenantProfile = data;
-                        this.clientEmail = data.billing_email || '';
-                        this.clientPhone = data.billing_phone || '';
-                        this.clientAddress = data.billing_address || '';
-                        this.clientName = data.company_name || '';
-                        this.subscriptions = data.subscriptions || [];
-                        if (data.currency) this.currency = data.currency;
-                        if (this.subscriptionId && !this.subscriptions.some(s => String(s.id) === String(this.subscriptionId))) {
-                            this.subscriptionId = '';
-                        }
-                    } catch {
-                        this.tenantProfile = null;
-                    } finally {
-                        this.profileLoading = false;
-                    }
-                },
-                init() {
-                    if (this.tenantId) this.loadTenant();
-                    if (!this.templateId && this.templates.length) {
-                        this.templateId = String(this.templates[0].id);
-                    }
-                },
-            };
-        }
-    </script>
+    @once
+        <style>
+            #manual-document-create-layout .line-items-table input[type=number]::-webkit-outer-spin-button,
+            #manual-document-create-layout .line-items-table input[type=number]::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+
+            #manual-document-create-layout .line-items-table input[type=number] {
+                -moz-appearance: textfield;
+                appearance: textfield;
+            }
+        </style>
+    @endonce
 </x-dashboard-layout>

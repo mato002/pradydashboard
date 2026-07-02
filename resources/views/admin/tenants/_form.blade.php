@@ -1,5 +1,6 @@
 @php
     $section = $section ?? 'all';
+    $compact = $compact ?? false;
     $selectClass = $selectClass ?? 'mt-1 block w-full rounded-xl border-slate-200/80 bg-white text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
     $textareaClass = $textareaClass ?? $selectClass.' min-h-[80px]';
     $plans = $plans ?? collect();
@@ -23,6 +24,7 @@
             <x-input-error class="mt-2" :messages="$errors->get('company_name')" />
         </div>
 
+        @unless ($compact)
         <div>
             <x-input-label for="business_type" :value="__('Business type')" />
             <x-text-input id="business_type" name="business_type" type="text" class="{{ $selectClass }}" :value="old('business_type', $tenant->business_type)" placeholder="Property, Retail, Healthcare…" />
@@ -40,18 +42,44 @@
                     <textarea id="physical_address" name="physical_address" rows="2" class="{{ $textareaClass }}">{{ old('physical_address', $tenant->physical_address) }}</textarea>
                     <x-input-error class="mt-2" :messages="$errors->get('physical_address')" />
                 </div>
+        @endunless
 
                 <div>
-                    <x-input-label for="country" :value="__('Country (ISO-2)')" />
-                    <x-text-input id="country" name="country" type="text" maxlength="2" class="{{ $selectClass }} uppercase" :value="old('country', $tenant->country)" placeholder="KE" />
+                    <x-input-label for="country" :value="__('Country')" />
+                    <select id="country" name="country" class="{{ $selectClass }}">
+                        <option value="">{{ __('Select country…') }}</option>
+                        @foreach (\App\Support\Phone\EastAfricaPhone::countries() as $eaCountry)
+                            <option
+                                value="{{ $eaCountry['iso'] }}"
+                                @selected(strtoupper(old('country', $tenant->country ?? 'KE')) === $eaCountry['iso'])
+                            >
+                                {{ $eaCountry['name'] }} ({{ $eaCountry['iso'] }})
+                            </option>
+                        @endforeach
+                    </select>
                     <x-input-error class="mt-2" :messages="$errors->get('country')" />
                 </div>
 
-                <div>
-                    <x-input-label for="logo_path" :value="__('Logo path / URL')" />
-                    <x-text-input id="logo_path" name="logo_path" type="text" class="{{ $selectClass }}" :value="old('logo_path', $tenant->logo_path)" />
-                    <x-input-error class="mt-2" :messages="$errors->get('logo_path')" />
-                </div>
+                @if ($tenant->exists)
+                    <details
+                        class="group md:col-span-2 rounded-xl border border-dashed border-slate-200/80 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-950/40"
+                        @if (filled(old('logo_path', $tenant->logo_path))) open @endif
+                    >
+                        <summary class="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-700 marker:content-none dark:text-slate-200 [&::-webkit-details-marker]:hidden">
+                            <span class="inline-flex items-center gap-2">
+                                <svg class="h-4 w-4 text-slate-400 transition group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+                                {{ __('Branding (optional)') }}
+                            </span>
+                            <span class="mt-0.5 block text-xs font-normal text-slate-500 dark:text-slate-400">{{ __('Skip this — not required to provision or go live.') }}</span>
+                        </summary>
+                        <div class="space-y-2 border-t border-slate-200/80 px-4 py-4 dark:border-slate-700">
+                            <x-input-label for="logo_path" :value="__('Company logo URL')" />
+                            <x-text-input id="logo_path" name="logo_path" type="text" class="{{ $selectClass }}" :value="old('logo_path', $tenant->logo_path)" placeholder="{{ __('Optional — https://… or leave blank') }}" />
+                            <p class="text-xs text-slate-500 dark:text-slate-400">{{ __('Public image URL only. Leave blank if you do not have a logo yet.') }}</p>
+                            <x-input-error class="mt-2" :messages="$errors->get('logo_path')" />
+                        </div>
+                    </details>
+                @endif
 
                 <div>
                     <x-input-label for="contact_person" :value="__('Contact person')" />
@@ -59,10 +87,19 @@
                     <x-input-error class="mt-2" :messages="$errors->get('contact_person')" />
                 </div>
 
+                @php
+                    $phoneParts = \App\Support\Phone\EastAfricaPhone::parse(
+                        $tenant->phone,
+                        \App\Support\Phone\EastAfricaPhone::dialForIso(old('country', $tenant->country ?? 'KE'))
+                    );
+                @endphp
                 <div>
-                    <x-input-label for="phone" :value="__('Phone')" />
-                    <x-text-input id="phone" name="phone" type="text" class="{{ $selectClass }}" :value="old('phone', $tenant->phone)" />
-                    <x-input-error class="mt-2" :messages="$errors->get('phone')" />
+                    <x-input-label for="phone_local" :value="__('Phone')" />
+                    <x-phone-input
+                        :dial-code="$phoneParts['dial_code']"
+                        :local="$phoneParts['local']"
+                        :select-class="$selectClass"
+                    />
                 </div>
 
                 <div class="md:col-span-2">
@@ -84,6 +121,7 @@
             <x-input-error class="mt-2" :messages="$errors->get('project_id')" />
         </div>
 
+        @unless ($compact)
         <div class="md:col-span-2">
             <x-input-label for="server_id" :value="__('Assigned server (optional)')" />
             <select id="server_id" name="server_id" class="{{ $selectClass }}">
@@ -107,27 +145,30 @@
             <x-text-input id="tenant_code" name="tenant_code" type="text" class="{{ $selectClass }} font-mono text-sm uppercase" :value="old('tenant_code', $tenant->tenant_code)" placeholder="{{ __('e.g. MATWARE') }}" />
             <x-input-error class="mt-2" :messages="$errors->get('tenant_code')" />
         </div>
+        @endunless
 
-        <div class="md:col-span-2">
+        <div class="{{ $compact ? 'md:col-span-2' : 'md:col-span-2' }}">
             <x-input-label for="tenant_domain" :value="__('Tenant application domain')" />
-            <x-text-input id="tenant_domain" name="tenant_domain" type="text" class="{{ $selectClass }} font-mono text-sm" :value="old('tenant_domain', $tenant->tenant_domain)" placeholder="mfi.pradytec.com" />
+            <x-text-input id="tenant_domain" name="tenant_domain" type="text" class="{{ $selectClass }} font-mono text-sm" :value="old('tenant_domain', $tenant->tenant_domain)" placeholder="acme-mfi.pradytecai.com" :required="$compact" />
             <p class="mt-1 text-xs text-slate-500">{{ __('Must match the host users open in the browser (license check).') }}</p>
             <x-input-error class="mt-2" :messages="$errors->get('tenant_domain')" />
         </div>
 
+        @unless ($compact)
         <div>
             <x-input-label for="login_url" :value="__('Login URL')" />
             <x-text-input id="login_url" name="login_url" type="url" class="mt-1 block w-full" :value="old('login_url', $tenant->login_url)" />
             <x-input-error class="mt-2" :messages="$errors->get('login_url')" />
         </div>
+        @endunless
     @endif
 
     @if ($show('billing'))
         @if ($plans->isNotEmpty())
-            <div class="md:col-span-2">
+            <div class="{{ $compact ? 'md:col-span-2' : 'md:col-span-2' }}">
                 <x-input-label for="saas_plan_id" :value="__('SaaS plan')" />
                 <select id="saas_plan_id" name="saas_plan_id" class="{{ $selectClass }}">
-                    <option value="">{{ __('Custom / manual') }}</option>
+                    <option value="">{{ $compact ? __('Select a plan…') : __('Custom / manual') }}</option>
                     @foreach ($plans as $plan)
                         <option
                             value="{{ $plan->id }}"
@@ -143,6 +184,16 @@
             </div>
         @endif
 
+        @if ($compact)
+            <input type="hidden" name="subscription_plan" id="subscription_plan" value="{{ old('subscription_plan', $tenant->subscription_plan) }}" />
+            <input type="hidden" name="subscription_amount" id="subscription_amount" value="{{ old('subscription_amount', $tenant->subscription_amount ?? 0) }}" />
+            <input type="hidden" name="tenant_currency" value="{{ old('tenant_currency', $tenant->tenant_currency ?? 'KES') }}" />
+            <input type="hidden" name="billing_cycle" value="{{ old('billing_cycle', $tenant->billing_cycle ?? 'monthly') }}" />
+            <input type="hidden" name="status" value="{{ old('status', $tenant->status ?? 'trial') }}" />
+            <input type="hidden" name="start_date" value="{{ old('start_date', optional($tenant->start_date)->format('Y-m-d') ?? now()->format('Y-m-d')) }}" />
+            <input type="hidden" name="grace_days" value="{{ old('grace_days', $tenant->grace_days ?? 7) }}" />
+            <input type="hidden" name="penalties_total" value="{{ old('penalties_total', $tenant->penalties_total ?? 0) }}" />
+        @else
         <div>
             <x-input-label for="subscription_plan" :value="__('Plan label')" />
             <x-text-input id="subscription_plan" name="subscription_plan" type="text" class="mt-1 block w-full" :value="old('subscription_plan', $tenant->subscription_plan)" />
@@ -204,9 +255,10 @@
                     </select>
                     <x-input-error class="mt-2" :messages="$errors->get('status')" />
                 </div>
+        @endif
             @endif
 
-    @if ($show('infrastructure'))
+    @if ($show('infrastructure') && ! $compact)
         <div>
             <x-input-label for="cpanel_account_ref" :value="__('cPanel account ref')" />
             <x-text-input id="cpanel_account_ref" name="cpanel_account_ref" type="text" class="mt-1 block w-full" :value="old('cpanel_account_ref', $tenant->cpanel_account_ref)" />

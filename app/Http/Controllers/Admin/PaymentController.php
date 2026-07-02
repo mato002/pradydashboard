@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\Billing\ReconcilePaymentsBatchJob;
+use App\Jobs\Billing\RetryFailedPaymentsJob;
 use App\Support\DemoMode;
 use App\Support\OperationalMetrics;
 use App\Models\TenantPayment;
@@ -35,6 +37,11 @@ class PaymentController extends Controller
         }
 
         $payments = $query->paginate(14)->withQueryString();
+
+        $selectedGateway = $request->string('gateway')->toString();
+        $selectedGatewayLabel = $selectedGateway !== ''
+            ? ($this->buildGatewayFleet()->firstWhere('key', $selectedGateway)['name'] ?? ucfirst(str_replace('_', ' ', $selectedGateway)))
+            : null;
 
         $collected = (float) TenantPayment::query()->where('status', 'successful')->sum('amount');
         $failedCount = TenantPayment::query()->where('status', 'failed')->count();
@@ -75,11 +82,15 @@ class PaymentController extends Controller
             'gateways',
             'alerts',
             'recurring',
+            'selectedGateway',
+            'selectedGatewayLabel',
         ));
     }
 
     public function reconcile(Request $request): RedirectResponse
     {
+        ReconcilePaymentsBatchJob::dispatch();
+
         return redirect()
             ->route('payments.index')
             ->with('status', __('Reconciliation job queued for all open settlement batches.'));
@@ -87,6 +98,8 @@ class PaymentController extends Controller
 
     public function retryFailed(Request $request): RedirectResponse
     {
+        RetryFailedPaymentsJob::dispatch();
+
         return redirect()
             ->route('payments.index')
             ->with('status', __('Failed transaction retry sweep initiated across gateways.'));
@@ -272,8 +285,18 @@ class PaymentController extends Controller
                 'latency' => null,
                 'status' => $total === 0 ? 'unknown' : ($success >= 95 ? 'operational' : 'degraded'),
                 'volume' => $this->formatKes((float) ($stats->volume ?? 0)),
+                'transaction_count' => $total,
+                'manage_url' => $this->gatewayManageUrl($def['key']),
             ];
         });
+    }
+
+    private function gatewayManageUrl(string $key): string
+    {
+        return match ($key) {
+            'mpesa' => route('settings.payments-gateway.transactions.index', ['transaction_type' => 'mpesa']),
+            default => route('payments.index', ['gateway' => $key]).'#ledger',
+        };
     }
 
     /**

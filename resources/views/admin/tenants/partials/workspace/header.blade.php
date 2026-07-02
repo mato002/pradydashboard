@@ -30,6 +30,7 @@
         <a
             href="{{ route('tenants.edit', $tenant).'?return_tab='.urlencode($tab) }}"
             data-tenant-full-nav
+            data-turbo-frame="_top"
             class="inline-flex items-center rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
         >{{ __('Edit tenant') }}</a>
         <form method="post" action="{{ route('tenants.destroy', $tenant) }}" onsubmit="return confirm(@json(__('Delete this tenant?')));">

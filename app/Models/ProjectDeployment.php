@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class ProjectDeployment extends Model
 {
@@ -21,9 +22,21 @@ class ProjectDeployment extends Model
         ];
     }
 
+    public static function hostedProjectForeignKey(): string
+    {
+        static $key = null;
+
+        if ($key === null) {
+            $table = (new static)->getTable();
+            $key = Schema::hasColumn($table, 'hosted_project_id') ? 'hosted_project_id' : 'project_id';
+        }
+
+        return $key;
+    }
+
     public function hostedProject(): BelongsTo
     {
-        return $this->belongsTo(HostedProject::class, 'hosted_project_id');
+        return $this->belongsTo(HostedProject::class, static::hostedProjectForeignKey());
     }
 
     /** @deprecated Use hostedProject() */
@@ -34,11 +47,11 @@ class ProjectDeployment extends Model
 
     public function getProjectIdAttribute(): ?int
     {
-        return $this->hosted_project_id;
+        return $this->{static::hostedProjectForeignKey()};
     }
 
     public function setProjectIdAttribute(?int $value): void
     {
-        $this->attributes['hosted_project_id'] = $value;
+        $this->attributes[static::hostedProjectForeignKey()] = $value;
     }
 }

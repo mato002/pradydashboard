@@ -25,7 +25,7 @@ class PradyWorkspaceNavigationTest extends TestCase
             ->withHeader('X-Prady-Workspace', '1')
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('id="prady-workspace-content"', false)
+            ->assertSee('id="prady-workspace"', false)
             ->assertDontSee('x-data="pradyShell()"', false);
     }
 
@@ -37,7 +37,7 @@ class PradyWorkspaceNavigationTest extends TestCase
             ->withHeader('X-Prady-Workspace', '1')
             ->get(route('tenants.index'))
             ->assertOk()
-            ->assertSee('id="prady-workspace-content"', false);
+            ->assertSee('id="prady-workspace"', false);
     }
 
     public function test_unauthorized_partial_request_is_rejected(): void
@@ -52,7 +52,19 @@ class PradyWorkspaceNavigationTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_tenant_tab_partial_still_returns_panel_only(): void
+    public function test_turbo_frame_header_returns_workspace_content_only(): void
+    {
+        $user = $this->userWithDashboardAccess();
+
+        $this->actingAs($user)
+            ->withHeader('Turbo-Frame', 'prady-workspace')
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('id="prady-workspace"', false)
+            ->assertDontSee('x-data="pradyShell()"', false);
+    }
+
+    public function test_turbo_frame_header_returns_tenant_panel_only(): void
     {
         $user = $this->userWithTenantAccess();
         $project = HostedProject::query()->create([
@@ -68,11 +80,34 @@ class PradyWorkspaceNavigationTest extends TestCase
         ]);
 
         $this->actingAs($user)
+            ->withHeader('Turbo-Frame', 'tenant-workspace')
+            ->get(route('tenants.show', ['tenant' => $tenant, 'tab' => 'billing']))
+            ->assertOk()
+            ->assertSee('id="tenant-workspace"', false)
+            ->assertDontSee('id="prady-workspace"', false);
+    }
+
+    public function test_legacy_tenant_tab_partial_still_returns_panel_only(): void
+    {
+        $user = $this->userWithTenantAccess();
+        $project = HostedProject::query()->create([
+            'name' => 'Panel App Legacy',
+            'domain' => 'panel-legacy.test',
+        ]);
+        $tenant = Tenant::query()->create([
+            'hosted_project_id' => $project->id,
+            'company_name' => 'Panel Tenant Legacy',
+            'tenant_currency' => 'KES',
+            'billing_cycle' => 'monthly',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)
             ->withHeader('X-Tenant-Workspace', '1')
             ->get(route('tenants.show', ['tenant' => $tenant, 'tab' => 'billing']))
             ->assertOk()
-            ->assertSee('id="tenant-workspace-panel"', false)
-            ->assertDontSee('id="prady-workspace-content"', false);
+            ->assertSee('id="tenant-workspace"', false)
+            ->assertDontSee('id="prady-workspace"', false);
     }
 
     private function userWithDashboardAccess(): User

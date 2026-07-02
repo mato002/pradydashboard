@@ -25,7 +25,32 @@ class OperationalCache
 
         $key = $this->key($domain, $name, $scopeKey);
 
-        return Cache::remember($key, $ttlSeconds, $callback);
+        $cached = Cache::remember($key, $ttlSeconds, $callback);
+
+        if ($this->isBrokenCacheValue($cached)) {
+            Cache::forget($key);
+
+            return $callback();
+        }
+
+        return $cached;
+    }
+
+    private function isBrokenCacheValue(mixed $value): bool
+    {
+        if ($value instanceof \__PHP_Incomplete_Class) {
+            return true;
+        }
+
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                if ($this->isBrokenCacheValue($item)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -133,16 +133,67 @@ class OperationalRiskScanner
      */
     public function attentionRequired(int $limit = 10): Collection
     {
-        return $this->operationalCache->remember(
+        $cached = $this->operationalCache->remember(
             'risk',
             'attention:'.$limit,
             config('redis_cache.ttl.risk_attention', 120),
-            fn () => $this->scan()
-                ->reject(fn (array $r) => $r['acknowledged'])
-                ->whereIn('severity', ['critical', 'warning'])
-                ->take($limit)
-                ->values(),
+            fn () => $this->attentionRequiredPayload($limit),
         );
+
+        if (! is_array($cached)) {
+            return $this->hydrateAttentionRisks($this->attentionRequiredPayload($limit));
+        }
+
+        return $this->hydrateAttentionRisks($cached);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function attentionRequiredPayload(int $limit): array
+    {
+        return $this->scan()
+            ->reject(fn (array $r) => $r['acknowledged'])
+            ->whereIn('severity', ['critical', 'warning'])
+            ->take($limit)
+            ->values()
+            ->map(fn (array $risk) => $this->normalizeRiskForCache($risk))
+            ->all();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function hydrateAttentionRisks(array $rows): Collection
+    {
+        return collect($rows)->map(fn (array $risk) => $this->denormalizeRiskFromCache($risk));
+    }
+
+    /**
+     * @param  array<string, mixed>  $risk
+     * @return array<string, mixed>
+     */
+    private function normalizeRiskForCache(array $risk): array
+    {
+        if (($risk['due_at'] ?? null) instanceof Carbon) {
+            $risk['due_at'] = $risk['due_at']->toIso8601String();
+        }
+
+        return $risk;
+    }
+
+    /**
+     * @param  array<string, mixed>  $risk
+     * @return array<string, mixed>
+     */
+    private function denormalizeRiskFromCache(array $risk): array
+    {
+        if (is_string($risk['due_at'] ?? null)) {
+            $risk['due_at'] = Carbon::parse($risk['due_at']);
+        }
+
+        return $risk;
     }
 
     /**

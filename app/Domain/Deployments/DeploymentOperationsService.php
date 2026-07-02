@@ -104,9 +104,11 @@ class DeploymentOperationsService
     {
         $projectIds = $projects->pluck('id');
 
+        $projectFk = ProjectDeployment::hostedProjectForeignKey();
+
         return ProjectDeployment::query()
             ->with('project.server')
-            ->when($projectIds->isNotEmpty(), fn ($q) => $q->whereIn('project_id', $projectIds))
+            ->when($projectIds->isNotEmpty(), fn ($q) => $q->whereIn($projectFk, $projectIds))
             ->orderByDesc('deployed_at')
             ->orderByDesc('created_at')
             ->limit($limit)
@@ -245,11 +247,14 @@ class DeploymentOperationsService
         $projectIds = $projects->pluck('id');
         $serverIds = $projects->pluck('server_id')->filter()->unique();
 
+        $projectFk = ProjectDeployment::hostedProjectForeignKey();
+        $opsProjectFk = DeploymentOpsEvent::hostedProjectForeignKey();
+
         $freq = [];
         for ($i = 6; $i >= 0; $i--) {
             $day = now()->subDays($i)->startOfDay();
             $count = ProjectDeployment::query()
-                ->when($projectIds->isNotEmpty(), fn ($q) => $q->whereIn('project_id', $projectIds))
+                ->when($projectIds->isNotEmpty(), fn ($q) => $q->whereIn($projectFk, $projectIds))
                 ->whereDate('deployed_at', $day)
                 ->count();
             $freq[] = ['label' => $day->format('D'), 'count' => $count];
@@ -259,8 +264,8 @@ class DeploymentOperationsService
 
         $opsQuery = DeploymentOpsEvent::query()->where('occurred_at', '>=', $since);
         if ($projectIds->isNotEmpty()) {
-            $opsQuery->where(function ($q) use ($projectIds) {
-                $q->whereIn('project_id', $projectIds)->orWhereNull('project_id');
+            $opsQuery->where(function ($q) use ($projectIds, $opsProjectFk) {
+                $q->whereIn($opsProjectFk, $projectIds)->orWhereNull($opsProjectFk);
             });
         }
 

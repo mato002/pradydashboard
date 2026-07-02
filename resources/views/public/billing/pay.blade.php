@@ -13,6 +13,18 @@
             <h1 class="mt-2 text-2xl font-semibold">{{ __('Complete your payment') }}</h1>
             <p class="mt-2 text-sm text-slate-400">{{ $tenant->company_name }}</p>
 
+            @if (session('status'))
+                <div class="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                    {{ session('status') }}
+                </div>
+            @endif
+
+            @if ($errors->any())
+                <div class="mt-4 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                    {{ $errors->first() }}
+                </div>
+            @endif
+
             @if ($billing && ($billing['amount_due'] ?? 0) > 0)
                 <div class="mt-6 rounded-xl bg-slate-800/60 p-5">
                     <p class="text-xs uppercase tracking-wide text-slate-500">{{ __('Amount due') }}</p>
@@ -24,6 +36,31 @@
                         <p class="text-sm text-slate-400">{{ __('Due') }}: {{ $billing['due_date'] }}</p>
                     @endif
                 </div>
+            @endif
+
+            @if (($stkAvailable ?? false) && $billing && ($billing['amount_due'] ?? 0) > 0)
+                <form method="post" action="{{ $stkAction }}" class="mt-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-5">
+                    @csrf
+                    @php $primaryInvoice = $invoices->first(); @endphp
+                    @if ($primaryInvoice)
+                        <input type="hidden" name="invoice_id" value="{{ $primaryInvoice->id }}">
+                    @endif
+                    <h2 class="text-sm font-semibold text-indigo-200">{{ __('Pay with M-Pesa') }}</h2>
+                    <p class="mt-1 text-xs text-slate-400">{{ __('Enter the mobile number that will receive the STK push prompt.') }}</p>
+                    <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+                        <input
+                            type="tel"
+                            name="phone"
+                            value="{{ old('phone', $billing['billing_phone'] ?? '') }}"
+                            placeholder="0712 345 678"
+                            required
+                            class="flex-1 rounded-xl border border-slate-600 bg-slate-950 px-4 py-2.5 text-sm text-white placeholder:text-slate-500"
+                        >
+                        <button type="submit" class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500">
+                            {{ __('Send STK push') }}
+                        </button>
+                    </div>
+                </form>
             @endif
 
             @if ($billing && ! empty($billing['payment_instructions']))

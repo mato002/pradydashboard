@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Ssl\DomainSslInspector;
 use App\Http\Controllers\Controller;
+use App\Jobs\Ssl\RenewSslCertificatesJob;
+use App\Jobs\Ssl\VerifyDnsRecordsJob;
 use App\Support\DemoMode;
 use App\Models\DnsRecord;
 use App\Models\ManagedDomain;
@@ -155,6 +157,12 @@ class SslDomainController extends Controller
 
     public function renew(Request $request): RedirectResponse
     {
+        $validated = $request->validate([
+            'domain_id' => ['nullable', 'exists:managed_domains,id'],
+        ]);
+
+        RenewSslCertificatesJob::dispatch($validated['domain_id'] ?? null);
+
         return redirect()
             ->route('ssl-domains.index')
             ->with('status', __('SSL renewal queued for the selected certificate.'));
@@ -162,6 +170,12 @@ class SslDomainController extends Controller
 
     public function verifyDns(Request $request): RedirectResponse
     {
+        $validated = $request->validate([
+            'domain_id' => ['nullable', 'exists:managed_domains,id'],
+        ]);
+
+        VerifyDnsRecordsJob::dispatch($validated['domain_id'] ?? null);
+
         return redirect()
             ->route('ssl-domains.index')
             ->with('status', __('DNS verification scan started across all zones.'));

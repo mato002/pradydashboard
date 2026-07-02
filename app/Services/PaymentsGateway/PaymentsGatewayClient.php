@@ -120,6 +120,17 @@ class PaymentsGatewayClient
      * @param  array<string, mixed>  $payload
      * @return array{ok: bool, status: int, data: mixed, message: ?string, error: ?string, errors: mixed, response_time_ms: int, unavailable: bool}
      */
+    public function initiateStkCollection(array $payload): array
+    {
+        $path = (string) config('payment_gateway.stk_path', '/pay/stk');
+
+        return $this->post($path, $payload);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{ok: bool, status: int, data: mixed, message: ?string, error: ?string, errors: mixed, response_time_ms: int, unavailable: bool}
+     */
     public function createPaymentProfile(string $tenantUuid, array $payload): array
     {
         return $this->post('/api/v1/tenants/'.$tenantUuid.'/payment-profiles', $payload);

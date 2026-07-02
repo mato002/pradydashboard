@@ -30,18 +30,40 @@
         @apply border border-white/20 bg-white/70 shadow-glass backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/60;
     }
     .prady-table {
-        @apply min-w-full divide-y divide-slate-200/80 text-[13px] leading-snug dark:divide-slate-800/80;
+        @apply min-w-full border-collapse text-[13px] leading-snug;
     }
     .prady-table thead {
         @apply sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm dark:bg-slate-900/95;
     }
+    .prady-table th,
+    .prady-table td {
+        @apply border border-slate-200/90 px-4 py-3 dark:border-slate-700/70;
+    }
     .prady-table th {
-        @apply px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400;
+        @apply text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400;
     }
     .prady-table td {
-        @apply px-4 py-3 text-slate-700 dark:text-slate-200;
+        @apply text-slate-700 dark:text-slate-200;
     }
     .prady-table tbody tr {
+        @apply transition-colors hover:bg-slate-50/90 dark:hover:bg-slate-800/40;
+    }
+
+    /* Data tables without .prady-table (e.g. legacy markup) */
+    .prady-scrollbar table:has(thead):not(.prady-table) {
+        @apply min-w-full border-collapse text-[13px] leading-snug;
+    }
+    .prady-scrollbar table:has(thead):not(.prady-table) th,
+    .prady-scrollbar table:has(thead):not(.prady-table) td {
+        @apply border border-slate-200/90 px-4 py-3 dark:border-slate-700/70;
+    }
+    .prady-scrollbar table:has(thead):not(.prady-table) th {
+        @apply bg-slate-50/95 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:bg-slate-900/95 dark:text-slate-400;
+    }
+    .prady-scrollbar table:has(thead):not(.prady-table) td {
+        @apply text-slate-700 dark:text-slate-200;
+    }
+    .prady-scrollbar table:has(thead):not(.prady-table) tbody tr {
         @apply transition-colors hover:bg-slate-50/90 dark:hover:bg-slate-800/40;
     }
 

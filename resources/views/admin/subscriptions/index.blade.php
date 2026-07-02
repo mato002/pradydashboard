@@ -31,9 +31,9 @@
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                             {{ __('Add Subscription') }}
                         </a>
-                        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+                        <a href="{{ route('subscriptions.create', ['upgrade' => 1]) }}" class="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                             {{ __('Upgrade Plan') }}
-                        </button>
+                        </a>
                         <form method="POST" action="{{ route('subscriptions.renew') }}">
                             @csrf
                             <button type="submit" class="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
@@ -48,6 +48,15 @@
                         </form>
                     </div>
                 </div>
+
+                @if ($selectedTenant)
+                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-violet-500/25 bg-violet-500/5 px-5 py-3 ring-1 ring-violet-500/15">
+                        <p class="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            {{ __('Filtered to subscriptions for :tenant.', ['tenant' => $selectedTenant->company_name]) }}
+                        </p>
+                        <a href="{{ route('subscriptions.index') }}" class="text-sm font-semibold text-violet-600 hover:text-violet-500 dark:text-violet-400">{{ __('Show all tenants') }}</a>
+                    </div>
+                @endif
 
                 <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
                     <x-ui.kpi-card :title="__('MRR')" :value="$kpis['mrr']" :animate="false" :trend="$kpis['mrrGrowth'] ?? null" :sublabel="__('ARR').': '.$kpis['arr']" :points="$spark('sub-mrr')" tone="violet">
@@ -85,7 +94,7 @@
                 <div class="grid gap-5 lg:grid-cols-12">
                     <div class="lg:col-span-8 space-y-5">
                         <x-ui.table-panel :title="__('Subscriptions')">
-                            <table class="prady-table">
+                            <table class="prady-table" id="subscriptions-table">
                                 <thead>
                                     <tr>
                                         <th>{{ __('Tenant') }}</th>
@@ -124,8 +133,23 @@
                                             </td>
                                             <td class="text-right" @click.stop>
                                                 <x-ui.row-actions-menu>
-                                                    <x-ui.row-action>{{ __('View Usage') }}</x-ui.row-action>
-                                                    <x-ui.row-action danger>{{ __('Suspend') }}</x-ui.row-action>
+                                                    @if ($sub->tenant)
+                                                        <x-ui.row-action :href="route('tenants.show', [$sub->tenant, 'tab' => 'billing'])">{{ __('View billing') }}</x-ui.row-action>
+                                                        <x-ui.row-action :href="route('subscriptions.create', array_filter([
+                                                            'tenant_id' => $sub->tenant_id,
+                                                            'saas_plan_id' => $sub->saas_plan_id,
+                                                            'upgrade' => 1,
+                                                        ]))">{{ __('Upgrade plan') }}</x-ui.row-action>
+                                                    @endif
+                                                    <x-ui.row-action :href="route('subscriptions.subscription.invoice', $sub)" method="POST">{{ __('Generate invoice') }}</x-ui.row-action>
+                                                    @if ($sub->status !== 'suspended')
+                                                        <x-ui.row-action
+                                                            :href="route('subscriptions.subscription.suspend', $sub)"
+                                                            method="POST"
+                                                            danger
+                                                            :confirm="__('Suspend this subscription?')"
+                                                        >{{ __('Suspend') }}</x-ui.row-action>
+                                                    @endif
                                                 </x-ui.row-actions-menu>
                                             </td>
                                         </tr>
@@ -141,11 +165,14 @@
 
                         <div id="plans" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                                     @forelse ($plans as $plan)
-                                        <div @class([
-                                            'relative overflow-hidden rounded-2xl border p-5 shadow-card transition hover:shadow-card-hover',
-                                            'border-violet-300/60 bg-gradient-to-br from-violet-50 to-fuchsia-50/50 ring-2 ring-violet-500/20 dark:border-violet-800 dark:from-violet-950/40 dark:to-fuchsia-950/20' => $plan->tier === 'professional',
-                                            'border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900/60' => $plan->tier !== 'professional',
-                                        ])>
+                                        <a
+                                            href="{{ route('subscriptions.create', ['saas_plan_id' => $plan->id]) }}#plans"
+                                            @class([
+                                                'group relative block overflow-hidden rounded-2xl border p-5 shadow-card transition hover:shadow-card-hover',
+                                                'border-violet-300/60 bg-gradient-to-br from-violet-50 to-fuchsia-50/50 ring-2 ring-violet-500/20 dark:border-violet-800 dark:from-violet-950/40 dark:to-fuchsia-950/20' => $plan->tier === 'professional',
+                                                'border-slate-200/80 bg-white hover:border-violet-300 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-violet-700' => $plan->tier !== 'professional',
+                                            ])
+                                        >
                                             @if ($plan->tier === 'professional')
                                                 <span class="absolute right-3 top-3 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">{{ __('Popular') }}</span>
                                             @endif
@@ -169,7 +196,8 @@
                                                 <div><span class="text-slate-500">{{ __('API') }}</span><p class="font-semibold tabular-nums">{{ $plan->api_quota ? number_format($plan->api_quota) : '∞' }}</p></div>
                                                 <div><span class="text-slate-500">{{ __('Storage') }}</span><p class="font-semibold">{{ $plan->storage_gb ? $plan->storage_gb.' GB' : '∞' }}</p></div>
                                             </div>
-                                        </div>
+                                            <p class="mt-3 text-[10px] font-semibold uppercase tracking-wide text-violet-600 opacity-0 transition group-hover:opacity-100 dark:text-violet-400">{{ __('Assign to tenant →') }}</p>
+                                        </a>
                                     @empty
                                         <p class="col-span-full rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">{{ __('No SaaS plans configured yet.') }}</p>
                                     @endforelse
@@ -250,7 +278,13 @@
                             @foreach ($insights as $row)
                                 <li class="flex items-center justify-between gap-4 px-4 py-3">
                                     <div>
-                                        <p class="text-sm font-semibold text-slate-900 dark:text-white">{{ $row['tenant'] }}</p>
+                                        <p class="text-sm font-semibold text-slate-900 dark:text-white">
+                                            @if (! empty($row['tenant_id']))
+                                                <a href="{{ route('tenants.show', ['tenant' => $row['tenant_id'], 'tab' => 'billing']) }}" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">{{ $row['tenant'] }}</a>
+                                            @else
+                                                {{ $row['tenant'] }}
+                                            @endif
+                                        </p>
                                         <p class="text-xs text-slate-500">{{ $row['plan'] }} · {{ $row['metric'] }}</p>
                                     </div>
                                     <div class="text-right">

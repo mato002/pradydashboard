@@ -4,9 +4,10 @@
     'documentTitle' => null,
 ])
 
-<div
-    id="prady-workspace-content"
-    class="prady-workspace-content min-w-0"
+<turbo-frame
+    id="prady-workspace"
+    target="_top"
+    class="prady-workspace-content block min-w-0"
     @if ($heading) data-page-heading="{{ $heading }}" @endif
     @if ($subheading) data-page-subheading="{{ $subheading }}" @endif
     @if ($documentTitle) data-document-title="{{ $documentTitle }}" @endif
@@ -18,4 +19,4 @@
     @endif
 
     {{ $slot }}
-</div>
+</turbo-frame>

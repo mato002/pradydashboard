@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Billing\SubscriptionBillingService;
 use App\Http\Controllers\Controller;
+use App\Jobs\Billing\GenerateSubscriptionInvoicesJob;
+use App\Jobs\Billing\RenewSubscriptionsJob;
 use App\Support\DemoMode;
 use App\Support\OperationalMetrics;
 use App\Models\SaasPlan;
@@ -18,16 +21,23 @@ use Illuminate\View\View;
 
 class SubscriptionController extends Controller
 {
-    public function create(): View
+    public function create(Request $request): View
     {
         if (DemoMode::enabled() && SaasPlan::query()->doesntExist()) {
             (new SubscriptionDemoSeeder)->run();
         }
 
+        $selectedTenantId = $request->integer('tenant_id') ?: null;
+        $selectedPlanId = $request->integer('saas_plan_id') ?: null;
+        $isUpgrade = $request->boolean('upgrade');
+
         return view('admin.subscriptions.create', [
             'subscription' => new TenantSubscription,
             'tenants' => Tenant::query()->with('project')->orderBy('company_name')->get(),
             'plans' => SaasPlan::query()->where('is_active', true)->orderBy('sort_order')->get(),
+            'selectedTenantId' => $selectedTenantId,
+            'selectedPlanId' => $selectedPlanId,
+            'isUpgrade' => $isUpgrade,
         ]);
     }
 
@@ -84,11 +94,18 @@ class SubscriptionController extends Controller
             (new SubscriptionDemoSeeder)->run();
         }
 
+        $selectedTenantId = $request->integer('tenant') ?: null;
+
         $subscriptions = TenantSubscription::query()
             ->with(['tenant.project', 'saasPlan'])
+            ->when($selectedTenantId, fn ($q) => $q->where('tenant_id', $selectedTenantId))
             ->orderByDesc('current_period_end')
             ->paginate(12)
             ->withQueryString();
+
+        $selectedTenant = $selectedTenantId
+            ? Tenant::query()->find($selectedTenantId)
+            : null;
 
         $plans = SaasPlan::query()->where('is_active', true)->orderBy('sort_order')->get();
 
@@ -135,21 +152,64 @@ class SubscriptionController extends Controller
             'insights',
             'automation',
             'alerts',
+            'selectedTenantId',
+            'selectedTenant',
         ));
     }
 
     public function renew(Request $request): RedirectResponse
     {
+        RenewSubscriptionsJob::dispatch();
+
         return redirect()
             ->route('subscriptions.index')
-            ->with('status', __('Plan renewal queued for billing automation.'));
+            ->with('status', __('Plan renewal queued for eligible auto-renew subscriptions.'));
     }
 
     public function generateInvoice(Request $request): RedirectResponse
     {
+        GenerateSubscriptionInvoicesJob::dispatch();
+
         return redirect()
             ->route('subscriptions.index')
-            ->with('status', __('Invoice generation started for eligible subscriptions.'));
+            ->with('status', __('Invoice generation queued for active subscriptions.'));
+    }
+
+    public function renewSubscription(TenantSubscription $subscription, SubscriptionBillingService $billing): RedirectResponse
+    {
+        $billing->renew($subscription);
+
+        return redirect()
+            ->route('subscriptions.index', ['tenant' => $subscription->tenant_id])
+            ->with('status', __('Subscription renewed for :tenant.', [
+                'tenant' => $subscription->tenant?->company_name ?? __('tenant'),
+            ]));
+    }
+
+    public function suspendSubscription(TenantSubscription $subscription, SubscriptionBillingService $billing): RedirectResponse
+    {
+        $billing->suspend($subscription);
+
+        return redirect()
+            ->route('subscriptions.index')
+            ->with('status', __('Subscription suspended for :tenant.', [
+                'tenant' => $subscription->tenant?->company_name ?? __('tenant'),
+            ]));
+    }
+
+    public function invoiceSubscription(TenantSubscription $subscription, SubscriptionBillingService $billing): RedirectResponse
+    {
+        $invoice = $billing->generateInvoice($subscription);
+
+        if ($invoice === null) {
+            return redirect()
+                ->route('subscriptions.index')
+                ->with('status', __('No invoice created — billing period may already be invoiced or tenant is missing.'));
+        }
+
+        return redirect()
+            ->route('invoices.show', $invoice)
+            ->with('status', __('Invoice :number generated.', ['number' => $invoice->invoice_number]));
     }
 
     private function mapSubscriptionStatusToTenant(string $status): string
@@ -237,6 +297,7 @@ class SubscriptionController extends Controller
             ->map(function ($sub) {
                 return [
                     'tenant' => $sub->tenant?->company_name ?? __('Unknown'),
+                    'tenant_id' => $sub->tenant_id,
                     'plan' => $sub->plan_name,
                     'metric' => __('Status'),
                     'value' => ucfirst(str_replace('_', ' ', $sub->status)),

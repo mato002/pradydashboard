@@ -42,7 +42,7 @@ class SubscriptionCreateTest extends TestCase
             'domain' => 'crm.example.com',
         ]);
         $tenant = Tenant::query()->create([
-            'project_id' => $project->id,
+            'hosted_project_id' => $project->id,
             'company_name' => 'Acme Ltd',
             'tenant_currency' => 'KES',
             'billing_cycle' => 'monthly',

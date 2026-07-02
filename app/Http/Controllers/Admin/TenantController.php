@@ -35,12 +35,14 @@ use App\Models\TenantSubscription;
 use App\Support\Admin\TenantWorkspaceMetrics;
 use App\Support\Admin\PradyWorkspaceRequest;
 use App\Support\DemoMode;
+use App\Support\Phone\EastAfricaPhone;
 use App\Support\TenantOperationsPresenter;
 use Database\Seeders\SubscriptionDemoSeeder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class TenantController extends Controller
@@ -117,6 +119,9 @@ class TenantController extends Controller
         $this->authorize('create', Tenant::class);
 
         $data = $this->normalizeTenantProjectFields($this->validated($request));
+        if (! $request->route('tenant')) {
+            $data = $this->applyProvisionDefaults($data, $request);
+        }
         $saasPlanId = $request->input('saas_plan_id');
         unset($data['saas_plan_id']);
 
@@ -140,7 +145,7 @@ class TenantController extends Controller
             ['tab' => $tab],
         );
 
-        if (PradyWorkspaceRequest::isPartial($request)) {
+        if (PradyWorkspaceRequest::isTenantPanelPartial($request)) {
             return response()
                 ->view('admin.tenants.partials.workspace.content', $data)
                 ->header('X-Tenant-Workspace', 'partial');
@@ -166,6 +171,7 @@ class TenantController extends Controller
         $operationalRisks = app(OperationalRiskScanner::class)->forTenant($tenant->id);
         $metricGroups = TenantWorkspaceMetrics::groups($opsSummary, $billingKpi, $tenant);
         $workspaceTabs = $this->workspaceTabs();
+        $integrationReadiness = app(\App\Support\Integrations\TenantIntegrationReadinessService::class)->checklist($tenant);
 
         return compact(
             'tenant',
@@ -174,6 +180,7 @@ class TenantController extends Controller
             'operationalRisks',
             'metricGroups',
             'workspaceTabs',
+            'integrationReadiness',
         );
     }
 
@@ -506,7 +513,7 @@ class TenantController extends Controller
      */
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'project_id' => ['required', 'exists:hosted_projects,id'],
             'server_id' => ['nullable', 'exists:servers,id'],
             'tenant_code' => ['nullable', 'string', 'max:80', Rule::unique('tenants', 'tenant_code')->ignore($request->route('tenant'))],
@@ -522,10 +529,11 @@ class TenantController extends Controller
             'business_type' => ['nullable', 'string', 'max:255'],
             'kra_pin' => ['nullable', 'string', 'max:64'],
             'physical_address' => ['nullable', 'string', 'max:500'],
-            'country' => ['nullable', 'string', 'size:2'],
+            'country' => ['nullable', 'string', Rule::in(array_map(fn (array $c) => $c['iso'], EastAfricaPhone::countries()))],
             'logo_path' => ['nullable', 'string', 'max:500'],
             'contact_person' => ['nullable', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:50'],
+            'phone_dial_code' => ['nullable', Rule::in(EastAfricaPhone::dialCodes())],
+            'phone_local' => ['nullable', 'string', 'max:15', 'regex:/^\d*$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'subscription_plan' => ['nullable', 'string', 'max:255'],
             'subscription_amount' => ['nullable', 'numeric', 'min:0'],
@@ -544,6 +552,60 @@ class TenantController extends Controller
             'notes' => ['nullable', 'string'],
             'saas_plan_id' => ['nullable', 'exists:saas_plans,id'],
         ]);
+
+        return $this->composePhoneFields($data, $request);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function applyProvisionDefaults(array $data, Request $request): array
+    {
+        $data['country'] = $data['country'] ?? 'KE';
+        $data['tenant_currency'] = $data['tenant_currency'] ?? 'KES';
+        $data['billing_cycle'] = $data['billing_cycle'] ?? 'monthly';
+        $data['status'] = $data['status'] ?? 'trial';
+        $data['grace_days'] = $data['grace_days'] ?? 7;
+        $data['penalties_total'] = $data['penalties_total'] ?? 0;
+        $data['start_date'] = $data['start_date'] ?? now()->toDateString();
+
+        if (! empty($data['saas_plan_id'])) {
+            $plan = SaasPlan::query()->find($data['saas_plan_id']);
+            if ($plan) {
+                $data['subscription_plan'] = $data['subscription_plan'] ?? $plan->name;
+                $data['subscription_amount'] = $data['subscription_amount'] ?? (float) $plan->monthly_price;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function composePhoneFields(array $data, Request $request): array
+    {
+        $local = EastAfricaPhone::sanitizeLocal($request->input('phone_local'));
+        $dial = $request->input('phone_dial_code')
+            ?: EastAfricaPhone::dialForIso($data['country'] ?? null);
+
+        if ($local !== '') {
+            if (! EastAfricaPhone::isValid($dial, $local)) {
+                throw ValidationException::withMessages([
+                    'phone_local' => EastAfricaPhone::validationMessage((string) $dial),
+                ]);
+            }
+
+            $data['phone'] = EastAfricaPhone::compose($dial, $local);
+        } else {
+            $data['phone'] = null;
+        }
+
+        unset($data['phone_dial_code'], $data['phone_local']);
+
+        return $data;
     }
 
     /**

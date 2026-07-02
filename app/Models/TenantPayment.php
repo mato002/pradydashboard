@@ -26,6 +26,7 @@ class TenantPayment extends Model
         'paid_at',
         'method',
         'gateway',
+        'gateway_transaction_uuid',
         'reference',
         'bank_source',
         'narration',

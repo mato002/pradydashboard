@@ -27,6 +27,7 @@
                     <a
                         href="{{ $tabUrl($key) }}"
                         data-tenant-tab="{{ $key }}"
+                        data-turbo-frame="tenant-workspace"
                         @class([
                             'shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium transition',
                             'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25' => $tab === $key,

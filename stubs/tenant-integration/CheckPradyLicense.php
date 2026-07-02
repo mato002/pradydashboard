@@ -22,6 +22,10 @@ class CheckPradyLicense
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if ($this->shouldSkip($request)) {
+            return $next($request);
+        }
+
         $cacheKey = 'prady_license:'.config('services.prady.tenant_key');
 
         $license = Cache::remember($cacheKey, config('services.prady.cache_ttl', 600), function () {
@@ -93,5 +97,22 @@ class CheckPradyLicense
     private function isMutatingRequest(Request $request): bool
     {
         return in_array($request->method(), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
+    }
+
+    private function shouldSkip(Request $request): bool
+    {
+        if ($request->is('up', 'health', 'health/*')) {
+            return true;
+        }
+
+        if ($request->is('api/system/info')) {
+            return true;
+        }
+
+        if ($request->is('webhooks/payments-gateway/*')) {
+            return true;
+        }
+
+        return false;
     }
 }

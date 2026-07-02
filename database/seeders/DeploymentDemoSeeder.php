@@ -58,7 +58,7 @@ class DeploymentDemoSeeder extends Seeder
                 ], $project);
 
                 $deployment = ProjectDeployment::query()->create([
-                    'project_id' => $project->id,
+                    ProjectDeployment::hostedProjectForeignKey() => $project->id,
                     'version' => $version,
                     'deployed_at' => $deployedAt,
                     'notes' => json_encode($notes),
@@ -88,7 +88,10 @@ class DeploymentDemoSeeder extends Seeder
         foreach ($catalog as $row) {
             $integration = DeploymentIntegration::query()->create([
                 ...$row,
-                'settings' => ['auto_deploy' => true],
+                'settings' => [
+                    'auto_deploy' => true,
+                    'webhook_secret' => config('deployments.webhook_secret') ?: 'demo-webhook-secret',
+                ],
                 'last_synced_at' => now()->subMinutes(random_int(5, 120)),
             ]);
 
@@ -97,7 +100,7 @@ class DeploymentDemoSeeder extends Seeder
                 foreach (range(1, min(3, $row['webhooks_count'])) as $n) {
                     DeploymentWebhookEvent::query()->create([
                         'deployment_integration_id' => $integration->id,
-                        'project_id' => $project?->id,
+                        DeploymentWebhookEvent::hostedProjectForeignKey() => $project?->id,
                         'event_type' => 'push',
                         'status' => 'delivered',
                         'summary' => __('Deploy hook received for :repo', ['repo' => $row['name'].'/'.$n]),

@@ -3,6 +3,8 @@
     'active' => false,
     'label',
     'icon' => null,
+    'iconName' => null,
+    'iconVariant' => 'solid',
     'nested' => false,
 ])
 
@@ -15,11 +17,16 @@
 <a
     href="{{ $href }}"
     data-prady-nav
+    data-turbo-frame="prady-workspace"
     @click="if ($store.sidebar.collapsed) { $dispatch('sidebar-close-flyout') }"
     {{ $attributes->merge(['class' => trim("group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition {$linkClass} " . ($nested ? 'pl-9' : ''))]) }}
     title="{{ $label }}"
 >
-    @if ($icon)
+    @if ($iconName)
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10 group-hover:bg-white/10">
+            <x-ui.icon :name="$iconName" :variant="$iconVariant" />
+        </span>
+    @elseif ($icon)
         <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10 group-hover:bg-white/10">
             {!! $icon !!}
         </span>

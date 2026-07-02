@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\OperationalDocumentController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PaymentReconciliationController;
 use App\Http\Controllers\Admin\HostedProjectController;
+use App\Http\Controllers\Admin\IntegrationSetupGuideController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProjectModuleController;
 use App\Http\Controllers\Admin\ProjectVersionController;
@@ -78,6 +79,10 @@ Route::view('/', 'landing')->name('home');
 Route::get('/billing/pay/{tenant}', [PublicTenantBillingController::class, 'show'])
     ->middleware('signed')
     ->name('billing.pay');
+
+Route::post('/billing/pay/{tenant}/stk', [PublicTenantBillingController::class, 'initiateStk'])
+    ->middleware('signed')
+    ->name('billing.pay.stk');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->middleware('permission:dashboard.view')->name('dashboard');
@@ -235,6 +240,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('permission:support.tickets.assign')
         ->name('support-tickets.comments.store')
         ->where('ticket', '[0-9]+');
+
+    Route::get('integration-setup-guide', [IntegrationSetupGuideController::class, 'index'])
+        ->middleware('permission:dashboard.view')
+        ->name('integration-setup-guide.index');
 
     Route::get('api-credentials', [ApiCredentialsController::class, 'index'])->middleware('permission:api_credentials.view')->name('api-credentials.index');
     Route::prefix('api-credentials')->name('api-credentials.')->middleware('permission:api_credentials.update')->group(function () {
@@ -439,6 +448,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('subscriptions', [SubscriptionController::class, 'store'])->middleware('permission:subscriptions.update')->name('subscriptions.store');
     Route::post('subscriptions/renew', [SubscriptionController::class, 'renew'])->middleware('permission:subscriptions.update')->name('subscriptions.renew');
     Route::post('subscriptions/invoice', [SubscriptionController::class, 'generateInvoice'])->middleware('permission:subscriptions.update')->name('subscriptions.invoice');
+    Route::post('subscriptions/{subscription}/renew', [SubscriptionController::class, 'renewSubscription'])->middleware('permission:subscriptions.update')->name('subscriptions.subscription.renew');
+    Route::post('subscriptions/{subscription}/suspend', [SubscriptionController::class, 'suspendSubscription'])->middleware('permission:subscriptions.update')->name('subscriptions.subscription.suspend');
+    Route::post('subscriptions/{subscription}/invoice', [SubscriptionController::class, 'invoiceSubscription'])->middleware('permission:subscriptions.update')->name('subscriptions.subscription.invoice');
 
     Route::get('invoices', [InvoiceController::class, 'index'])->middleware('permission:invoices.view')->name('invoices.index');
     Route::get('invoices/create', [InvoiceController::class, 'create'])->middleware('permission:invoices.generate')->name('invoices.create');

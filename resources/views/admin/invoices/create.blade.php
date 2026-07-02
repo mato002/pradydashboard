@@ -121,7 +121,7 @@
                 class="mt-4 flex gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100"
                 role="alert"
             >
-                <span class="text-lg leading-none" aria-hidden="true">⚠</span>
+                <x-ui.icon name="triangle-exclamation" class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
                 <div>
                     <p class="font-semibold">{{ __('No tenant selected') }}</p>
                     <p class="mt-0.5 text-xs opacity-90">{{ __('This document will not appear under a tenant account. Enter manual client details below. Linked receipts cannot attach to walk-in invoices from this form.') }}</p>

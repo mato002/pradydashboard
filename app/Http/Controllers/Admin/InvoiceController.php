@@ -23,7 +23,7 @@ use App\Domain\Billing\PaymentRecorderService;
 use App\Domain\Billing\ProformaConverter;
 use App\Domain\Billing\QuotationConverter;
 use App\Domain\Billing\RecurringBillingProcessor;
-use App\Domain\Billing\SampleFinancialDocumentSnapshot;
+use App\Domain\Billing\TenantBillingActivationService;
 use App\Domain\Rbac\RbacScopeFilter;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ManualFinancialDocumentRequest;
@@ -693,7 +693,7 @@ class InvoiceController extends Controller
         return back()->with('status', __('Payment recorded. Balance updated.'));
     }
 
-    public function markPaid(TenantInvoice $invoice): RedirectResponse
+    public function markPaid(TenantInvoice $invoice, TenantBillingActivationService $billingActivation): RedirectResponse
     {
         if ($invoice->balanceDue() > 0.009) {
             return back()->with('error', __('Invoice still has an outstanding balance.'));
@@ -704,6 +704,8 @@ class InvoiceController extends Controller
             'status' => 'paid',
             'amount_paid' => $invoice->invoiceTotal() + (float) $invoice->penalty_amount,
         ]);
+
+        $billingActivation->activateFromPaidInvoice($invoice->fresh(['tenant', 'lineItems']));
 
         $this->activityLogger->log(
             'invoice.marked_paid',

@@ -2,7 +2,7 @@
 
 namespace App\Domain\Deployments;
 
-use App\Models\Project;
+use App\Models\HostedProject;
 use Carbon\Carbon;
 
 class DeploymentPipelineBuilder
@@ -26,7 +26,7 @@ class DeploymentPipelineBuilder
      * @param  array<string, mixed>  $attributes
      * @return array<string, mixed>
      */
-    public static function buildNotes(array $attributes, ?Project $project = null): array
+    public static function buildNotes(array $attributes, ?HostedProject $project = null): array
     {
         $status = (string) ($attributes['status'] ?? 'queued');
         $triggeredBy = (string) ($attributes['triggered_by'] ?? 'CI Pipeline');
@@ -124,7 +124,7 @@ class DeploymentPipelineBuilder
      * @param  array<string, mixed>  $meta
      * @return array<string, mixed>
      */
-    public static function forSuccess(array $meta, ?Project $project = null): array
+    public static function forSuccess(array $meta, ?HostedProject $project = null): array
     {
         $meta['status'] = 'success';
         $meta['pipeline_stages'] = self::stagesForStatus('success', $meta['triggered_by'] ?? 'CI Pipeline', now());
@@ -143,7 +143,7 @@ class DeploymentPipelineBuilder
      * @param  array<string, mixed>  $meta
      * @return array<string, mixed>
      */
-    public static function forRollback(array $meta, ?Project $project = null): array
+    public static function forRollback(array $meta, ?HostedProject $project = null): array
     {
         $meta['status'] = 'rolled_back';
         $meta['pipeline_stages'] = self::stagesForStatus('rolled_back', $meta['triggered_by'] ?? 'Rollback', now());
@@ -160,7 +160,7 @@ class DeploymentPipelineBuilder
     /**
      * @return list<string>
      */
-    public static function buildLogs(?Project $project, string $version, string $environment, string $status): array
+    public static function buildLogs(?HostedProject $project, string $version, string $environment, string $status): array
     {
         $host = $project?->server?->name ?? 'edge-node';
         $name = $project?->name ?? 'application';

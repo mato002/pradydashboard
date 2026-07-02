@@ -3,11 +3,13 @@
 namespace Database\Seeders;
 
 use App\Domain\Tenancy\TenantProjectProvisioner;
+use App\Models\Product;
 use App\Models\Project;
 use App\Models\Tenant;
 use App\Models\TenantInvoice;
 use App\Models\TenantPayment;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 class PaymentTestDataSeeder extends Seeder
 {
@@ -57,17 +59,30 @@ class PaymentTestDataSeeder extends Seeder
         $projects = [];
 
         foreach ($definitions as $slug => $definition) {
-            $projects[$slug] = Project::query()->updateOrCreate(
-                ['product_slug' => $slug],
-                array_merge($definition, [
-                    'product_key' => $slug,
+            $product = Product::query()->updateOrCreate(
+                ['slug' => $slug],
+                [
+                    'name' => $definition['name'],
+                    'description' => $definition['description'],
+                    'category' => 'saas',
                     'status' => 'active',
-                    'currency' => 'KES',
-                    'license_validation_mode' => 'api',
-                    'grace_period_days' => 7,
-                    'billing_model' => 'subscription',
-                    'trial_days' => 14,
-                ])
+                    'default_billing_model' => 'subscription',
+                    'default_license_mode' => 'module',
+                ],
+            );
+
+            $projects[$slug] = Project::query()->updateOrCreate(
+                ['domain' => $definition['domain']],
+                [
+                    'product_id' => $product->id,
+                    'name' => $definition['name'],
+                    'description' => $definition['description'],
+                    'product_key' => $slug,
+                    'api_token' => Str::random(64),
+                    'base_url' => 'https://'.$definition['domain'],
+                    'environment' => 'production',
+                    'status' => 'active',
+                ],
             );
         }
 
@@ -152,7 +167,10 @@ class PaymentTestDataSeeder extends Seeder
             $tenants[] = Tenant::query()->updateOrCreate(
                 ['tenant_key' => $definition['tenant_key']],
                 array_merge($definition, [
-                    'project_id' => $projects[$projectSlug]->id,
+                    'external_key' => $definition['external_key'] ?? (string) Str::uuid(),
+                    'license_secret' => $definition['license_secret'] ?? Str::random(64),
+                    'hosted_project_id' => $projects[$projectSlug]->id,
+                    'product_id' => $projects[$projectSlug]->product_id,
                     'start_date' => now()->subMonths(3)->toDateString(),
                     'renewal_date' => now()->addDays(18)->toDateString(),
                     'grace_days' => 7,

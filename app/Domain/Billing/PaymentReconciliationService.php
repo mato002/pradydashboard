@@ -21,6 +21,7 @@ class PaymentReconciliationService
         private readonly ReceiptGenerator $receiptGenerator,
         private readonly ActivityLogger $activityLogger,
         private readonly OperationalCache $operationalCache,
+        private readonly TenantBillingActivationService $billingActivation,
     ) {}
 
     public function findDuplicate(TenantPayment $payment): ?TenantPayment
@@ -92,6 +93,7 @@ class PaymentReconciliationService
             $invoice->refresh();
             if ($invoice->status === 'paid' && $invoice->document_type === 'invoice') {
                 $receipt = $this->receiptGenerator->generateForPayment($invoice->fresh(), $payment->fresh());
+                $this->billingActivation->activateFromPaidInvoice($invoice->fresh(['tenant', 'lineItems']));
             }
 
             $this->refreshPaymentReconciliationState($payment);

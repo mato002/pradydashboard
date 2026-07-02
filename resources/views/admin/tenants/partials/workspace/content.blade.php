@@ -1,6 +1,7 @@
-<div
-    id="tenant-workspace-panel"
-    class="tenant-workspace-panel relative min-h-[12rem] transition-opacity duration-200"
+<turbo-frame
+    id="tenant-workspace"
+    target="_top"
+    class="tenant-workspace-panel relative block min-h-[12rem] transition-opacity duration-200"
     data-tenant-tab="{{ $tab }}"
     role="region"
     aria-label="{{ $workspaceTabs[$tab] ?? __('Workspace') }}"
@@ -131,4 +132,4 @@
             <p class="mt-4 text-xs text-slate-500">{{ __('Suspension workflow: reminders → warning banner → restricted transactions → login lockout → restore on payment. Automate via jobs in Phase 3.') }}</p>
         </div>
     @endif
-</div>
+</turbo-frame>

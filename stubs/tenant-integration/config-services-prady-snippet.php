@@ -15,4 +15,5 @@
     'commit' => env('PRADY_COMMIT'),
     'last_deployed_at' => env('PRADY_LAST_DEPLOYED_AT'),
     'cache_ttl' => (int) env('PRADY_LICENSE_CACHE_TTL', 600),
+    'payments_gateway_webhook_secret' => env('PAYMENTS_GATEWAY_WEBHOOK_SECRET'),
 ],

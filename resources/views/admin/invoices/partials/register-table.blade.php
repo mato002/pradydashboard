@@ -47,7 +47,7 @@
                 <th class="text-right">{{ __('Actions') }}</th>
             </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100 dark:divide-slate-800/80">
+        <tbody>
             @forelse ($invoices as $invoice)
                 <tr @class(['bg-rose-50/50 dark:bg-rose-950/20' => $invoice->status === 'overdue'])>
                     <td>

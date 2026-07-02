@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\AuthenticateDeploymentWebhook;
+use App\Http\Middleware\AuthenticatePaymentsGatewayWebhook;
 use App\Http\Middleware\AuthenticateProjectApiToken;
 use App\Http\Middleware\EnsureActiveRole;
 use App\Http\Middleware\EnsurePasswordIsFresh;
@@ -19,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'project.api' => AuthenticateProjectApiToken::class,
+            'payments.gateway.webhook' => AuthenticatePaymentsGatewayWebhook::class,
+            'deployment.webhook' => AuthenticateDeploymentWebhook::class,
             'permission' => EnsurePermission::class,
             'password.fresh' => EnsurePasswordIsFresh::class,
         ]);
@@ -57,6 +61,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->job(new \App\Jobs\Integrations\PollTenantIntegrationsFleetJob())
             ->hourly()
             ->withoutOverlapping(30)
+            ->onOneServer();
+
+        $schedule->job(new \App\Jobs\Billing\SyncPaymentsGatewayTransactionsJob())
+            ->hourly()
+            ->withoutOverlapping(30)
+            ->onOneServer();
+
+        $schedule->job(new \App\Jobs\Billing\ReconcilePaymentsBatchJob())
+            ->everyTenMinutes()
+            ->withoutOverlapping(15)
+            ->onOneServer();
+
+        $schedule->job(new \App\Jobs\Ssl\RenewSslCertificatesJob())
+            ->dailyAt('03:30')
+            ->withoutOverlapping(60)
             ->onOneServer();
 
         if (class_exists(\Laravel\Horizon\Horizon::class)) {

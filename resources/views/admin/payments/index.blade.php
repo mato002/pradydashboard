@@ -87,6 +87,18 @@
             </div>
         @endif
 
+        @if ($selectedGatewayLabel)
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-500/25 bg-indigo-500/5 px-5 py-3 ring-1 ring-indigo-500/15">
+                <p class="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    {{ __('Showing transactions for :gateway.', ['gateway' => $selectedGatewayLabel]) }}
+                </p>
+                <a
+                    href="{{ route('payments.index', array_filter(['status' => request('status')])) }}#ledger"
+                    class="text-sm font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                >{{ __('Clear gateway filter') }}</a>
+            </div>
+        @endif
+
         {{-- KPIs --}}
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             <x-ui.kpi-card :title="__('Payments Collected')" :value="$kpis['collected']" :animate="false" :sublabel="__('Successful settlements')" :points="$spark('pay-collected')" tone="emerald">
@@ -122,7 +134,7 @@
         </div>
 
         {{-- Transactions + Alerts --}}
-        <div class="grid gap-5 lg:grid-cols-12">
+        <div id="ledger" class="grid gap-5 lg:grid-cols-12 scroll-mt-24">
             <div class="lg:col-span-8">
                 <div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card dark:border-slate-800/80 dark:bg-slate-900/60">
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3 dark:border-slate-800/80">
@@ -130,7 +142,7 @@
                         <div class="flex flex-wrap gap-2">
                             @foreach (['' => __('All'), 'successful' => __('Successful'), 'pending' => __('Pending'), 'failed' => __('Failed'), 'refunded' => __('Refunded')] as $val => $label)
                                 <a
-                                    href="{{ route('payments.index', array_filter(['status' => $val ?: null, 'gateway' => request('gateway')])) }}"
+                                    href="{{ route('payments.index', array_filter(['status' => $val ?: null, 'gateway' => request('gateway')])) }}#ledger"
                                     @class([
                                         'rounded-lg px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition',
                                         'bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/25 dark:text-emerald-300' => request('status', '') === $val,
@@ -139,6 +151,31 @@
                                 >{{ $label }}</a>
                             @endforeach
                         </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 border-b border-slate-200/80 px-4 py-2.5 dark:border-slate-800/80">
+                        <span class="self-center text-[10px] font-semibold uppercase tracking-wide text-slate-400">{{ __('Gateway') }}</span>
+                        @foreach ($gateways as $gw)
+                            @php
+                                $gwActive = request('gateway') === $gw['key'];
+                            @endphp
+                            <a
+                                href="{{ route('payments.index', array_filter([
+                                    'gateway' => $gwActive ? null : $gw['key'],
+                                    'status' => request('status'),
+                                ])) }}#ledger"
+                                @class([
+                                    'rounded-lg px-2.5 py-1 text-[11px] font-semibold transition',
+                                    'bg-indigo-500/15 text-indigo-700 ring-1 ring-indigo-500/25 dark:text-indigo-300' => $gwActive,
+                                    'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800' => ! $gwActive,
+                                ])
+                            >{{ $gw['name'] }}</a>
+                        @endforeach
+                        @if (request('gateway'))
+                            <a
+                                href="{{ route('payments.index', array_filter(['status' => request('status')])) }}#ledger"
+                                class="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                            >{{ __('Clear') }}</a>
+                        @endif
                     </div>
                     <div class="prady-scrollbar overflow-x-auto">
                         <table class="prady-table">
@@ -185,7 +222,13 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="9" class="py-12 text-center text-sm text-slate-500">{{ __('No payment transactions recorded yet.') }}</td>
+                                        <td colspan="9" class="py-12 text-center text-sm text-slate-500">
+                                            @if ($selectedGatewayLabel)
+                                                {{ __('No :gateway transactions match the current filters.', ['gateway' => $selectedGatewayLabel]) }}
+                                            @else
+                                                {{ __('No payment transactions recorded yet.') }}
+                                            @endif
+                                        </td>
                                     </tr>
                                 @endforelse
                             </tbody>
@@ -281,9 +324,22 @@
             </div>
             <div class="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-5">
                 @foreach ($gateways as $gw)
+                    @php
+                        $gwActive = request('gateway') === $gw['key'];
+                        $uptime = $gw['uptime'] ?? 0;
+                        $success = $gw['success'] ?? 0;
+                    @endphp
                     <a
-                        href="{{ route('payments.index', ['gateway' => $gw['key']]) }}"
-                        class="group relative overflow-hidden rounded-xl border border-slate-200/80 p-4 transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:hover:border-slate-600"
+                        href="{{ route('payments.index', array_filter([
+                            'gateway' => $gwActive ? null : $gw['key'],
+                            'status' => request('status'),
+                        ])) }}#ledger"
+                        @class([
+                            'group relative overflow-hidden rounded-xl border p-4 transition hover:shadow-md',
+                            'border-indigo-500/50 bg-indigo-500/5 ring-2 ring-indigo-500/30 dark:border-indigo-400/40' => $gwActive,
+                            'border-slate-200/80 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600' => ! $gwActive,
+                        ])
+                        aria-current="{{ $gwActive ? 'true' : 'false' }}"
                     >
                         <div class="mb-3 flex items-center justify-between">
                             <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br {{ $gwTone($gw['color']) }} text-xs font-bold text-white shadow">
@@ -299,22 +355,25 @@
                             <div>
                                 <div class="mb-0.5 flex justify-between text-[10px]">
                                     <span class="text-slate-500">{{ __('Uptime') }}</span>
-                                    <span class="font-semibold tabular-nums">{{ $gw['uptime'] }}%</span>
+                                    <span class="font-semibold tabular-nums">{{ $uptime !== null ? $uptime.'%' : '—' }}</span>
                                 </div>
                                 <div class="h-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                                    <div class="h-full rounded-full bg-emerald-500" style="width: {{ $gw['uptime'] }}%"></div>
+                                    <div class="h-full rounded-full bg-emerald-500" style="width: {{ min(100, max(0, (float) $uptime)) }}%"></div>
                                 </div>
                             </div>
                             <div>
                                 <div class="mb-0.5 flex justify-between text-[10px]">
                                     <span class="text-slate-500">{{ __('Success rate') }}</span>
-                                    <span class="font-semibold tabular-nums">{{ $gw['success'] }}%</span>
+                                    <span class="font-semibold tabular-nums">{{ $success !== null ? $success.'%' : '—' }}</span>
                                 </div>
                                 <div class="h-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                                    <div class="h-full rounded-full bg-indigo-500" style="width: {{ $gw['success'] }}%"></div>
+                                    <div class="h-full rounded-full bg-indigo-500" style="width: {{ min(100, max(0, (float) $success)) }}%"></div>
                                 </div>
                             </div>
-                            <p class="text-[10px] text-slate-400">{{ __('Latency') }}: <span class="font-mono font-semibold text-slate-600 dark:text-slate-300">{{ $gw['latency'] }}ms</span></p>
+                            <p class="text-[10px] text-slate-400">{{ __('Latency') }}: <span class="font-mono font-semibold text-slate-600 dark:text-slate-300">{{ filled($gw['latency']) ? $gw['latency'].'ms' : '—' }}</span></p>
+                            @if ($gwActive)
+                                <p class="mt-2 text-[10px] font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">{{ __('Filtering ledger') }}</p>
+                            @endif
                         </div>
                     </a>
                 @endforeach

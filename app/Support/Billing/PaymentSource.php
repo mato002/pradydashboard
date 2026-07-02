@@ -18,6 +18,8 @@ final class PaymentSource
 
     public const OTHER = 'other';
 
+    public const PAYMENTS_GATEWAY = 'payments_gateway';
+
     /** @return list<string> */
     public static function all(): array
     {
@@ -29,6 +31,7 @@ final class PaymentSource
             self::CARD,
             self::CHEQUE,
             self::OTHER,
+            self::PAYMENTS_GATEWAY,
         ];
     }
 
@@ -41,6 +44,7 @@ final class PaymentSource
             self::CARD => __('Card'),
             self::CHEQUE => __('Cheque'),
             self::OTHER => __('Other'),
+            self::PAYMENTS_GATEWAY => __('Payments Gateway'),
             default => __('Manual'),
         };
     }

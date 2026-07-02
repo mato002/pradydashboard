@@ -3,6 +3,8 @@
     'label',
     'defaultOpen' => false,
     'icon' => null,
+    'iconName' => null,
+    'iconVariant' => 'solid',
 ])
 
 <div
@@ -35,26 +37,25 @@
         :title="@js($label)"
         :aria-expanded="isOpen() || flyout"
     >
-        @if ($icon)
+        @if ($iconName)
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10">
+                <x-ui.icon :name="$iconName" :variant="$iconVariant" />
+            </span>
+        @elseif ($icon)
             <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10">
                 {!! $icon !!}
             </span>
         @endif
         <span class="min-w-0 flex-1 truncate" :class="$store.sidebar.collapsed ? 'lg:hidden' : ''">{{ $label }}</span>
-        <svg
-            class="h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200"
+        <span
+            class="inline-flex shrink-0"
             :class="[
                 $store.sidebar.collapsed ? 'lg:hidden' : '',
                 isOpen() ? 'rotate-180' : '',
             ]"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            aria-hidden="true"
         >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
+            <x-ui.icon name="chevron-down" class="h-4 w-4 text-slate-500 transition-transform duration-200" />
+        </span>
     </button>
 
     <div
@@ -72,7 +73,7 @@
             ? 'absolute left-full top-0 z-[60] ml-2 hidden min-w-[12.5rem] rounded-xl border border-sidebar-border bg-sidebar py-2 shadow-2xl ring-1 ring-white/10 lg:block'
             : 'mt-0.5 space-y-0.5 pb-1'"
     >
-        @if ($icon)
+        @if ($iconName || $icon)
             <p class="mb-1 hidden px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500 lg:block" :class="$store.sidebar.collapsed ? '' : 'lg:!hidden'">{{ $label }}</p>
         @endif
         <div :class="$store.sidebar.collapsed ? 'space-y-0.5 px-1.5' : ''">

@@ -1,5 +1,7 @@
 # Prady Dashboard — Control Plane Architecture
 
+> **Setting up integrations?** See [INTEGRATION_SETUP_GUIDE.md](./INTEGRATION_SETUP_GUIDE.md) for dashboard setup, and [PRODUCT_APP_INTEGRATION_BRIEF.md](./PRODUCT_APP_INTEGRATION_BRIEF.md) for implementing the pipeline in product apps (MFI, Property, CRM) with Cursor.
+
 ## What this system is
 
 **Prady Dashboard** (`dashboard.pradytecai.com`) is the **master control system** for:

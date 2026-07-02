@@ -17,6 +17,31 @@
         {{ __('Subscribe to a project before adding service integrations.') }}
     </p>
 @else
+    @if (! empty($integrationReadiness))
+        <div class="mb-6 rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Integration readiness') }}</h3>
+            <ul class="mt-3 space-y-2 text-sm">
+                @foreach ($integrationReadiness as $item)
+                    <li class="flex items-start gap-2">
+                        <span @class([
+                            'mt-1 h-2 w-2 shrink-0 rounded-full',
+                            'bg-emerald-500' => $item['status'] === 'pass',
+                            'bg-amber-500' => $item['status'] === 'warn',
+                            'bg-rose-500' => $item['status'] === 'fail',
+                        ])></span>
+                        <div>
+                            <p class="font-medium text-slate-800 dark:text-slate-200">{{ $item['label'] }}</p>
+                            <p class="text-slate-500 dark:text-slate-400">{{ $item['message'] }}</p>
+                            @if ($item['action'])
+                                <p class="mt-0.5 text-xs text-indigo-600 dark:text-indigo-400">{{ $item['action'] }}</p>
+                            @endif
+                        </div>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
             <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('Provider APIs and tenant system endpoints for each product subscription.') }}</p>

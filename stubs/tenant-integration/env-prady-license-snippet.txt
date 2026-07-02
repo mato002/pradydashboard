@@ -1,0 +1,10 @@
+# Prady license integration — product app .env
+PRADY_DASHBOARD_URL=https://dashboard.pradytecai.com
+PRADY_PROJECT_API_TOKEN=
+PRADY_PRODUCT_KEY=
+PRADY_TENANT_KEY=
+PRADY_LICENSE_SECRET=
+PRADY_LICENSE_CACHE_TTL=600
+
+# Optional: payments gateway events delivered to this app
+# PAYMENTS_GATEWAY_WEBHOOK_SECRET=

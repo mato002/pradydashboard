@@ -36,8 +36,15 @@
                     if (amount) document.getElementById('amount').value = amount;
                 }
             }"
+            x-init="$nextTick(() => applyPlan())"
         >
             @csrf
+
+            @if ($isUpgrade)
+                <div class="rounded-2xl border border-indigo-500/25 bg-indigo-500/5 px-5 py-3 text-sm text-slate-700 ring-1 ring-indigo-500/15 dark:text-slate-200">
+                    {{ __('Upgrade mode — pick a higher SaaS plan and billing period. The new subscription will sync renewal dates on the tenant profile.') }}
+                </div>
+            @endif
 
             <div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card dark:border-slate-800/80 dark:bg-slate-900/60">
                 <div class="border-b border-slate-200/80 bg-gradient-to-r from-violet-50/80 to-fuchsia-50/40 px-6 py-4 dark:border-slate-800 dark:from-violet-950/30 dark:to-fuchsia-950/20">
@@ -52,7 +59,7 @@
                                 <option
                                     value="{{ $tenant->id }}"
                                     data-product="{{ $tenant->project?->name }}"
-                                    @selected(old('tenant_id') == $tenant->id)
+                                    @selected(old('tenant_id', $selectedTenantId ?? null) == $tenant->id)
                                 >
                                     {{ $tenant->company_name }} — {{ $tenant->project?->name ?? __('No product') }}
                                 </option>
@@ -78,7 +85,7 @@
                                         data-name="{{ $plan->name }}"
                                         data-monthly="{{ $plan->monthly_price }}"
                                         data-annual="{{ $plan->annual_price }}"
-                                        @selected(old('saas_plan_id') == $plan->id)
+                                        @selected(old('saas_plan_id', $selectedPlanId ?? null) == $plan->id)
                                     >
                                         {{ $plan->name }} — {{ $plan->formattedMonthly() }}/mo
                                     </option>

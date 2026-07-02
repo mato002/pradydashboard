@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Tenancy\Services\TenantActivityLogger;
 use App\Domain\Tenancy\TenantProjectProvisioner;
 use App\Http\Controllers\Controller;
+use App\Jobs\Backups\RunBackupJob;
 use App\Models\Backup;
 use App\Models\Tenant;
 use App\Models\TenantProjectServiceIntegration;
@@ -63,7 +64,7 @@ class TenantQuickActionsController extends Controller
         $this->authorize('view', $tenant);
         abort_unless(Rbac::can('backups.create'), 403);
 
-        Backup::query()->create(Backup::attributesWithHostedProject($tenant->hosted_project_id, [
+        $backup = Backup::query()->create(Backup::attributesWithHostedProject($tenant->hosted_project_id, [
             'name' => __('On-demand: :tenant', ['tenant' => $tenant->company_name]),
             'server_id' => $tenant->server_id,
             'tenant_id' => $tenant->id,
@@ -72,6 +73,8 @@ class TenantQuickActionsController extends Controller
             'started_at' => now(),
             'notes' => __('Queued from tenant control center.'),
         ]));
+
+        RunBackupJob::dispatch($backup->id);
 
         $this->activityLogger->log(
             $tenant,

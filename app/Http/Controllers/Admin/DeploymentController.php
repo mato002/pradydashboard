@@ -6,6 +6,7 @@ use App\Domain\Deployments\DeploymentOpsRecorder;
 use App\Domain\Deployments\DeploymentOperationsService;
 use App\Domain\Deployments\DeploymentPipelineBuilder;
 use App\Http\Controllers\Controller;
+use App\Jobs\Deployments\ExecuteDeploymentJob;
 use App\Support\DemoMode;
 use App\Models\Project;
 use App\Models\ProjectDeployment;
@@ -86,6 +87,8 @@ class DeploymentController extends Controller
         ]);
 
         DeploymentOpsRecorder::recordForDeployment($deployment, $notes);
+
+        ExecuteDeploymentJob::dispatch($deployment->id);
 
         return redirect()->route('deployments.index')->with('status', __('Deployment queued for :project.', ['project' => $project->name]));
     }

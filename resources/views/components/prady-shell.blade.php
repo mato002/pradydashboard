@@ -51,7 +51,7 @@
                 ]"
             >
                 <div class="flex h-[4.25rem] shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
-                    <a href="{{ route('dashboard') }}" data-prady-nav class="flex min-w-0 items-center gap-3">
+                    <a href="{{ route('dashboard') }}" data-prady-nav data-turbo-frame="prady-workspace" class="flex min-w-0 items-center gap-3">
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold tracking-tight text-white shadow-lg shadow-indigo-500/30">P</span>
                         <div class="min-w-0 flex-1 overflow-hidden transition-opacity" :class="$store.sidebar.collapsed ? 'lg:opacity-0 lg:pointer-events-none' : ''">
                             <p class="truncate text-sm font-semibold tracking-tight text-white">Prady Dashboard</p>
@@ -190,10 +190,10 @@
                                         </button>
                                     </x-slot>
                                     <x-slot name="content">
-                                        <x-dropdown-link :href="route('profile.edit')" data-prady-full-nav>{{ __('Profile') }}</x-dropdown-link>
+                                        <x-dropdown-link :href="route('profile.edit')" data-prady-full-nav data-turbo-frame="_top">{{ __('Profile') }}</x-dropdown-link>
                                         <form method="POST" action="{{ route('logout') }}">
                                             @csrf
-                                            <x-dropdown-link :href="route('logout')" data-prady-full-nav onclick="event.preventDefault(); this.closest('form').submit();">
+                                            <x-dropdown-link :href="route('logout')" data-prady-full-nav data-turbo-frame="_top" onclick="event.preventDefault(); this.closest('form').submit();">
                                                 {{ __('Log Out') }}
                                             </x-dropdown-link>
                                         </form>

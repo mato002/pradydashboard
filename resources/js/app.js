@@ -1,3 +1,7 @@
+import * as Turbo from '@hotwired/turbo';
+
+Turbo.session.drive = false;
+
 import './bootstrap';
 
 import Alpine from 'alpinejs';
@@ -79,66 +83,36 @@ document.addEventListener('alpine:init', () => {
                 }
             });
 
-            document.addEventListener('click', (event) => this.handleWorkspaceLinkClick(event));
+            document.addEventListener('turbo:before-fetch-request', (event) => {
+                const frameId = event.detail?.headers?.['Turbo-Frame'];
+                if (frameId === 'prady-workspace') {
+                    this.workspaceLoading = true;
+                    this.sidebarOpen = false;
+                }
+            });
 
-            window.addEventListener('popstate', () => {
-                if (window.history.state?.tenantTab !== undefined) {
+            document.addEventListener('turbo:frame-render', (event) => {
+                if (event.target?.id !== 'prady-workspace') {
                     return;
                 }
-                this.loadWorkspaceFromUrl(window.location.href, false);
+
+                this.workspaceLoading = false;
+                this.updatePageChrome(event.target);
+                this.updateSidebarActiveState(window.location.pathname);
+
+                if (window.Alpine) {
+                    window.Alpine.initTree(event.target);
+                }
+
+                window.scrollTo({ top: 0, behavior: 'auto' });
+            });
+
+            document.addEventListener('turbo:fetch-request-error', () => {
+                this.workspaceLoading = false;
             });
         },
 
-        shouldHandleWorkspaceLink(link) {
-            if (!link?.href || link.hasAttribute('data-prady-full-nav') || link.hasAttribute('data-tenant-full-nav')) {
-                return false;
-            }
-            if (link.target === '_blank' || link.hasAttribute('download')) {
-                return false;
-            }
-            if (link.closest('#tenant-workspace-root')) {
-                return false;
-            }
-
-            const href = link.getAttribute('href') || '';
-            if (!href || href.startsWith('#') || href.startsWith('javascript:')) {
-                return false;
-            }
-
-            let target;
-            try {
-                target = new URL(link.href, window.location.origin);
-            } catch {
-                return false;
-            }
-
-            if (target.origin !== window.location.origin) {
-                return false;
-            }
-
-            const skipPaths = ['/logout', '/login', '/register', '/confirm-password'];
-            if (skipPaths.some((p) => target.pathname === p || target.pathname.startsWith(p + '/'))) {
-                return false;
-            }
-
-            const inSidebar = link.closest('aside');
-            const inWorkspace = link.closest('#prady-workspace-content');
-
-            return Boolean(inSidebar || inWorkspace);
-        },
-
-        handleWorkspaceLinkClick(event) {
-            const link = event.target.closest('a[href]');
-            if (!this.shouldHandleWorkspaceLink(link)) {
-                return;
-            }
-
-            event.preventDefault();
-            this.sidebarOpen = false;
-            this.loadWorkspaceFromUrl(link.href);
-        },
-
-        updatePageChrome(workspaceEl, doc) {
+        updatePageChrome(workspaceEl) {
             const heading = workspaceEl?.dataset?.pageHeading;
             const subheading = workspaceEl?.dataset?.pageSubheading;
             const documentTitle = workspaceEl?.dataset?.documentTitle;
@@ -155,11 +129,7 @@ document.addEventListener('alpine:init', () => {
 
             if (documentTitle) {
                 document.title = documentTitle;
-            } else if (doc?.querySelector('title')?.textContent) {
-                document.title = doc.querySelector('title').textContent;
             }
-
-            this.updateSidebarActiveState(window.location.pathname);
         },
 
         updateSidebarActiveState(pathname) {
@@ -188,64 +158,6 @@ document.addEventListener('alpine:init', () => {
                     dot.classList.toggle('bg-slate-500', ! isActive);
                 }
             });
-        },
-
-        async loadWorkspaceFromUrl(url, pushState = true) {
-            if (this.workspaceLoading) {
-                return;
-            }
-
-            this.workspaceLoading = true;
-
-            try {
-                const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-                const headers = {
-                    Accept: 'text/html',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-Prady-Workspace': '1',
-                };
-                if (token) {
-                    headers['X-CSRF-TOKEN'] = token;
-                }
-
-                const response = await fetch(url, {
-                    headers,
-                    credentials: 'same-origin',
-                });
-
-                if (!response.ok) {
-                    window.location.href = url;
-                    return;
-                }
-
-                const html = await response.text();
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                const next = doc.getElementById('prady-workspace-content');
-                const current = document.getElementById('prady-workspace-content');
-
-                if (!next || !current) {
-                    window.location.href = url;
-                    return;
-                }
-
-                current.replaceWith(next);
-
-                if (window.Alpine) {
-                    window.Alpine.initTree(next);
-                }
-
-                this.updatePageChrome(next, doc);
-
-                if (pushState) {
-                    window.history.pushState({ pradyNav: true }, '', url);
-                }
-
-                window.scrollTo({ top: 0, behavior: 'auto' });
-            } catch {
-                window.location.href = url;
-            } finally {
-                this.workspaceLoading = false;
-            }
         },
         setTheme(mode) {
             this.theme = mode;
@@ -335,118 +247,46 @@ document.addEventListener('alpine:init', () => {
         loading: false,
 
         init() {
-            this.syncTabFromLocation(false);
+            this.syncTabFromLocation();
 
-            this.$el.addEventListener('click', (event) => {
-                const link = event.target.closest('a[href]');
-                if (!link || link.hasAttribute('data-tenant-full-nav')) {
-                    return;
+            document.addEventListener('turbo:before-fetch-request', (event) => {
+                if (event.detail?.headers?.['Turbo-Frame'] === 'tenant-workspace') {
+                    this.loading = true;
                 }
-
-                let target;
-                try {
-                    target = new URL(link.href, window.location.origin);
-                } catch {
-                    return;
-                }
-
-                const base = new URL(this.baseUrl, window.location.origin);
-                if (target.pathname !== base.pathname) {
-                    return;
-                }
-
-                const tab = target.searchParams.get('tab') || 'overview';
-                if (!this.tabs.includes(tab)) {
-                    return;
-                }
-
-                event.preventDefault();
-                this.navigateToUrl(link.href, tab);
             });
 
-            window.addEventListener('popstate', () => {
-                this.syncTabFromLocation(true);
+            document.addEventListener('turbo:frame-render', (event) => {
+                if (event.target?.id !== 'tenant-workspace') {
+                    return;
+                }
+
+                this.loading = false;
+                const tab = event.target.dataset.tenantTab;
+                if (tab && this.tabs.includes(tab)) {
+                    this.activeTab = tab;
+                }
+
+                if (window.Alpine) {
+                    window.Alpine.initTree(event.target);
+                }
+            });
+
+            document.addEventListener('turbo:fetch-request-error', () => {
+                this.loading = false;
             });
         },
 
-        syncTabFromLocation(fetchPanel) {
-            const url = new URL(window.location.href);
-            const tab = url.searchParams.get('tab') || 'overview';
-            if (!this.tabs.includes(tab)) {
-                return;
-            }
-            this.activeTab = tab;
-            if (fetchPanel) {
-                this.navigateToUrl(url.toString(), tab, false);
+        syncTabFromLocation() {
+            const tab = new URL(window.location.href).searchParams.get('tab') || 'overview';
+            if (this.tabs.includes(tab)) {
+                this.activeTab = tab;
             }
         },
 
         navigate(tab) {
             const url = new URL(this.baseUrl, window.location.origin);
             url.searchParams.set('tab', tab);
-            this.navigateToUrl(url.toString(), tab);
-        },
-
-        async navigateToUrl(url, tab = null, pushState = true) {
-            if (this.loading) {
-                return;
-            }
-
-            const resolvedTab =
-                tab ||
-                new URL(url, window.location.origin).searchParams.get('tab') ||
-                'overview';
-
-            this.activeTab = resolvedTab;
-            this.loading = true;
-
-            const panel = document.getElementById('tenant-workspace-panel');
-            const scrollY = window.scrollY;
-
-            try {
-                const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-                const headers = {
-                    Accept: 'text/html',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-Tenant-Workspace': '1',
-                    'X-Prady-Workspace': '1',
-                };
-                if (token) {
-                    headers['X-CSRF-TOKEN'] = token;
-                }
-
-                const response = await fetch(url, {
-                    headers,
-                    credentials: 'same-origin',
-                });
-
-                if (!response.ok) {
-                    window.location.href = url;
-                    return;
-                }
-
-                const html = await response.text();
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                const next = doc.getElementById('tenant-workspace-panel');
-
-                if (panel && next) {
-                    panel.innerHTML = next.innerHTML;
-                    panel.dataset.tenantTab = next.dataset.tenantTab || resolvedTab;
-                    if (next.getAttribute('aria-label')) {
-                        panel.setAttribute('aria-label', next.getAttribute('aria-label'));
-                    }
-                }
-
-                if (pushState) {
-                    window.history.pushState({ tenantTab: resolvedTab }, '', url);
-                }
-
-                window.scrollTo({ top: scrollY, behavior: 'instant' in window ? 'instant' : 'auto' });
-            } catch {
-                window.location.href = url;
-            } finally {
-                this.loading = false;
-            }
+            Turbo.visit(url.toString(), { frame: 'tenant-workspace' });
         },
     }));
 

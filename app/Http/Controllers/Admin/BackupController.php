@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\Backups\RunBackupJob;
 use App\Support\OperationalMetrics;
 use App\Support\DemoMode;
 use App\Models\Backup;
@@ -81,6 +82,22 @@ class BackupController extends Controller
 
     public function run(Request $request): RedirectResponse
     {
+        $validated = $request->validate([
+            'server_id' => ['nullable', 'exists:servers,id'],
+            'backup_type' => ['nullable', 'in:full,database,files,snapshot,incremental'],
+        ]);
+
+        $backup = Backup::query()->create([
+            'name' => __('Manual backup :time', ['time' => now()->format('Y-m-d H:i')]),
+            'server_id' => $validated['server_id'] ?? null,
+            'backup_type' => $validated['backup_type'] ?? 'full',
+            'status' => 'queued',
+            'started_at' => now(),
+            'notes' => __('Queued from backup center.'),
+        ]);
+
+        RunBackupJob::dispatch($backup->id);
+
         return redirect()
             ->route('backups.index')
             ->with('status', __('Backup job queued on the next available agent.'));

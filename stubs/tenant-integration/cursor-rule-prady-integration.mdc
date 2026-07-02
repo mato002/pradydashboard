@@ -1,0 +1,60 @@
+---
+description: Prady Dashboard control-plane integration for hosted product apps (license, system info, webhooks)
+globs: app/Http/Middleware/**,app/Http/Controllers/Api/**,app/Http/Controllers/Webhooks/**,routes/api.php,routes/web.php,bootstrap/app.php,config/services.php,.env.example
+alwaysApply: false
+---
+
+# Prady product integration
+
+When wiring this app to **Prady Dashboard** (`dashboard.pradytecai.com`):
+
+## Architecture
+
+- **Product → Dashboard:** `POST /api/v1/license/check` (Bearer project token + HMAC body signature)
+- **Dashboard → Product:** `GET /api/system/info` (Bearer `PRADY_DASHBOARD_API_TOKEN`)
+- **Gateway → Product (optional):** `POST /webhooks/payments-gateway/events`
+- One deployment = one tenant (`PRADY_TENANT_KEY` in `.env`). No shared sessions with dashboard.
+
+## Implementation source of truth
+
+If `prady-dashboard` repo is available, copy from:
+- `stubs/tenant-integration/` (middleware, controllers, views)
+- `docs/PRODUCT_APP_INTEGRATION_BRIEF.md` (file checklist + acceptance tests)
+
+## Required `.env` keys
+
+```
+PRADY_DASHBOARD_URL
+PRADY_PROJECT_API_TOKEN
+PRADY_PRODUCT_KEY
+PRADY_TENANT_KEY
+PRADY_LICENSE_SECRET
+PRADY_DASHBOARD_API_TOKEN
+```
+
+## Middleware rules
+
+1. `CheckPradyLicense` on `web` group — must **skip**: `/up`, `/api/system/info`, `/webhooks/payments-gateway/*`
+2. `AuthenticatePradyDashboard` only on `/api/system/info`
+3. Enforce `read_only` by blocking POST/PUT/PATCH/DELETE
+4. Flash `prady_license_warning` when `access_level` is `warning`
+
+## License HMAC
+
+Sign the **raw JSON body** of the license request with `PRADY_LICENSE_SECRET`:
+`X-Prady-Signature: hash_hmac('sha256', $jsonBody, $secret)`
+
+## Module gating
+
+Use `prady.module:{key}` middleware; keys must match `enabled_modules` from license API response.
+
+## Do not
+
+- Query dashboard database directly
+- Share Laravel sessions across domains
+- Commit API tokens or license secrets
+- Block `/api/system/info` with license middleware (breaks dashboard polling)
+
+## Verify
+
+Run checks in `stubs/tenant-integration/ACCEPTANCE_CHECKS.md` after implementation.

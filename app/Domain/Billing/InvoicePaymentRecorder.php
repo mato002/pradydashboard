@@ -10,6 +10,7 @@ class InvoicePaymentRecorder
 {
     public function __construct(
         private readonly ReceiptGenerator $receiptGenerator,
+        private readonly TenantBillingActivationService $billingActivation,
     ) {}
 
     public function record(TenantInvoice $invoice, array $data): TenantPayment
@@ -35,6 +36,7 @@ class InvoicePaymentRecorder
 
             if ($invoice->status === 'paid' && $invoice->document_type === 'invoice') {
                 $this->receiptGenerator->generateForPayment($invoice->fresh(), $payment);
+                $this->billingActivation->activateFromPaidInvoice($invoice->fresh(['tenant', 'lineItems']));
             }
 
             return $payment;

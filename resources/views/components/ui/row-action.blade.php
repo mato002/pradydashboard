@@ -3,6 +3,8 @@
     'method' => null,
     'danger' => false,
     'confirm' => null,
+    'fullNav' => false,
+    'target' => null,
 ])
 
 @php
@@ -10,15 +12,25 @@
     $classes .= $danger
         ? ' text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10'
         : ' text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800';
+
+    $fullNavAttr = ($fullNav || $method) ? ['data-prady-full-nav' => true] : [];
+    $targetAttr = filled($target) ? ['target' => $target] : [];
+    if ($target === '_blank') {
+        $targetAttr['rel'] = 'noopener noreferrer';
+    }
 @endphp
 
 @if ($href && ! $method)
-    <a href="{{ $href }}" {{ $attributes->merge(['class' => $classes, 'role' => 'menuitem']) }}>{{ $slot }}</a>
+    <a
+        href="{{ $href }}"
+        {{ $attributes->merge($fullNavAttr)->merge($targetAttr)->merge(['class' => $classes, 'role' => 'menuitem']) }}
+    >{{ $slot }}</a>
 @elseif ($href && $method)
     <form
         method="POST"
         action="{{ $href }}"
         class="block"
+        data-prady-full-nav
         @if ($confirm) onsubmit="return confirm(@js($confirm))" @endif
     >
         @csrf

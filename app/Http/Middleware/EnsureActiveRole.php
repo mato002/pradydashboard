@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Domain\Rbac\ActiveRoleService;
 use App\Domain\Rbac\LoginRoleActivationService;
 use App\Models\User;
+use App\Models\UserActiveRole;
 use App\Models\UserRoleAssignment;
 use App\Support\Rbac\RoleScopeType;
 use App\Support\Rbac\UserRoleAssignmentStatus;
@@ -18,8 +19,14 @@ class EnsureActiveRole
     {
         $user = $request->user();
 
-        if ($user instanceof User && ! app(ActiveRoleService::class)->getActiveRecord($user)) {
-            $this->activatePreferredRole($user);
+        if ($user instanceof User) {
+            $record = app(ActiveRoleService::class)->getActiveRecord($user);
+
+            if (! $record) {
+                $this->activatePreferredRole($user);
+            } else {
+                $this->rebindSuperAdminSessionIfStale($user, $record);
+            }
         }
 
         return $next($request);
@@ -39,5 +46,31 @@ class EnsureActiveRole
         if ($hasSuperAdmin) {
             app(LoginRoleActivationService::class)->activateForSession($user, false);
         }
+    }
+
+    private function rebindSuperAdminSessionIfStale(User $user, UserActiveRole $record): void
+    {
+        $sessionId = session()->getId();
+
+        if (! filled($record->session_id) || ! filled($sessionId)) {
+            return;
+        }
+
+        if (hash_equals($record->session_id, $sessionId)) {
+            return;
+        }
+
+        $assignment = $record->assignment;
+
+        if (! $assignment?->role?->isSuperAdmin() || ! $assignment->isActivatable()) {
+            return;
+        }
+
+        app(ActiveRoleService::class)->setActive(
+            $user,
+            $assignment,
+            $sessionId,
+            $record->elevation_verified_at,
+        );
     }
 }

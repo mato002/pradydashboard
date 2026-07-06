@@ -57,7 +57,7 @@ class TenantLicenseBillingContext
             );
         }
 
-        $paymentUrl = URL::temporarySignedRoute('billing.pay', now()->addDays(30), ['tenant' => $tenant->id]);
+        $paymentUrl = URL::temporarySignedRoute('billing.pay', now()->addDays(30), ['tenant' => $tenant]);
 
         $actions = [
             [
@@ -140,7 +140,7 @@ class TenantLicenseBillingContext
             );
         }
 
-        $paymentUrl = URL::temporarySignedRoute('billing.pay', now()->addDays(30), ['tenant' => $tenant->id]);
+        $paymentUrl = URL::temporarySignedRoute('billing.pay', now()->addDays(30), ['tenant' => $tenant]);
 
         $actions = [
             [

@@ -39,7 +39,7 @@
                 @foreach ($supportSummary['recent_communications']->take(5) as $comm)
                     <li class="flex flex-wrap justify-between gap-2">
                         <span>
-                            <a href="{{ route('tenants.show', ['tenant' => $comm->tenant_id, 'tab' => 'communications']) }}" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+                            <a href="{{ route('tenants.show', ['tenant' => $comm->tenant, 'tab' => 'communications']) }}" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
                                 {{ $comm->tenant?->company_name ?? __('Tenant') }}
                             </a>
                             — {{ \Illuminate\Support\Str::limit($comm->message, 60) }}

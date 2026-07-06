@@ -214,9 +214,20 @@
                                         <td class="text-xs text-slate-500">{{ $payment->paid_at?->format('M j, Y H:i') ?? $payment->created_at?->format('M j, Y') }}</td>
                                         <td class="text-right" @click.stop>
                                             <x-ui.row-actions-menu>
-                                                <x-ui.row-action>{{ __('View Receipt') }}</x-ui.row-action>
-                                                <x-ui.row-action>{{ __('Allocate') }}</x-ui.row-action>
-                                                <x-ui.row-action>{{ __('Refund') }}</x-ui.row-action>
+                                                @if ($payment->invoice)
+                                                    <x-ui.row-action :href="route('invoices.preview', $payment->invoice)" fullNav target="_blank">{{ __('View Receipt') }}</x-ui.row-action>
+                                                @else
+                                                    <x-ui.row-action :href="route('invoices.index', ['tab' => 'payments']).'#payment-'.$payment->id">{{ __('View Receipt') }}</x-ui.row-action>
+                                                @endif
+                                                <x-ui.row-action :href="route('invoices.index', ['tab' => 'payments']).'#payment-'.$payment->id">{{ __('Allocate') }}</x-ui.row-action>
+                                                @if ($payment->status === 'successful')
+                                                    <x-ui.row-action
+                                                        :href="route('invoices.payments.reverse', $payment)"
+                                                        method="POST"
+                                                        :confirm="__('Reverse this payment and unallocate linked invoices?')"
+                                                        danger
+                                                    >{{ __('Refund') }}</x-ui.row-action>
+                                                @endif
                                             </x-ui.row-actions-menu>
                                         </td>
                                     </tr>

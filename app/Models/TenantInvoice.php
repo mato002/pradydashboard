@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use App\Support\Billing\BillingDocumentType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TenantInvoice extends Model
 {
+    use HasPublicId;
+
     public const OPEN_STATUSES = ['draft', 'sent', 'pending', 'partial', 'partially_paid', 'overdue'];
 
     protected $fillable = [

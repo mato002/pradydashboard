@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use App\Models\Concerns\HasStaffAssignments;
 use App\Domain\Servers\Support\ServerConnectionConfig;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Crypt;
 
 class Server extends Model
 {
+    use HasPublicId;
     use HasStaffAssignments;
 
     protected $fillable = [

@@ -80,7 +80,7 @@ class ActivityLogQuery
     public function paginate(array $filters, int $perPage = 25, bool $applyRbacScope = true): LengthAwarePaginator
     {
         $query = SystemActivityLog::query()
-            ->with(['user:id,name', 'staffProfile:id,full_name', 'tenant:id,company_name', 'project:id,name', 'server:id,name'])
+            ->with(['user:id,name', 'staffProfile:id,full_name', 'tenant:id,company_name,public_id', 'project:id,name,public_id', 'server:id,name,public_id'])
             ->orderByDesc('created_at');
 
         if ($applyRbacScope) {
@@ -96,7 +96,7 @@ class ActivityLogQuery
     public function recent(int $limit = 10, ?array $filters = null): Collection
     {
         $query = SystemActivityLog::query()
-            ->with(['user:id,name', 'staffProfile:id,full_name', 'tenant:id,company_name'])
+            ->with(['user:id,name', 'staffProfile:id,full_name', 'tenant:id,company_name,public_id'])
             ->orderByDesc('created_at')
             ->limit($limit);
 

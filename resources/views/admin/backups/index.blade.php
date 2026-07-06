@@ -160,9 +160,9 @@
                                             </td>
                                             <td class="text-right" @click.stop>
                                                 <x-ui.row-actions-menu>
-                                                    <x-ui.row-action>{{ __('Download Archive') }}</x-ui.row-action>
-                                                    <x-ui.row-action>{{ __('Verify Integrity') }}</x-ui.row-action>
-                                                    <x-ui.row-action>{{ __('View Logs') }}</x-ui.row-action>
+                                                    <x-ui.row-action :href="route('backups.download', $backup)" fullNav>{{ __('Download Archive') }}</x-ui.row-action>
+                                                    <x-ui.row-action :href="route('backups.verify', $backup)" method="POST">{{ __('Verify Integrity') }}</x-ui.row-action>
+                                                    <x-ui.row-action :href="route('activity-logs.index', ['q' => $backup->name])">{{ __('View Logs') }}</x-ui.row-action>
                                                 </x-ui.row-actions-menu>
                                             </td>
                                         </tr>

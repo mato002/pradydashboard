@@ -28,10 +28,26 @@ class ActiveRoleService
 
         if (filled($record->session_id)) {
             $currentSessionId = session()->getId();
-            if (! filled($currentSessionId) || ! hash_equals($record->session_id, $currentSessionId)) {
-                $record->delete();
 
-                return null;
+            if (! filled($currentSessionId) || ! hash_equals($record->session_id, $currentSessionId)) {
+                $assignment = $record->assignment;
+
+                if (
+                    filled($currentSessionId)
+                    && $assignment?->role?->isSuperAdmin()
+                    && $assignment->isActivatable()
+                ) {
+                    $record = $this->setActive(
+                        $user,
+                        $assignment,
+                        $currentSessionId,
+                        $record->elevation_verified_at,
+                    );
+                } else {
+                    $record->delete();
+
+                    return null;
+                }
             }
         }
 

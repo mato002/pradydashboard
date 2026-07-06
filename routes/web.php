@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\ApiCredentialsController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DeploymentController;
+use App\Http\Controllers\Admin\FeatureDiscoveryController;
 use App\Http\Controllers\Admin\HrController;
 use App\Http\Controllers\Admin\HrDepartmentController;
 use App\Http\Controllers\Admin\InvoiceController;
@@ -72,6 +73,7 @@ use App\Http\Controllers\Settings\Integrations\PaymentsGateway\PaymentsGatewayOv
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\TenantProfilesController;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\WebhookEndpointsController;
 use App\Http\Controllers\PublicTenantBillingController;
+use App\Models\HostedProject;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'landing')->name('home');
@@ -88,6 +90,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->middleware('permission:dashboard.view')->name('dashboard');
 
     Route::post('active-role/switch', [ActiveRoleController::class, 'switch'])->name('active-role.switch');
+
+    Route::get('feature-discovery/search', [FeatureDiscoveryController::class, 'search'])->name('feature-discovery.search');
 
     Route::middleware('permission:servers.sync')->group(function () {
         Route::post('servers/probe', [ServerController::class, 'probe'])->name('servers.probe');
@@ -130,8 +134,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::redirect('projects', '/hosted-projects')->name('projects.index');
     Route::redirect('projects/create', '/hosted-projects/create')->name('projects.create');
-    Route::get('projects/{project}', fn (int $project) => redirect()->route('hosted-projects.show', $project))->name('projects.show');
-    Route::get('projects/{project}/edit', fn (int $project) => redirect()->route('hosted-projects.edit', $project))->name('projects.edit');
+    Route::get('projects/{project}', fn (HostedProject $project) => redirect()->route('hosted-projects.show', $project))->name('projects.show');
+    Route::get('projects/{project}/edit', fn (HostedProject $project) => redirect()->route('hosted-projects.edit', $project))->name('projects.edit');
 
     Route::post('tenants/{tenant}/modules', [TenantModuleController::class, 'update'])
         ->name('tenants.modules.update');
@@ -232,14 +236,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('support-tickets', [SupportTicketsController::class, 'index'])->middleware('permission:support.tickets.view')->name('support-tickets.index');
     Route::get('support-tickets/create', [SupportTicketsController::class, 'create'])->middleware('permission:support.tickets.view')->name('support-tickets.create');
     Route::post('support-tickets', [SupportTicketsController::class, 'store'])->middleware('permission:support.tickets.assign')->name('support-tickets.store');
-    Route::get('support-tickets/{reference}', [SupportTicketsController::class, 'show'])->middleware('permission:support.tickets.view')->name('support-tickets.show')->where('reference', '[A-Za-z0-9\-]+');
-    Route::get('support-tickets/{reference}/edit', [SupportTicketsController::class, 'edit'])->middleware('permission:support.tickets.view')->name('support-tickets.edit')->where('reference', '[A-Za-z0-9\-]+');
-    Route::put('support-tickets/{reference}', [SupportTicketsController::class, 'update'])->middleware('permission:support.tickets.assign')->name('support-tickets.update')->where('reference', '[A-Za-z0-9\-]+');
-    Route::delete('support-tickets/{reference}', [SupportTicketsController::class, 'destroy'])->middleware('permission:support.tickets.assign')->name('support-tickets.destroy')->where('reference', '[A-Za-z0-9\-]+');
+    Route::get('support-tickets/{ticket}', [SupportTicketsController::class, 'show'])->middleware('permission:support.tickets.view')->name('support-tickets.show');
+    Route::get('support-tickets/{ticket}/edit', [SupportTicketsController::class, 'edit'])->middleware('permission:support.tickets.view')->name('support-tickets.edit');
+    Route::put('support-tickets/{ticket}', [SupportTicketsController::class, 'update'])->middleware('permission:support.tickets.assign')->name('support-tickets.update');
+    Route::delete('support-tickets/{ticket}', [SupportTicketsController::class, 'destroy'])->middleware('permission:support.tickets.assign')->name('support-tickets.destroy');
     Route::post('support-tickets/{ticket}/comments', [SupportTicketCommentController::class, 'storeGlobal'])
         ->middleware('permission:support.tickets.assign')
-        ->name('support-tickets.comments.store')
-        ->where('ticket', '[0-9]+');
+        ->name('support-tickets.comments.store');
 
     Route::get('integration-setup-guide', [IntegrationSetupGuideController::class, 'index'])
         ->middleware('permission:dashboard.view')
@@ -431,6 +434,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('backups', [BackupController::class, 'index'])->middleware('permission:backups.view')->name('backups.index');
     Route::post('backups/run', [BackupController::class, 'run'])->middleware('permission:backups.create')->name('backups.run');
+    Route::get('backups/{backup}/download', [BackupController::class, 'download'])->middleware('permission:backups.view')->name('backups.download');
+    Route::post('backups/{backup}/verify', [BackupController::class, 'verify'])->middleware('permission:backups.create')->name('backups.verify');
     Route::patch('backups/schedules/{schedule}/toggle', [BackupController::class, 'toggleSchedule'])->middleware('permission:backups.create')->name('backups.schedules.toggle');
 
     Route::get('payments', [PaymentController::class, 'index'])->middleware('permission:payments.view')->name('payments.index');
@@ -440,6 +445,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('ssl-domains', [SslDomainController::class, 'index'])->middleware('permission:ssl.view')->name('ssl-domains.index');
     Route::get('ssl-domains/create', [SslDomainController::class, 'create'])->middleware('permission:ssl.update')->name('ssl-domains.create');
     Route::post('ssl-domains', [SslDomainController::class, 'store'])->middleware('permission:ssl.update')->name('ssl-domains.store');
+    Route::get('ssl-domains/{domain}', [SslDomainController::class, 'show'])->middleware('permission:ssl.view')->name('ssl-domains.show');
+    Route::post('ssl-domains/{domain}/renew', [SslDomainController::class, 'renewDomain'])->middleware('permission:ssl.renew')->name('ssl-domains.domain.renew');
     Route::post('ssl-domains/renew', [SslDomainController::class, 'renew'])->middleware('permission:ssl.renew')->name('ssl-domains.renew');
     Route::post('ssl-domains/verify-dns', [SslDomainController::class, 'verifyDns'])->middleware('permission:ssl.update')->name('ssl-domains.verify-dns');
 

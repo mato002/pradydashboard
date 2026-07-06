@@ -97,7 +97,7 @@
                             {{ $comm->staffProfile?->full_name ?? __('Unassigned') }}
                             · {{ $commStatuses[$comm->status] ?? $comm->status }}
                             @if ($comm->relatedTicket)
-                                · <a href="{{ route('tenants.show', ['tenant' => $tenant, 'tab' => 'support', 'ticket' => $comm->relatedTicket->id]) }}" class="text-indigo-600 hover:underline">#{{ $comm->relatedTicket->id }}</a>
+                                · <a href="{{ route('tenants.show', ['tenant' => $tenant, 'tab' => 'support', 'ticket' => $comm->relatedTicket->public_id]) }}" class="text-indigo-600 hover:underline">{{ $comm->relatedTicket->humanReference() }}</a>
                             @endif
                         </p>
                     </li>

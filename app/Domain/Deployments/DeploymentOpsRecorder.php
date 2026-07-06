@@ -12,8 +12,8 @@ class DeploymentOpsRecorder
      */
     public static function recordForDeployment(ProjectDeployment $deployment, array $meta): void
     {
-        $deployment->loadMissing('project.server');
-        $project = $deployment->project;
+        $deployment->loadMissing('hostedProject.server');
+        $project = $deployment->hostedProject;
         $serverId = $project?->server_id;
         $occurredAt = $deployment->deployed_at ?? $deployment->created_at ?? now();
         $environment = (string) ($meta['environment'] ?? 'production');
@@ -21,7 +21,7 @@ class DeploymentOpsRecorder
         $status = (string) ($meta['status'] ?? 'success');
 
         DeploymentOpsEvent::query()->create([
-            'project_id' => $deployment->project_id,
+            'hosted_project_id' => $deployment->hosted_project_id,
             'server_id' => $serverId,
             'project_deployment_id' => $deployment->id,
             'type' => DeploymentOpsEvent::TYPE_CONTAINER,
@@ -36,7 +36,7 @@ class DeploymentOpsRecorder
 
         if (in_array($strategy, ['blue_green', 'canary'], true) || $environment === 'production') {
             DeploymentOpsEvent::query()->create([
-                'project_id' => $deployment->project_id,
+                'hosted_project_id' => $deployment->hosted_project_id,
                 'server_id' => $serverId,
                 'project_deployment_id' => $deployment->id,
                 'type' => DeploymentOpsEvent::TYPE_INFRA,
@@ -48,7 +48,7 @@ class DeploymentOpsRecorder
 
         if ($status === 'success' && $serverId) {
             DeploymentOpsEvent::query()->create([
-                'project_id' => $deployment->project_id,
+                'hosted_project_id' => $deployment->hosted_project_id,
                 'server_id' => $serverId,
                 'project_deployment_id' => $deployment->id,
                 'type' => DeploymentOpsEvent::TYPE_SCALING,

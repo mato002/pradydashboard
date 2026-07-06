@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use App\Support\OperationalDocumentOptions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OperationalDocument extends Model
 {
+    use HasPublicId;
+
     protected $fillable = [
         'tenant_id',
         'tenant_project_subscription_id',

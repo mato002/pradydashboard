@@ -155,9 +155,9 @@
                                             <td class="text-xs text-slate-500">{{ $domain->server?->name ?? '—' }}</td>
                                             <td class="text-right" @click.stop>
                                                 <x-ui.row-actions-menu>
-                                                    <x-ui.row-action>{{ __('View Certificate') }}</x-ui.row-action>
-                                                    <x-ui.row-action>{{ __('Configure Routing') }}</x-ui.row-action>
-                                                    <x-ui.row-action>{{ __('Force Renewal') }}</x-ui.row-action>
+                                                    <x-ui.row-action :href="route('ssl-domains.show', $domain)">{{ __('View Certificate') }}</x-ui.row-action>
+                                                    <x-ui.row-action :href="route('ssl-domains.show', $domain).'#routing'">{{ __('Configure Routing') }}</x-ui.row-action>
+                                                    <x-ui.row-action :href="route('ssl-domains.domain.renew', $domain)" method="POST" :confirm="__('Queue SSL renewal for :domain?', ['domain' => $domain->domain])">{{ __('Force Renewal') }}</x-ui.row-action>
                                                 </x-ui.row-actions-menu>
                                             </td>
                                         </tr>

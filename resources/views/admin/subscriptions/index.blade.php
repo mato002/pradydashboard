@@ -134,20 +134,12 @@
                                             <td class="text-right" @click.stop>
                                                 <x-ui.row-actions-menu>
                                                     @if ($sub->tenant)
-                                                        <x-ui.row-action :href="route('tenants.show', [$sub->tenant, 'tab' => 'billing'])">{{ __('View billing') }}</x-ui.row-action>
-                                                        <x-ui.row-action :href="route('subscriptions.create', array_filter([
-                                                            'tenant_id' => $sub->tenant_id,
-                                                            'saas_plan_id' => $sub->saas_plan_id,
-                                                            'upgrade' => 1,
-                                                        ]))">{{ __('Upgrade plan') }}</x-ui.row-action>
-                                                    @endif
-                                                    <x-ui.row-action :href="route('subscriptions.subscription.invoice', $sub)" method="POST">{{ __('Generate invoice') }}</x-ui.row-action>
-                                                    @if ($sub->status !== 'suspended')
+                                                        <x-ui.row-action :href="route('tenants.show', ['tenant' => $sub->tenant, 'tab' => 'monitoring'])">{{ __('View Usage') }}</x-ui.row-action>
                                                         <x-ui.row-action
-                                                            :href="route('subscriptions.subscription.suspend', $sub)"
+                                                            :href="route('access-controls.suspend', $sub->tenant)"
                                                             method="POST"
+                                                            :confirm="__('Suspend :tenant?', ['tenant' => $sub->tenant->company_name])"
                                                             danger
-                                                            :confirm="__('Suspend this subscription?')"
                                                         >{{ __('Suspend') }}</x-ui.row-action>
                                                     @endif
                                                 </x-ui.row-actions-menu>

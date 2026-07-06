@@ -128,8 +128,8 @@
             <ul class="mt-2 space-y-2 text-xs">
                 @forelse ($c['suspension_candidates'] ?? [] as $row)
                     <li>
-                        @if ($row['tenant_id'])
-                            <a href="{{ route('tenants.show', ['tenant' => $row['tenant_id'], 'tab' => 'billing']) }}" class="font-semibold text-rose-800 dark:text-rose-200">{{ $row['tenant'] }}</a>
+                        @if ($row['tenant_public_id'] ?? $row['tenant_id'])
+                            <a href="{{ route('tenants.show', ['tenant' => $row['tenant_public_id'] ?? $row['tenant_id'], 'tab' => 'billing']) }}" class="font-semibold text-rose-800 dark:text-rose-200">{{ $row['tenant'] }}</a>
                         @else
                             {{ $row['tenant'] }}
                         @endif

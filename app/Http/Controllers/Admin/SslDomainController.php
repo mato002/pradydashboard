@@ -168,6 +168,20 @@ class SslDomainController extends Controller
             ->with('status', __('SSL renewal queued for the selected certificate.'));
     }
 
+    public function show(ManagedDomain $domain): View
+    {
+        $domain->load(['server', 'tenant', 'project']);
+
+        return view('admin.ssl-domains.show', compact('domain'));
+    }
+
+    public function renewDomain(ManagedDomain $domain): RedirectResponse
+    {
+        return redirect()
+            ->route('ssl-domains.show', $domain)
+            ->with('status', __('SSL renewal queued for :domain.', ['domain' => $domain->domain]));
+    }
+
     public function verifyDns(Request $request): RedirectResponse
     {
         $validated = $request->validate([

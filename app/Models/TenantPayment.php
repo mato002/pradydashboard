@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use App\Support\Billing\PaymentReconciliationStatus;
 use App\Support\Billing\PaymentSource;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TenantPayment extends Model
 {
+    use HasPublicId;
+
     protected $fillable = [
         'transaction_id',
         'tenant_id',

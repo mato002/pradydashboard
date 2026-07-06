@@ -27,7 +27,7 @@ class SupportTicketCommentController extends Controller
         return $this->store($request, $ticket, redirect()->route('tenants.show', [
             'tenant' => $tenant,
             'tab' => 'support',
-            'ticket' => $ticket->id,
+            'ticket' => $ticket->public_id,
         ]));
     }
 
@@ -35,7 +35,7 @@ class SupportTicketCommentController extends Controller
     {
         abort_unless($ticket->exists, 404);
 
-        return $this->store($request, $ticket, redirect()->route('support-tickets.show', $ticket->id));
+        return $this->store($request, $ticket, redirect()->route('support-tickets.show', $ticket));
     }
 
     private function store(Request $request, SupportTicket $ticket, RedirectResponse $redirect): RedirectResponse

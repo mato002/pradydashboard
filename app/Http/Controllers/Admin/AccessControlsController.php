@@ -163,6 +163,7 @@ class AccessControlsController extends Controller
             return [
                 'id' => $control?->id,
                 'tenant_id' => $tenant->id,
+                'tenant_public_id' => $tenant->public_id,
                 'tenant' => $tenant->company_name,
                 'tenant_url' => route('tenants.show', $tenant),
                 'policy_type' => $this->policyTypeLabel($control?->level, $subStatus),

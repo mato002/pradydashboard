@@ -23,6 +23,7 @@ class PaymentReconciliationController extends Controller
     {
         $rows = $suggester->suggest($payment)->map(fn (array $row) => [
             'invoice_id' => $row['invoice']->id,
+            'invoice_public_id' => $row['invoice']->public_id,
             'invoice_number' => $row['invoice']->invoice_number,
             'tenant' => $row['invoice']->tenant?->company_name ?? $row['invoice']->manual_client_name,
             'balance' => $row['invoice']->formattedBalance(),

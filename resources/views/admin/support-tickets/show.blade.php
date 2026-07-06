@@ -1,5 +1,5 @@
 @php
-    $ref = $ticket->id;
+    $ref = $ticket;
     $priorityVariant = match ($profile['priority'] ?? 'medium') {
         'urgent', 'critical' => 'danger',
         'high' => 'warning',
@@ -100,7 +100,7 @@
                             <div class="flex justify-between gap-2">
                                 <dt class="text-slate-500">{{ __('Tenant') }}</dt>
                                 <dd class="font-medium">
-                                    <a href="{{ route('tenants.show', ['tenant' => $ticket->tenant_id, 'tab' => 'support', 'ticket' => $ticket->id]) }}" class="text-indigo-600 hover:underline">{{ $profile['tenant'] }}</a>
+                                    <a href="{{ route('tenants.show', ['tenant' => $ticket->tenant, 'tab' => 'support', 'ticket' => $ticket->public_id]) }}" class="text-indigo-600 hover:underline">{{ $profile['tenant'] }}</a>
                                 </dd>
                             </div>
                         @endif

@@ -1,11 +1,15 @@
 import * as Turbo from '@hotwired/turbo';
 
 Turbo.session.drive = false;
+window.Turbo = Turbo;
 
 import './bootstrap';
 
 import Alpine from 'alpinejs';
 import { registerManualDocumentForm } from './manual-document-form';
+import { registerPdfDownloadLink } from './pdf-download-link';
+import { registerRowActionsMenu } from './row-actions-menu';
+import { createFeatureDiscoveryMixin } from './feature-discovery';
 
 window.Alpine = Alpine;
 
@@ -26,6 +30,8 @@ function applyThemeClass(mode) {
 
 document.addEventListener('alpine:init', () => {
     registerManualDocumentForm(Alpine);
+    registerPdfDownloadLink(Alpine);
+    registerRowActionsMenu(Alpine);
 
     Alpine.store('sidebar', {
         groups: {},
@@ -68,6 +74,7 @@ document.addEventListener('alpine:init', () => {
     Alpine.store('sidebar').init();
 
     Alpine.data('pradyShell', () => ({
+        ...createFeatureDiscoveryMixin(),
         sidebarOpen: false,
         theme: localStorage.getItem('prady-theme') || 'light',
         dateMenuOpen: false,
@@ -110,6 +117,8 @@ document.addEventListener('alpine:init', () => {
             document.addEventListener('turbo:fetch-request-error', () => {
                 this.workspaceLoading = false;
             });
+
+            this.initFeatureDiscovery();
         },
 
         updatePageChrome(workspaceEl) {
@@ -800,5 +809,78 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 });
+
+function shouldIgnoreFrameLinkClick(event, link) {
+    if (event.defaultPrevented || event.button !== 0) {
+        return true;
+    }
+
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return true;
+    }
+
+    if (link.target && link.target !== '_self') {
+        return true;
+    }
+
+    if (link.hasAttribute('download') || link.dataset.turbo === 'false' || link.dataset.pradyFullNav !== undefined) {
+        return true;
+    }
+
+    const href = link.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+        return true;
+    }
+
+    try {
+        const url = new URL(link.href, window.location.origin);
+        if (url.origin !== window.location.origin) {
+            return true;
+        }
+    } catch {
+        return true;
+    }
+
+    return false;
+}
+
+function initTurboFrameNavigation() {
+    document.addEventListener('click', (event) => {
+        const link = event.target.closest('a[data-turbo-frame]');
+        if (!link) {
+            return;
+        }
+
+        const frameId = link.dataset.turboFrame;
+        if (!frameId || frameId === '_top') {
+            return;
+        }
+
+        if (shouldIgnoreFrameLinkClick(event, link)) {
+            return;
+        }
+
+        if (!document.getElementById(frameId)) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const action = link.dataset.turboAction === 'replace' ? 'replace' : 'advance';
+        Turbo.visit(link.href, { frame: frameId, action });
+    });
+
+    document.addEventListener('turbo:frame-missing', (event) => {
+        const frameId = event.target?.id;
+        if (frameId !== 'prady-workspace' && frameId !== 'tenant-workspace') {
+            return;
+        }
+
+        event.preventDefault();
+        event.detail.visit(event.detail.response);
+    });
+}
+
+initTurboFrameNavigation();
 
 Alpine.start();

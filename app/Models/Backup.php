@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class Backup extends Model
 {
@@ -25,6 +26,9 @@ class Backup extends Model
         'duration_seconds',
         'status',
         'storage_disk',
+        'archive_path',
+        'archive_filename',
+        'checksum',
         'integrity_verified',
         'is_restore_point',
         'notes',
@@ -65,6 +69,26 @@ class Backup extends Model
     public function hostedProject(): BelongsTo
     {
         return $this->belongsTo(HostedProject::class, static::hostedProjectForeignKey());
+    }
+
+    public function actions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(BackupAction::class)->orderByDesc('performed_at');
+    }
+
+    public function hasDownloadableArchive(): bool
+    {
+        if (! filled($this->archive_path)) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk($this->storage_disk ?: 'local')
+            ->exists((string) $this->archive_path);
+    }
+
+    public function downloadFilename(): string
+    {
+        return $this->archive_filename ?: (Str::slug($this->name ?: 'backup').'.zip');
     }
 
     /** @deprecated Use {@see hostedProject()} */

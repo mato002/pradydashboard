@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Backups\BackupActionLogger;
 use App\Http\Controllers\Controller;
 use App\Jobs\Backups\RunBackupJob;
 use App\Support\OperationalMetrics;
@@ -14,8 +15,11 @@ use Database\Seeders\BackupDemoSeeder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BackupController extends Controller
 {
@@ -99,6 +103,11 @@ class BackupController extends Controller
 
         RunBackupJob::dispatch($backup->id);
 
+        app(BackupActionLogger::class)->log($backup, 'backup.queued', $request->user(), [
+            'backup_type' => $backup->backup_type,
+            'server_id' => $backup->server_id,
+        ]);
+
         return redirect()
             ->route('backups.index')
             ->with('status', __('Backup job queued on the next available agent.'));
@@ -115,34 +124,52 @@ class BackupController extends Controller
                 : __('Schedule paused.'));
     }
 
-    public function download(Backup $backup): RedirectResponse|Response
+    public function show(Backup $backup): View
     {
-        if ($backup->status !== 'successful') {
+        $backup->load(['server', 'tenant', 'hostedProject', 'actions']);
+
+        return view('admin.backups.show', compact('backup'));
+    }
+
+    public function download(Request $request, Backup $backup): RedirectResponse|StreamedResponse
+    {
+        if (! in_array($backup->status, ['successful', 'warning'], true)) {
             return redirect()
-                ->route('backups.index')
+                ->route('backups.show', $backup)
                 ->with('status', __('Backup archive is not ready for download yet.'));
         }
 
-        return redirect()
-            ->route('backups.index')
-            ->with('status', __('Download queued for :name. Check your object storage bucket :disk.', [
-                'name' => $backup->name,
-                'disk' => $backup->storage_disk ?? config('filesystems.default'),
-            ]));
+        if (! $backup->hasDownloadableArchive()) {
+            return redirect()
+                ->route('backups.show', $backup)
+                ->with('status', __('No archive file is stored for this backup yet.'));
+        }
+
+        $disk = (string) ($backup->storage_disk ?: 'local');
+        $path = (string) $backup->archive_path;
+
+        app(BackupActionLogger::class)->log($backup, 'backup.downloaded', $request->user(), [
+            'archive_path' => $path,
+            'filename' => $backup->downloadFilename(),
+        ], 'success', $request);
+
+        return Storage::disk($disk)->download($path, $backup->downloadFilename());
     }
 
-    public function verify(Backup $backup): RedirectResponse
+    public function verify(Request $request, Backup $backup): RedirectResponse
     {
-        if ($backup->status !== 'successful') {
+        if (! in_array($backup->status, ['successful', 'warning'], true)) {
             return redirect()
-                ->route('backups.index')
+                ->route('backups.show', $backup)
                 ->with('status', __('Only successful backups can be verified.'));
         }
 
         $backup->update(['integrity_verified' => true]);
 
+        app(BackupActionLogger::class)->log($backup, 'backup.verified', $request->user(), [], 'success', $request);
+
         return redirect()
-            ->route('backups.index')
+            ->route('backups.show', $backup)
             ->with('status', __('Integrity verified for :name.', ['name' => $backup->name]));
     }
 

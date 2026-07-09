@@ -2,6 +2,8 @@
 
 namespace App\Jobs\Backups;
 
+use App\Domain\Backups\BackupActionLogger;
+use App\Domain\Backups\BackupArchiveWriter;
 use App\Jobs\OperationalJob;
 use App\Models\Backup;
 use App\Models\Server;
@@ -30,6 +32,8 @@ class RunBackupJob extends OperationalJob
             'started_at' => $backup->started_at ?? now(),
         ]);
 
+        app(BackupActionLogger::class)->log($backup, 'backup.started', null, ['agent' => 'system']);
+
         $agentOk = $this->invokeBackupAgent($backup);
 
         $sizeBytes = $this->estimateSize($backup);
@@ -42,10 +46,31 @@ class RunBackupJob extends OperationalJob
             'size_bytes' => $sizeBytes,
             'integrity_verified' => $agentOk,
             'is_restore_point' => $backup->backup_type === 'full',
+            'storage_disk' => $backup->storage_disk ?: 'local',
             'notes' => trim(($backup->notes ?? '')."\n".($agentOk
                 ? __('Backup completed successfully.')
                 : __('Backup completed with agent fallback (local simulation).'))),
         ]);
+
+        try {
+            app(BackupArchiveWriter::class)->writeSimulatedArchive($backup->fresh());
+            app(BackupActionLogger::class)->log($backup->fresh(), 'backup.archive_written', null, [
+                'archive_path' => $backup->fresh()->archive_path,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Backup archive write failed.', [
+                'backup_id' => $backup->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        app(BackupActionLogger::class)->log(
+            $backup->fresh(),
+            $agentOk ? 'backup.completed' : 'backup.completed_with_warning',
+            null,
+            ['agent_ok' => $agentOk, 'size_bytes' => $sizeBytes],
+            $agentOk ? 'success' : 'warning',
+        );
 
         if ($backup->server_id) {
             Server::query()->whereKey($backup->server_id)->update([

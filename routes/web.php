@@ -433,8 +433,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('monitoring/failed-jobs/{uuid}', [QueueOperationsController::class, 'forget'])->middleware('permission:monitoring.sync')->name('monitoring.failed-jobs.forget');
 
     Route::get('backups', [BackupController::class, 'index'])->middleware('permission:backups.view')->name('backups.index');
+    Route::get('backups/{backup}', [BackupController::class, 'show'])->middleware('permission:backups.view')->name('backups.show');
     Route::post('backups/run', [BackupController::class, 'run'])->middleware('permission:backups.create')->name('backups.run');
-    Route::get('backups/{backup}/download', [BackupController::class, 'download'])->middleware('permission:backups.view')->name('backups.download');
+    Route::get('backups/{backup}/download', [BackupController::class, 'download'])->middleware('permission:backups.download')->name('backups.download');
     Route::post('backups/{backup}/verify', [BackupController::class, 'verify'])->middleware('permission:backups.create')->name('backups.verify');
     Route::patch('backups/schedules/{schedule}/toggle', [BackupController::class, 'toggleSchedule'])->middleware('permission:backups.create')->name('backups.schedules.toggle');
 

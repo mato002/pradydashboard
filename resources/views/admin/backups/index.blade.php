@@ -132,7 +132,7 @@
                                                                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" /></svg>
                                                             </span>
                                                             <div>
-                                                                <p class="font-semibold text-slate-900 dark:text-white">{{ $backup->name }}</p>
+                                                                <a href="{{ route('backups.show', $backup) }}" class="font-semibold text-slate-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-300">{{ $backup->name }}</a>
                                                                 @if ($backup->is_restore_point)
                                                                     <span class="text-[10px] font-semibold uppercase tracking-wide text-cyan-600 dark:text-cyan-400">{{ __('Restore point') }}</span>
                                                                 @endif
@@ -160,9 +160,11 @@
                                             </td>
                                             <td class="text-right" @click.stop>
                                                 <x-ui.row-actions-menu>
-                                                    <x-ui.row-action :href="route('backups.download', $backup)" fullNav>{{ __('Download Archive') }}</x-ui.row-action>
+                                                    <x-ui.row-action :href="route('backups.show', $backup)" fullNav>{{ __('View details') }}</x-ui.row-action>
+                                                    @if ($backup->hasDownloadableArchive())
+                                                        <x-ui.row-action :href="route('backups.download', $backup)" fullNav>{{ __('Download Archive') }}</x-ui.row-action>
+                                                    @endif
                                                     <x-ui.row-action :href="route('backups.verify', $backup)" method="POST">{{ __('Verify Integrity') }}</x-ui.row-action>
-                                                    <x-ui.row-action :href="route('activity-logs.index', ['q' => $backup->name])">{{ __('View Logs') }}</x-ui.row-action>
                                                 </x-ui.row-actions-menu>
                                             </td>
                                         </tr>

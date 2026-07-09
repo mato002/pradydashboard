@@ -41,6 +41,7 @@ class PermissionRegistry
             ['code' => 'monitoring.sync', 'name' => 'Sync monitoring', 'description' => 'Trigger monitoring sync jobs.', 'group' => 'monitoring'],
             ['code' => 'backups.view', 'name' => 'View backups', 'description' => 'View backup schedules and runs.', 'group' => 'backups'],
             ['code' => 'backups.create', 'name' => 'Create backups', 'description' => 'Run on-demand backups.', 'group' => 'backups'],
+            ['code' => 'backups.download', 'name' => 'Download backups', 'description' => 'Download backup archives.', 'group' => 'backups'],
             ['code' => 'backups.restore', 'name' => 'Restore backups', 'description' => 'Restore from backup.', 'group' => 'backups'],
             ['code' => 'ssl.view', 'name' => 'View SSL & domains', 'description' => 'View SSL certificates and domains.', 'group' => 'ssl'],
             ['code' => 'ssl.update', 'name' => 'Update SSL & domains', 'description' => 'Manage SSL and domain records.', 'group' => 'ssl'],

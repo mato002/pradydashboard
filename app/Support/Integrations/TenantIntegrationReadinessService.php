@@ -14,7 +14,7 @@ class TenantIntegrationReadinessService
      */
     public function checklist(Tenant $tenant): array
     {
-        $tenant->loadMissing(['hostedProject', 'projectSubscriptions.integrations']);
+        $tenant->loadMissing(['hostedProject', 'projectSubscriptions.serviceIntegrations']);
 
         $items = [
             $this->hostedProjectCheck($tenant),
@@ -117,7 +117,7 @@ class TenantIntegrationReadinessService
             ];
         }
 
-        $integration = $subscription->integrations
+        $integration = $subscription->serviceIntegrations
             ->first(fn (TenantProjectServiceIntegration $i) => $i->isTenantSystem());
 
         if ($integration === null) {

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\BackupAgentApiController;
 use App\Http\Controllers\Api\DeploymentWebhookController;
 use App\Http\Controllers\Api\EnterpriseLicenseCheckController;
 use App\Http\Controllers\Api\LicenseCheckController;
@@ -15,6 +16,11 @@ Route::post('/license/check', EnterpriseLicenseCheckController::class)
 
 Route::post('/v1/tenant/usage', TenantUsageHeartbeatController::class)
     ->middleware('project.api');
+
+Route::middleware(['project.api', 'throttle:60,1'])->prefix('v1/backups/agents')->group(function () {
+    Route::post('/register', [BackupAgentApiController::class, 'registerAgent']);
+    Route::post('/heartbeat', [BackupAgentApiController::class, 'heartbeat']);
+});
 
 Route::post('/v1/payments-gateway/webhooks', PaymentsGatewayWebhookController::class)
     ->middleware(['payments.gateway.webhook', 'throttle:60,1'])

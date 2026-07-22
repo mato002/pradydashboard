@@ -71,6 +71,9 @@
                 @endif
             </div>
             <div class="flex flex-wrap gap-2">
+                @if ($invoice->canEdit())
+                    <a href="{{ route('invoices.edit', $invoice) }}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">{{ __('Edit draft') }}</a>
+                @endif
                 <a href="{{ route('invoices.preview', $invoice) }}" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">{{ __('Preview document') }}</a>
                 <x-billing.pdf-download-link :url="route('invoices.pdf', $invoice)" />
 

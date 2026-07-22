@@ -31,6 +31,7 @@ use App\Http\Requests\ManualDocumentPreviewRequest;
 use App\Http\Requests\PromiseToPayRequest;
 use App\Http\Requests\SendFinancialDocumentRequest;
 use App\Http\Requests\StoreCollectionNoteRequest;
+use App\Http\Requests\UpdateManualFinancialDocumentRequest;
 use App\Models\CollectionNote;
 use App\Models\BillingAutomationRule;
 use App\Models\DocumentTemplate;
@@ -143,6 +144,65 @@ class InvoiceController extends Controller
             $documentType = BillingDocumentType::INVOICE;
         }
 
+        return view('admin.invoices.create', $this->manualDocumentFormViewData($documentType));
+    }
+
+    public function edit(TenantInvoice $invoice): View|RedirectResponse
+    {
+        if (! $invoice->canEdit()) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with('error', __('This document cannot be edited.'));
+        }
+
+        $invoice->load(['lineItems', 'tenant', 'projectSubscription.project']);
+
+        return view('admin.invoices.create', array_merge(
+            $this->manualDocumentFormViewData($invoice->document_type, $invoice),
+            ['invoice' => $invoice],
+        ));
+    }
+
+    public function store(ManualFinancialDocumentRequest $request, ManualDocumentCreator $creator): RedirectResponse
+    {
+        try {
+            $invoice = $creator->create($request->validated());
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()
+                ->route('invoices.create', ['type' => $request->input('document_type')])
+                ->withErrors($e->errors())
+                ->withInput();
+        }
+
+        return redirect()
+            ->route('invoices.preview', $invoice)
+            ->with('status', __('Document :number created. Review the preview below.', ['number' => $invoice->invoice_number]));
+    }
+
+    public function updateManual(
+        UpdateManualFinancialDocumentRequest $request,
+        TenantInvoice $invoice,
+        ManualDocumentCreator $creator,
+    ): RedirectResponse {
+        try {
+            $invoice = $creator->update($invoice, $request->validated());
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()
+                ->route('invoices.edit', $invoice)
+                ->withErrors($e->errors())
+                ->withInput();
+        }
+
+        return redirect()
+            ->route('invoices.show', $invoice)
+            ->with('status', __('Document :number updated.', ['number' => $invoice->invoice_number]));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function manualDocumentFormViewData(string $documentType, ?TenantInvoice $editingInvoice = null): array
+    {
         $scopeFilter = app(RbacScopeFilter::class);
         $tenants = $this->operations->filterTenants($scopeFilter);
         $templateResolver = app(DocumentTemplateResolver::class);
@@ -170,9 +230,27 @@ class InvoiceController extends Controller
         if ($defaultTemplate) {
             $previewBuilder = app(ManualDocumentPreviewBuilder::class);
             $renderer = app(DocumentRenderer::class);
-            $initialPreviewHtml = $renderer->render(
-                $defaultTemplate,
-                $previewBuilder->build([
+            $previewPayload = $editingInvoice
+                ? [
+                    'document_type' => $editingInvoice->document_type,
+                    'issue_date' => $editingInvoice->issue_date?->toDateString() ?? now()->toDateString(),
+                    'due_date' => $editingInvoice->due_date?->toDateString(),
+                    'currency' => $editingInvoice->currency ?? $billing->defaultCurrency(),
+                    'manual_client_name' => $editingInvoice->manual_client_name ?? $editingInvoice->tenant?->company_name ?? '',
+                    'manual_client_email' => $editingInvoice->manual_client_email,
+                    'manual_client_phone' => $editingInvoice->manual_client_phone,
+                    'manual_client_address' => $editingInvoice->manual_client_address,
+                    'notes' => $editingInvoice->notes,
+                    'line_items' => $editingInvoice->lineItems->map(fn ($line) => [
+                        'description' => $line->description,
+                        'quantity' => (float) $line->quantity,
+                        'unit_price' => (float) $line->unit_price,
+                        'discount' => (float) $line->discount,
+                        'tax_rate' => (float) $line->tax_rate,
+                        'item_type' => $line->item_type ?? 'custom',
+                    ])->all(),
+                ]
+                : [
                     'document_type' => $documentType,
                     'issue_date' => now()->toDateString(),
                     'currency' => $billing->defaultCurrency(),
@@ -185,12 +263,16 @@ class InvoiceController extends Controller
                         'tax_rate' => 0,
                         'item_type' => 'custom',
                     ]],
-                ]),
+                ];
+
+            $initialPreviewHtml = $renderer->render(
+                $defaultTemplate,
+                $previewBuilder->build($previewPayload),
             );
             $initialPreviewPaperSize = strtoupper((string) $defaultTemplate->paper_size);
         }
 
-        return view('admin.invoices.create', [
+        return [
             'documentType' => $documentType,
             'tenants' => $tenants,
             'defaultTemplate' => $defaultTemplate,
@@ -228,23 +310,7 @@ class InvoiceController extends Controller
             ],
             'initialPreviewHtml' => $initialPreviewHtml,
             'initialPreviewPaperSize' => $initialPreviewPaperSize,
-        ]);
-    }
-
-    public function store(ManualFinancialDocumentRequest $request, ManualDocumentCreator $creator): RedirectResponse
-    {
-        try {
-            $invoice = $creator->create($request->validated());
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return redirect()
-                ->route('invoices.create', ['type' => $request->input('document_type')])
-                ->withErrors($e->errors())
-                ->withInput();
-        }
-
-        return redirect()
-            ->route('invoices.preview', $invoice)
-            ->with('status', __('Document :number created. Review the preview below.', ['number' => $invoice->invoice_number]));
+        ];
     }
 
     public function previewManualDocument(

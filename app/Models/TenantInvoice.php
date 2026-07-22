@@ -302,6 +302,35 @@ class TenantInvoice extends Model
         return true;
     }
 
+    public function canEdit(): bool
+    {
+        if (! $this->isDraft() || $this->isCancelled() || $this->isConverted()) {
+            return false;
+        }
+
+        if ($this->isFinalized() || $this->wasEmailed()) {
+            return false;
+        }
+
+        if (in_array($this->document_type, [BillingDocumentType::RECEIPT, BillingDocumentType::STATEMENT], true)) {
+            return false;
+        }
+
+        if ((float) $this->amount_paid > 0.009 || $this->payments()->exists()) {
+            return false;
+        }
+
+        if ($this->document_type === BillingDocumentType::INVOICE && $this->hasLinkedReceipt()) {
+            return false;
+        }
+
+        return in_array($this->document_type, [
+            BillingDocumentType::INVOICE,
+            BillingDocumentType::PROFORMA,
+            BillingDocumentType::QUOTATION,
+        ], true);
+    }
+
     public function canConvert(): bool
     {
         if ($this->isCancelled() || $this->isConverted()) {

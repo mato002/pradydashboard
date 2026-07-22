@@ -91,6 +91,9 @@
                     <td class="text-xs font-medium {{ $invoice->agingColor() }}">{{ $invoice->agingLabel() }}</td>
                     <td class="text-right" @click.stop>
                         <x-ui.row-actions-menu>
+                            @if ($invoice->canEdit())
+                                <x-ui.row-action :href="route('invoices.edit', $invoice)">{{ __('Edit') }}</x-ui.row-action>
+                            @endif
                             <x-ui.row-action :href="route('invoices.preview', $invoice)" fullNav target="_blank">{{ __('Preview') }}</x-ui.row-action>
                             <x-billing.pdf-download-link :url="route('invoices.pdf', $invoice)" variant="menu" :label="__('Download PDF')" />
                             <x-ui.row-action :href="route('invoices.email', $invoice)" method="POST">{{ __('Email') }}</x-ui.row-action>

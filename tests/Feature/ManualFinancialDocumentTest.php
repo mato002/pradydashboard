@@ -442,6 +442,87 @@ class ManualFinancialDocumentTest extends TestCase
         $this->assertSame($invoice->invoice_number, $snapshot['conversion_links']['linked_invoice_number']);
     }
 
+    public function test_draft_invoice_can_be_edited(): void
+    {
+        [$user, $tenant] = $this->userAndTenant();
+
+        $this->actingAs($user)
+            ->post(route('invoices.manual.store'), array_merge([
+                'document_type' => BillingDocumentType::INVOICE,
+                'tenant_id' => $tenant->id,
+                'issue_date' => now()->toDateString(),
+                'currency' => 'KES',
+            ], $this->linePayload()));
+
+        $invoice = TenantInvoice::query()->where('tenant_id', $tenant->id)->latest('id')->first();
+        $originalNumber = $invoice->invoice_number;
+
+        $this->assertTrue($invoice->canEdit());
+
+        $this->actingAs($user)
+            ->get(route('invoices.edit', $invoice))
+            ->assertOk()
+            ->assertSee('Consulting hours')
+            ->assertSee($originalNumber);
+
+        $this->actingAs($user)
+            ->put(route('invoices.manual.update', $invoice), [
+                'tenant_id' => $tenant->id,
+                'issue_date' => now()->toDateString(),
+                'due_date' => now()->addDays(14)->toDateString(),
+                'currency' => 'KES',
+                'notes' => 'Updated draft notes',
+                'line_items' => [
+                    [
+                        'description' => 'License renewal',
+                        'quantity' => 1,
+                        'unit_price' => 4650,
+                        'discount' => 0,
+                        'tax_rate' => 0,
+                        'item_type' => 'custom',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('invoices.show', $invoice));
+
+        $invoice->refresh();
+        $this->assertSame($originalNumber, $invoice->invoice_number);
+        $this->assertSame('draft', $invoice->status);
+        $this->assertSame(4650.0, (float) $invoice->total);
+        $this->assertSame('Updated draft notes', $invoice->notes);
+        $this->assertSame('License renewal', $invoice->lineItems->first()->description);
+    }
+
+    public function test_finalized_invoice_cannot_be_edited(): void
+    {
+        [$user, $tenant] = $this->userAndTenant();
+
+        $this->actingAs($user)
+            ->post(route('invoices.manual.store'), array_merge([
+                'document_type' => BillingDocumentType::INVOICE,
+                'tenant_id' => $tenant->id,
+                'issue_date' => now()->toDateString(),
+                'currency' => 'KES',
+            ], $this->linePayload()));
+
+        $invoice = TenantInvoice::query()->where('tenant_id', $tenant->id)->latest('id')->first();
+        $invoice->update(['finalized_at' => now()]);
+
+        $this->assertFalse($invoice->canEdit());
+
+        $this->actingAs($user)
+            ->get(route('invoices.edit', $invoice))
+            ->assertRedirect(route('invoices.show', $invoice));
+
+        $this->actingAs($user)
+            ->put(route('invoices.manual.update', $invoice), array_merge([
+                'tenant_id' => $tenant->id,
+                'issue_date' => now()->toDateString(),
+                'currency' => 'KES',
+            ], $this->linePayload()))
+            ->assertForbidden();
+    }
+
     public function test_document_number_year_suffix_matches_current_year(): void
     {
         $service = app(\App\Domain\Billing\DocumentIdentityService::class);

@@ -484,6 +484,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('invoices/schedules/{schedule}/toggle', [InvoiceController::class, 'toggleSchedule'])->middleware('permission:invoices.generate')->name('invoices.schedules.toggle');
     Route::get('invoices/templates/{documentTemplate}/sample-preview', [InvoiceController::class, 'previewDocumentTemplate'])->middleware('permission:invoices.view')->name('invoices.templates.sample-preview');
     Route::patch('invoices/templates/{template}', [InvoiceController::class, 'updateTemplate'])->middleware('permission:invoices.generate')->name('invoices.templates.update');
+    Route::get('invoices/{invoice}/edit', [InvoiceController::class, 'edit'])->middleware('permission:invoices.generate')->name('invoices.edit');
+    Route::put('invoices/{invoice}/manual', [InvoiceController::class, 'updateManual'])->middleware('permission:invoices.generate')->name('invoices.manual.update');
     Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->middleware('permission:invoices.view')->name('invoices.show');
     Route::get('invoices/{invoice}/preview', [InvoiceController::class, 'preview'])->middleware('permission:invoices.view')->name('invoices.preview');
     Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'downloadPdf'])->middleware('permission:invoices.view')->name('invoices.pdf');

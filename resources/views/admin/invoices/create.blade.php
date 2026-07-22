@@ -1,4 +1,5 @@
 @php
+    $isEdit = isset($invoice);
     $typeLabels = [
         'invoice' => __('Invoice'),
         'proforma' => __('Proforma'),
@@ -11,7 +12,15 @@
         'receipt' => 'success',
         default => 'info',
     };
-    $heading = __('Create :type', ['type' => $typeLabels[$documentType] ?? __('Document')]);
+    if ($isEdit) {
+        $documentType = $invoice->document_type;
+        $heading = __('Edit :type :number', [
+            'type' => $typeLabels[$documentType] ?? __('Document'),
+            'number' => $invoice->invoice_number,
+        ]);
+    } else {
+        $heading = __('Create :type', ['type' => $typeLabels[$documentType] ?? __('Document')]);
+    }
     $defaultLineItem = [
         'description' => '',
         'quantity' => 1,
@@ -22,31 +31,45 @@
     ];
     $initialLineItems = old('line_items');
     if (! is_array($initialLineItems) || $initialLineItems === []) {
-        $initialLineItems = [$defaultLineItem];
+        if ($isEdit) {
+            $initialLineItems = $invoice->lineItems->map(fn ($line) => [
+                'description' => $line->description,
+                'quantity' => (float) $line->quantity,
+                'unit_price' => (float) $line->unit_price,
+                'discount' => (float) $line->discount,
+                'tax_rate' => (float) $line->tax_rate,
+                'item_type' => $line->item_type ?? 'custom',
+            ])->all();
+        }
+        if ($initialLineItems === []) {
+            $initialLineItems = [$defaultLineItem];
+        }
     }
+    $formAction = $isEdit ? route('invoices.manual.update', $invoice) : route('invoices.manual.store');
+    $cancelUrl = $isEdit ? route('invoices.show', $invoice) : route('invoices.index');
 @endphp
 
-<x-dashboard-layout :heading="$heading" :subheading="__('Manual financial document')">
+<x-dashboard-layout :heading="$heading" :subheading="$isEdit ? __('Update draft document') : __('Manual financial document')">
     <div
         x-data="manualDocumentForm(@js([
             'documentType' => $documentType,
-            'currency' => old('currency', $defaultCurrency),
+            'currency' => old('currency', $isEdit ? $invoice->currency : $defaultCurrency),
             'lineItems' => $initialLineItems,
             'tenantProfileBase' => url('/invoices/tenants'),
-            'oldTenantId' => old('tenant_id', ''),
-            'oldSubscriptionId' => old('tenant_project_subscription_id', ''),
-            'clientName' => old('manual_client_name', ''),
-            'clientEmail' => old('manual_client_email', ''),
-            'clientPhone' => old('manual_client_phone', ''),
-            'clientAddress' => old('manual_client_address', ''),
-            'issueDate' => old('issue_date', now()->toDateString()),
-            'dueDate' => old('due_date', ''),
+            'oldTenantId' => old('tenant_id', $isEdit ? (string) ($invoice->tenant_id ?? '') : ''),
+            'oldSubscriptionId' => old('tenant_project_subscription_id', $isEdit ? (string) ($invoice->tenant_project_subscription_id ?? '') : ''),
+            'clientName' => old('manual_client_name', $isEdit ? ($invoice->manual_client_name ?? '') : ''),
+            'clientEmail' => old('manual_client_email', $isEdit ? ($invoice->manual_client_email ?? '') : ''),
+            'clientPhone' => old('manual_client_phone', $isEdit ? ($invoice->manual_client_phone ?? '') : ''),
+            'clientAddress' => old('manual_client_address', $isEdit ? ($invoice->manual_client_address ?? '') : ''),
+            'issueDate' => old('issue_date', $isEdit ? $invoice->issue_date?->toDateString() : now()->toDateString()),
+            'dueDate' => old('due_date', $isEdit ? $invoice->due_date?->toDateString() : ''),
             'paymentDate' => old('payment_date', now()->toDateString()),
-            'notes' => old('notes', ''),
+            'notes' => old('notes', $isEdit ? ($invoice->notes ?? '') : ''),
             'linkedInvoiceId' => old('linked_invoice_id', ''),
             'receiptAmount' => old('amount_received', 0),
             'receiptLineDesc' => old('line_description', __('Payment received')),
-            'amountPaid' => old('amount_paid', 0),
+            'amountPaid' => old('amount_paid', $isEdit ? (float) $invoice->amount_paid : 0),
             'previewCompany' => $previewCompany,
             'paymentOptions' => $paymentOptions,
             'numberPrefix' => \App\Support\Billing\BillingDocumentType::numberPrefix($documentType),
@@ -62,7 +85,7 @@
         ]))"
     >
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <a href="{{ route('invoices.index') }}" class="text-sm text-indigo-600 hover:underline">← {{ __('Financial operations') }}</a>
+        <a href="{{ $cancelUrl }}" class="text-sm text-indigo-600 hover:underline">← {{ $isEdit ? __('Back to document') : __('Financial operations') }}</a>
         <div class="flex items-center gap-2">
             <button
                 type="button"
@@ -91,10 +114,13 @@
     <div class="manual-document-create-form">
     <form
         method="post"
-        action="{{ route('invoices.manual.store') }}"
+        action="{{ $formAction }}"
         class="space-y-6"
     >
         @csrf
+        @if ($isEdit)
+            @method('PUT')
+        @endif
         <input type="hidden" name="document_type" value="{{ $documentType }}">
 
         {{-- Client / tenant --}}
@@ -381,8 +407,10 @@
         @endif
 
         <div class="flex flex-wrap gap-3">
-            <button type="submit" class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-indigo-500">{{ __('Save as draft') }}</button>
-            <a href="{{ route('invoices.index') }}" class="rounded-xl border px-5 py-2.5 text-sm font-semibold">{{ __('Cancel') }}</a>
+            <button type="submit" class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-indigo-500">
+                {{ $isEdit ? __('Save changes') : __('Save as draft') }}
+            </button>
+            <a href="{{ $cancelUrl }}" class="rounded-xl border px-5 py-2.5 text-sm font-semibold">{{ __('Cancel') }}</a>
         </div>
     </form>
     </div>

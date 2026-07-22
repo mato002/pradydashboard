@@ -47,6 +47,20 @@ class ManualDocumentCreator
     /**
      * @param  array<string, mixed>  $data
      */
+    public function update(TenantInvoice $invoice, array $data): TenantInvoice
+    {
+        if (! $invoice->canEdit()) {
+            throw ValidationException::withMessages([
+                'document' => [__('This document cannot be edited.')],
+            ]);
+        }
+
+        return $this->updateBillableDocument($invoice, $data);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function createBillableDocument(string $documentType, array $data): TenantInvoice
     {
         $lines = $this->normalizeLines($data['line_items'] ?? []);
@@ -123,6 +137,94 @@ class ManualDocumentCreator
             }
 
             $this->logCreated($invoice);
+
+            return $invoice->fresh(['lineItems', 'tenant', 'projectSubscription.project']);
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function updateBillableDocument(TenantInvoice $invoice, array $data): TenantInvoice
+    {
+        $documentType = $invoice->document_type;
+        $lines = $this->normalizeLines($data['line_items'] ?? []);
+        if ($lines === []) {
+            throw ValidationException::withMessages([
+                'line_items' => [__('At least one line item is required.')],
+            ]);
+        }
+
+        $totals = $this->calculator->compute($lines);
+        if ($totals['total'] < 0) {
+            throw ValidationException::withMessages([
+                'line_items' => [__('Total cannot be negative.')],
+            ]);
+        }
+
+        $tenant = $this->resolveTenant($data);
+        $amountPaid = max(0, (float) ($data['amount_paid'] ?? $invoice->amount_paid));
+        $total = $totals['total'];
+        $amountDue = max(0, $total - $amountPaid);
+
+        return DB::transaction(function () use ($invoice, $documentType, $data, $tenant, $totals, $amountPaid, $amountDue, $total): TenantInvoice {
+            $subscription = $this->resolveSubscription($tenant, $data);
+
+            $invoice->update([
+                'tenant_id' => $tenant?->id,
+                'tenant_project_subscription_id' => $subscription?->id,
+                'currency' => (string) ($data['currency'] ?? $tenant?->billing_preferred_currency ?? $tenant?->tenant_currency ?? $invoice->currency),
+                'subtotal' => $totals['subtotal'],
+                'discount_amount' => $totals['discount_amount'],
+                'tax_amount' => $totals['tax_amount'],
+                'total' => $total,
+                'amount_due' => $amountDue,
+                'amount_paid' => $amountPaid,
+                'issue_date' => $data['issue_date'] ?? $invoice->issue_date,
+                'due_date' => $data['due_date'] ?? null,
+                'notes' => $data['notes'] ?? null,
+                'product_name' => $subscription?->project?->name ?? ($data['product_name'] ?? null),
+                'manual_client_name' => $tenant ? null : ($data['manual_client_name'] ?? null),
+                'manual_client_email' => $data['manual_client_email'] ?? $tenant?->billing_email,
+                'manual_client_phone' => $data['manual_client_phone'] ?? $tenant?->billing_phone,
+                'manual_client_address' => $data['manual_client_address'] ?? $tenant?->billing_address,
+                'document_template_id' => $this->resolveTemplateId($documentType, $data),
+            ]);
+
+            $invoice->lineItems()->delete();
+
+            foreach ($totals['lines'] as $line) {
+                TenantInvoiceLineItem::query()->create([
+                    'tenant_invoice_id' => $invoice->id,
+                    'item_type' => $line['item_type'] ?? 'custom',
+                    'description' => $line['description'],
+                    'quantity' => $line['quantity'],
+                    'unit_price' => $line['unit_price'],
+                    'discount' => $line['discount'],
+                    'tax_rate' => $line['tax_rate'],
+                    'tax_amount' => $line['tax_amount'],
+                    'line_total' => $line['line_total'],
+                ]);
+            }
+
+            if (in_array($documentType, [BillingDocumentType::PROFORMA, BillingDocumentType::QUOTATION], true)) {
+                $invoice->status = 'draft';
+            } else {
+                $invoice->syncPaymentStatus();
+                $invoice->amount_due = max(0, round($invoice->balanceDue(), 2));
+            }
+
+            $invoice->save();
+
+            $this->activityLogger->log(
+                'manual.document_updated',
+                ActivityLogCategory::BILLING,
+                __('Manual :type :number updated', [
+                    'type' => $invoice->document_type,
+                    'number' => $invoice->invoice_number,
+                ]),
+                $invoice,
+            );
 
             return $invoice->fresh(['lineItems', 'tenant', 'projectSubscription.project']);
         });

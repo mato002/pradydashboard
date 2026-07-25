@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings\Integrations\PaymentsGateway;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Settings\Integrations\PaymentsGateway\Concerns\InteractsWithPaymentsGateway;
+use App\Http\Requests\Settings\PaymentsGateway\LinkGatewayTenantRequest;
 use App\Models\Tenant;
 use App\Services\PaymentsGateway\Exceptions\PaymentsGatewayLinkException;
 use App\Services\PaymentsGateway\Exceptions\PaymentsGatewayTenantAlreadyLinkedException;
@@ -204,13 +205,14 @@ class TenantProfilesController extends Controller
         ]);
     }
 
-    public function link(Tenant $tenant, PaymentsGatewayTenantLinkService $linkService): RedirectResponse
+    public function link(LinkGatewayTenantRequest $request, Tenant $tenant, PaymentsGatewayTenantLinkService $linkService): RedirectResponse
     {
         try {
-            $linkService->link($tenant);
+            $linkService->link($tenant, $request->validated('gateway_tenant_uuid'));
         } catch (PaymentsGatewayTenantAlreadyLinkedException|PaymentsGatewayLinkException $exception) {
             return redirect()
                 ->route('settings.payments-gateway.tenants.show', $tenant)
+                ->withInput()
                 ->with('gateway_error', $exception->getMessage());
         }
 

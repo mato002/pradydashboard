@@ -728,6 +728,130 @@ class PaymentsGatewayTenantLinkTest extends TestCase
         $this->assertSame($this->gatewayTenantUuid, $tenant->payments_gateway_tenant_uuid);
     }
 
+    public function test_link_service_adopts_existing_gateway_tenant_by_slug(): void
+    {
+        $tenant = $this->createDashboardTenant('Slug Adopt Co');
+
+        Http::fake(function ($request) use ($tenant) {
+            $path = parse_url($request->url(), PHP_URL_PATH) ?: '';
+
+            if ($request->method() === 'GET' && $path === '/api/v1/tenants') {
+                return Http::response([
+                    'success' => true,
+                    'data' => [[
+                        'uuid' => $this->gatewayTenantUuid,
+                        'slug' => $tenant->tenant_key,
+                        'external_tenant_id' => 'different-external-id',
+                        'status' => 'active',
+                    ]],
+                ], 200);
+            }
+
+            return Http::response(['success' => true, 'data' => []], 200);
+        });
+
+        app(PaymentsGatewayTenantLinkService::class)->link($tenant);
+
+        $tenant->refresh();
+        $this->assertSame($this->gatewayTenantUuid, $tenant->payments_gateway_tenant_uuid);
+        Http::assertNotSent(fn ($request) => $request->method() === 'POST');
+    }
+
+    public function test_link_tenant_by_existing_gateway_uuid(): void
+    {
+        $tenant = $this->createDashboardTenant('Uuid Link Co');
+
+        Http::fake(function ($request) {
+            $path = parse_url($request->url(), PHP_URL_PATH) ?: '';
+
+            if ($request->method() === 'GET' && $path === '/api/v1/tenants/'.$this->gatewayTenantUuid) {
+                return Http::response([
+                    'success' => true,
+                    'data' => [
+                        'uuid' => $this->gatewayTenantUuid,
+                        'name' => 'Existing Gateway Client',
+                        'status' => 'active',
+                    ],
+                ], 200);
+            }
+
+            return Http::response(['success' => true, 'data' => []], 200);
+        });
+
+        $this->actingAs($this->paymentsGatewayManager())
+            ->post(route('settings.payments-gateway.tenants.link', $tenant), [
+                'gateway_tenant_uuid' => $this->gatewayTenantUuid,
+            ])
+            ->assertRedirect(route('settings.payments-gateway.tenants.show', $tenant))
+            ->assertSessionHas('status');
+
+        $tenant->refresh();
+        $this->assertSame($this->gatewayTenantUuid, $tenant->payments_gateway_tenant_uuid);
+        Http::assertNotSent(fn ($request) => $request->method() === 'POST');
+    }
+
+    public function test_link_tenant_by_uuid_allows_local_link_when_admin_unauthorized(): void
+    {
+        $tenant = $this->createDashboardTenant('Unauthorized Link Co');
+
+        Http::fake(function ($request) {
+            $path = parse_url($request->url(), PHP_URL_PATH) ?: '';
+
+            if ($request->method() === 'GET' && $path === '/api/v1/tenants/'.$this->gatewayTenantUuid) {
+                return Http::response([
+                    'success' => false,
+                    'message' => 'Unauthorized admin access',
+                ], 401);
+            }
+
+            return Http::response(['success' => false, 'message' => 'Unauthorized admin access'], 401);
+        });
+
+        $this->actingAs($this->paymentsGatewayManager())
+            ->post(route('settings.payments-gateway.tenants.link', $tenant), [
+                'gateway_tenant_uuid' => $this->gatewayTenantUuid,
+            ])
+            ->assertRedirect(route('settings.payments-gateway.tenants.show', $tenant))
+            ->assertSessionHas('status');
+
+        $tenant->refresh();
+        $this->assertSame($this->gatewayTenantUuid, $tenant->payments_gateway_tenant_uuid);
+        $this->assertSame('linked', $tenant->payments_gateway_status);
+    }
+
+    public function test_create_link_surfaces_unauthorized_hint_for_existing_uuid(): void
+    {
+        $tenant = $this->createDashboardTenant('Create Unauthorized Co');
+
+        Http::fake(function ($request) {
+            $path = parse_url($request->url(), PHP_URL_PATH) ?: '';
+
+            if ($request->method() === 'GET' && $path === '/api/v1/tenants') {
+                return Http::response(['success' => true, 'data' => []], 200);
+            }
+
+            if ($request->method() === 'POST' && $path === '/api/v1/tenants') {
+                return Http::response([
+                    'success' => false,
+                    'message' => 'Unauthorized admin access',
+                ], 401);
+            }
+
+            return Http::response(['success' => true, 'data' => []], 200);
+        });
+
+        $this->actingAs($this->paymentsGatewayManager())
+            ->post(route('settings.payments-gateway.tenants.link', $tenant))
+            ->assertRedirect(route('settings.payments-gateway.tenants.show', $tenant))
+            ->assertSessionHas('gateway_error');
+
+        $this->assertStringContainsString(
+            'paste its gateway tenant UUID',
+            (string) session('gateway_error')
+        );
+        $this->assertNull($tenant->fresh()->payments_gateway_tenant_uuid);
+    }
+
     private function createDashboardTenant(string $companyName): Tenant
     {
         $suffix = uniqid();
@@ -740,7 +864,7 @@ class PaymentsGatewayTenantLinkTest extends TestCase
         ]);
 
         return Tenant::query()->create([
-            'project_id' => $project->id,
+            'hosted_project_id' => $project->id,
             'company_name' => $companyName,
             'tenant_domain' => Str::slug($companyName).'.test',
             'status' => 'active',

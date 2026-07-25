@@ -2,7 +2,7 @@
 
 namespace App\Domain\Tenancy;
 
-use App\Models\Project;
+use App\Models\Product;
 use App\Models\ProjectVersion;
 use App\Models\TenantProjectSubscription;
 use Illuminate\Support\Collection;
@@ -12,12 +12,12 @@ class ProjectVersionRolloutSummary
     /**
      * @return array{total: int, latest: int, outdated: int, critical_update_required: int, unknown: int, project_current_version: ?string, project_latest_version: ?string}
      */
-    public function forProject(Project $project): array
+    public function forProduct(Product $product): array
     {
-        $project->loadMissing(['versions', 'tenantProjectSubscriptions.versionTracking']);
+        $product->loadMissing(['versions', 'tenantProjectSubscriptions.versionTracking']);
 
-        $projectCurrent = $this->projectCurrentVersion($project);
-        $subscriptions = $project->tenantProjectSubscriptions;
+        $productCurrent = $this->projectCurrentVersion($product);
+        $subscriptions = $product->tenantProjectSubscriptions;
 
         $counts = [
             'total' => $subscriptions->count(),
@@ -25,16 +25,22 @@ class ProjectVersionRolloutSummary
             'outdated' => 0,
             'critical_update_required' => 0,
             'unknown' => 0,
-            'project_current_version' => $projectCurrent,
-            'project_latest_version' => $this->projectLatestVersion($project, $projectCurrent),
+            'project_current_version' => $productCurrent,
+            'project_latest_version' => $this->projectLatestVersion($product, $productCurrent),
         ];
 
         foreach ($subscriptions as $subscription) {
-            $status = $this->resolveSubscriptionStatus($subscription, $projectCurrent);
+            $status = $this->resolveSubscriptionStatus($subscription, $productCurrent);
             $counts[$status]++;
         }
 
         return $counts;
+    }
+
+    /** @deprecated Use forProduct() */
+    public function forProject(Product $product): array
+    {
+        return $this->forProduct($product);
     }
 
     public function resolveSubscriptionStatus(TenantProjectSubscription $subscription, ?string $projectCurrent = null): string
@@ -54,7 +60,7 @@ class ProjectVersionRolloutSummary
             return 'unknown';
         }
 
-        $projectCurrent ??= $this->projectCurrentVersion($subscription->project);
+        $projectCurrent ??= $this->projectCurrentVersion($subscription->product);
         if (! $projectCurrent) {
             return 'unknown';
         }
@@ -62,37 +68,34 @@ class ProjectVersionRolloutSummary
         return version_compare($current, $projectCurrent, '>=') ? 'latest' : 'outdated';
     }
 
-    public function projectCurrentVersion(?Project $project): ?string
+    public function projectCurrentVersion(?Product $product): ?string
     {
-        if (! $project) {
+        if (! $product) {
             return null;
         }
 
-        $project->loadMissing('versions');
+        $product->loadMissing('versions');
 
-        $fromRegistry = $project->versions->firstWhere('is_current', true)?->version;
-
-        return $fromRegistry ?: ($project->version ?: null);
+        return $product->versions->firstWhere('is_current', true)?->version;
     }
 
-    public function projectLatestVersion(?Project $project, ?string $fallbackCurrent = null): ?string
+    public function projectLatestVersion(?Product $product, ?string $fallbackCurrent = null): ?string
     {
-        if (! $project) {
+        if (! $product) {
             return null;
         }
 
-        $project->loadMissing('versions');
+        $product->loadMissing('versions');
 
         /** @var Collection<int, ProjectVersion> $versions */
-        $versions = $project->versions;
+        $versions = $product->versions;
 
         if ($versions->isEmpty()) {
-            return $fallbackCurrent ?? $project->version;
+            return $fallbackCurrent;
         }
 
         return $versions->sortByDesc('release_date')->first()?->version
-            ?? $fallbackCurrent
-            ?? $project->version;
+            ?? $fallbackCurrent;
     }
 
     /**

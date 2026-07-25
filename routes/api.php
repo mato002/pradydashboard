@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\BackupAgentApiController;
+use App\Http\Controllers\Api\BackupUploadApiController;
 use App\Http\Controllers\Api\DeploymentWebhookController;
 use App\Http\Controllers\Api\EnterpriseLicenseCheckController;
 use App\Http\Controllers\Api\LicenseCheckController;
@@ -21,6 +22,20 @@ Route::middleware(['project.api', 'throttle:60,1'])->prefix('v1/backups/agents')
     Route::post('/register', [BackupAgentApiController::class, 'registerAgent']);
     Route::post('/heartbeat', [BackupAgentApiController::class, 'heartbeat']);
 });
+
+Route::middleware(['project.api', 'throttle:30,1'])->prefix('v1/backups')->group(function () {
+    Route::post('/upload-session', [BackupUploadApiController::class, 'createSession']);
+    Route::post('/upload-complete', [BackupUploadApiController::class, 'complete']);
+    Route::post('/upload-failed', [BackupUploadApiController::class, 'failed']);
+    Route::match(['get', 'post'], '/{id}/status', [BackupUploadApiController::class, 'status'])
+        ->whereNumber('id');
+    Route::match(['get', 'post'], '/{id}/retention', [BackupUploadApiController::class, 'retention'])
+        ->whereNumber('id');
+});
+
+// Byte PUT uses short-lived upload token only (no project Bearer).
+Route::put('/v1/backups/upload/{uploadId}', [BackupUploadApiController::class, 'putBytes'])
+    ->middleware('throttle:20,1');
 
 Route::post('/v1/payments-gateway/webhooks', PaymentsGatewayWebhookController::class)
     ->middleware(['payments.gateway.webhook', 'throttle:60,1'])

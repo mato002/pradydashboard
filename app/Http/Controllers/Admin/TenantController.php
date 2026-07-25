@@ -257,11 +257,11 @@ class TenantController extends Controller
             }
 
             if ($tab === 'versions') {
-                $selectedSubscription->loadMissing(['project.versions', 'versionTracking']);
-                $project = $selectedSubscription->project;
+                $selectedSubscription->loadMissing(['product.versions', 'versionTracking']);
+                $product = $selectedSubscription->product;
                 $projectVersionContext = [
-                    'current' => $this->rolloutSummary->projectCurrentVersion($project),
-                    'latest' => $this->rolloutSummary->projectLatestVersion($project),
+                    'current' => $this->rolloutSummary->projectCurrentVersion($product),
+                    'latest' => $this->rolloutSummary->projectLatestVersion($product),
                 ];
                 $inferredVersionStatus = $this->rolloutSummary->resolveSubscriptionStatus($selectedSubscription);
                 $updateStatusOptions = TenantOpsFormOptions::updateStatus();

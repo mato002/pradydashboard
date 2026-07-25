@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Domain\Tenancy\ProjectVersionRolloutSummary;
 use App\Domain\Tenancy\TenantProjectProvisioner;
+use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectVersion;
 use App\Models\Server;
@@ -115,26 +116,29 @@ class TenantProjectInfraVersionTest extends TestCase
 
     public function test_project_rollout_summary_counts_tenant_versions(): void
     {
-        $project = Project::query()->create(['name' => 'Rollout', 'domain' => 'roll.test', 'version' => '3.0.0']);
-        ProjectVersion::query()->create(['project_id' => $project->id, 'version' => '3.0.0', 'is_current' => true]);
+        $product = Product::query()->create(['name' => 'Rollout', 'slug' => 'rollout', 'status' => 'active']);
+        $project = Project::query()->create(['name' => 'Rollout', 'domain' => 'roll.test', 'product_id' => $product->id]);
+        ProjectVersion::query()->create(['product_id' => $product->id, 'version' => '3.0.0', 'is_current' => true]);
 
         $tenantA = Tenant::query()->create([
-            'project_id' => $project->id,
+            'hosted_project_id' => $project->id,
+            'product_id' => $product->id,
             'company_name' => 'A',
             'tenant_currency' => 'KES',
             'billing_cycle' => 'monthly',
             'status' => 'active',
         ]);
         $tenantB = Tenant::query()->create([
-            'project_id' => $project->id,
+            'hosted_project_id' => $project->id,
+            'product_id' => $product->id,
             'company_name' => 'B',
             'tenant_currency' => 'KES',
             'billing_cycle' => 'monthly',
             'status' => 'active',
         ]);
 
-        (new TenantProjectProvisioner)->syncPrimarySubscription($tenantA);
-        (new TenantProjectProvisioner)->syncPrimarySubscription($tenantB);
+        (new TenantProjectProvisioner)->syncPrimarySubscription($tenantA, $project);
+        (new TenantProjectProvisioner)->syncPrimarySubscription($tenantB, $project);
 
         $subA = TenantProjectSubscription::query()->where('tenant_id', $tenantA->id)->firstOrFail();
         $subB = TenantProjectSubscription::query()->where('tenant_id', $tenantB->id)->firstOrFail();
@@ -148,8 +152,8 @@ class TenantProjectInfraVersionTest extends TestCase
             ['current_version' => '2.0.0', 'latest_version' => '3.0.0', 'update_status' => 'outdated']
         );
 
-        $project->load('tenantProjectSubscriptions.versionTracking');
-        $summary = (new ProjectVersionRolloutSummary)->forProject($project);
+        $product->load('tenantProjectSubscriptions.versionTracking');
+        $summary = (new ProjectVersionRolloutSummary)->forProduct($product);
 
         $this->assertSame(2, $summary['total']);
         $this->assertSame(1, $summary['latest']);

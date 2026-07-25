@@ -28,7 +28,7 @@ class TenantProjectVersionController extends Controller
     {
         $this->authorizeTenantSubscriptionRbac($tenant, $subscription);
 
-        $subscription->load('project.versions');
+        $subscription->load('product.versions');
 
         $data = $request->validate([
             'current_version' => ['nullable', 'string', 'max:50'],
@@ -41,8 +41,8 @@ class TenantProjectVersionController extends Controller
             'update_notes' => ['nullable', 'string', 'max:10000'],
         ]);
 
-        $projectCurrent = $this->rolloutSummary->projectCurrentVersion($subscription->project);
-        $projectLatest = $this->rolloutSummary->projectLatestVersion($subscription->project, $projectCurrent);
+        $projectCurrent = $this->rolloutSummary->projectCurrentVersion($subscription->product);
+        $projectLatest = $this->rolloutSummary->projectLatestVersion($subscription->product, $projectCurrent);
 
         if (empty($data['latest_version']) && $projectLatest) {
             $data['latest_version'] = $projectLatest;
@@ -70,7 +70,7 @@ class TenantProjectVersionController extends Controller
             ActivityLogCategory::TENANT,
             __('Version tracking updated for :tenant — :project', [
                 'tenant' => $tenant->company_name,
-                'project' => $subscription->project?->name ?? __('subscription'),
+                'project' => $subscription->product?->name ?? __('subscription'),
             ]),
             $tracking,
             $existing?->only(array_keys($data)),

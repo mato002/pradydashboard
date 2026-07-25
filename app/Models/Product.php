@@ -47,6 +47,11 @@ class Product extends Model
         return $this->hasMany(ProjectVersion::class);
     }
 
+    public function tenantProjectSubscriptions(): HasMany
+    {
+        return $this->hasMany(TenantProjectSubscription::class);
+    }
+
     public static function generateUniqueSlug(string $name): string
     {
         $base = Str::slug($name);

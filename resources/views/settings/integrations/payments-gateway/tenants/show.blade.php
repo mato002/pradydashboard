@@ -35,21 +35,38 @@
             </dl>
 
             @permission('payments_gateway.manage')
-            <div class="mt-4 flex flex-wrap gap-2">
+            <div class="mt-4 space-y-3">
                 @if (! $linked)
-                    <form method="post" action="{{ route('settings.payments-gateway.tenants.link', $dashboardTenant) }}" onsubmit="return confirm(@js(__('Link this tenant to Payments Gateway?')))">
+                    <form method="post" action="{{ route('settings.payments-gateway.tenants.link', $dashboardTenant) }}" class="space-y-3" onsubmit="return confirm(@js(__('Link this tenant to Payments Gateway?')))">
                         @csrf
+                        <div>
+                            <label for="gateway_tenant_uuid" class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('Existing gateway tenant UUID') }}</label>
+                            <input
+                                id="gateway_tenant_uuid"
+                                name="gateway_tenant_uuid"
+                                type="text"
+                                value="{{ old('gateway_tenant_uuid') }}"
+                                placeholder="{{ __('Paste UUID from payments.pradytecai.com to link an existing client') }}"
+                                class="mt-1 w-full max-w-xl rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-950"
+                            >
+                            <p class="mt-1 text-xs text-slate-500">{{ __('Leave blank to create a new gateway tenant, or auto-adopt one that already matches this tenant key / external key.') }}</p>
+                            @error('gateway_tenant_uuid')
+                                <p class="mt-1 text-xs text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </div>
                         <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">{{ __('Link existing tenant') }}</button>
                     </form>
                 @else
-                    <form method="post" action="{{ route('settings.payments-gateway.tenants.sync', $dashboardTenant) }}">
-                        @csrf
-                        <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">{{ __('Sync treasury mapping') }}</button>
-                    </form>
-                    <form method="post" action="{{ route('settings.payments-gateway.tenants.unlink', $dashboardTenant) }}" onsubmit="return confirm(@js(__('Unlinking only removes the dashboard link. It does not delete treasury records on payments.pradytecai.com.')))">
-                        @csrf
-                        <button type="submit" class="rounded-xl border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-700 dark:border-rose-900 dark:text-rose-300">{{ __('Unlink') }}</button>
-                    </form>
+                    <div class="flex flex-wrap gap-2">
+                        <form method="post" action="{{ route('settings.payments-gateway.tenants.sync', $dashboardTenant) }}">
+                            @csrf
+                            <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">{{ __('Sync treasury mapping') }}</button>
+                        </form>
+                        <form method="post" action="{{ route('settings.payments-gateway.tenants.unlink', $dashboardTenant) }}" onsubmit="return confirm(@js(__('Unlinking only removes the dashboard link. It does not delete treasury records on payments.pradytecai.com.')))">
+                            @csrf
+                            <button type="submit" class="rounded-xl border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-700 dark:border-rose-900 dark:text-rose-300">{{ __('Unlink') }}</button>
+                        </form>
+                    </div>
                 @endif
             </div>
             @endpermission

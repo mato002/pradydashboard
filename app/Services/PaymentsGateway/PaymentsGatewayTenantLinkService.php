@@ -14,10 +14,14 @@ class PaymentsGatewayTenantLinkService
         protected PaymentsGatewayClient $client,
     ) {}
 
-    public function link(Tenant $tenant): Tenant
+    public function link(Tenant $tenant, ?string $gatewayTenantUuid = null): Tenant
     {
         if ($this->isLinked($tenant)) {
             throw new PaymentsGatewayTenantAlreadyLinkedException;
+        }
+
+        if (filled($gatewayTenantUuid)) {
+            return $this->linkToExistingUuid($tenant, (string) $gatewayTenantUuid);
         }
 
         $existingGatewayTenant = $this->findExistingGatewayTenant($tenant);
@@ -41,9 +45,16 @@ class PaymentsGatewayTenantLinkService
         }
 
         if (! ($response['ok'] ?? false)) {
-            throw new PaymentsGatewayLinkException(
-                (string) ($response['error'] ?? $response['message'] ?? __('Unable to create tenant on Payments Gateway.'))
-            );
+            $error = (string) ($response['error'] ?? $response['message'] ?? __('Unable to create tenant on Payments Gateway.'));
+            $status = (int) ($response['status'] ?? 0);
+
+            if (in_array($status, [401, 403], true)) {
+                throw new PaymentsGatewayLinkException(
+                    $error.' '.__('If this tenant already exists on payments.pradytecai.com, paste its gateway tenant UUID to link without creating a new record.')
+                );
+            }
+
+            throw new PaymentsGatewayLinkException($error);
         }
 
         $gatewayTenant = $this->client->extractResource($response);
@@ -54,6 +65,48 @@ class PaymentsGatewayTenantLinkService
         }
 
         return $this->persistLink($tenant, $gatewayUuid, $gatewayTenant);
+    }
+
+    public function linkToExistingUuid(Tenant $tenant, string $gatewayUuid): Tenant
+    {
+        if ($this->isLinked($tenant)) {
+            throw new PaymentsGatewayTenantAlreadyLinkedException;
+        }
+
+        $gatewayUuid = trim($gatewayUuid);
+
+        if ($gatewayUuid === '') {
+            throw new PaymentsGatewayLinkException(__('A Payments Gateway tenant UUID is required.'));
+        }
+
+        if ($this->isGatewayUuidLinkedElsewhere($gatewayUuid, $tenant)) {
+            throw new PaymentsGatewayLinkException(
+                __('This Payments Gateway tenant is already linked to another dashboard tenant.')
+            );
+        }
+
+        $response = $this->client->getTenant($gatewayUuid);
+
+        if ((bool) ($response['ok'] ?? false)) {
+            $gatewayTenant = $this->client->extractResource($response);
+
+            return $this->persistLink($tenant, $gatewayUuid, is_array($gatewayTenant) ? $gatewayTenant : ['status' => 'linked']);
+        }
+
+        $status = (int) ($response['status'] ?? 0);
+
+        if ($status === 404) {
+            throw new PaymentsGatewayLinkException(__('No Payments Gateway tenant found for that UUID.'));
+        }
+
+        // Read-only or misconfigured admin tokens still allow operator-attested local linkage.
+        if (in_array($status, [401, 403], true) || (bool) ($response['unavailable'] ?? false)) {
+            return $this->persistLink($tenant, $gatewayUuid, ['status' => 'linked']);
+        }
+
+        throw new PaymentsGatewayLinkException(
+            (string) ($response['error'] ?? $response['message'] ?? __('Unable to verify Payments Gateway tenant UUID.'))
+        );
     }
 
     public function sync(Tenant $tenant): Tenant
@@ -169,15 +222,38 @@ class PaymentsGatewayTenantLinkService
 
     protected function findExistingGatewayTenant(Tenant $tenant): ?array
     {
-        $response = $this->client->listTenants();
+        $externalKey = (string) $tenant->external_key;
+        $slug = (string) $tenant->tenant_key;
 
-        if (! ($response['ok'] ?? false)) {
-            return null;
+        $queries = array_values(array_filter([
+            $externalKey !== '' ? ['external_tenant_id' => $externalKey] : null,
+            $slug !== '' ? ['slug' => $slug] : null,
+            [],
+        ]));
+
+        foreach ($queries as $query) {
+            $response = $this->client->listTenants($query);
+
+            if (! ($response['ok'] ?? false)) {
+                continue;
+            }
+
+            $match = collect($this->client->extractItems($response))->first(
+                function (array $item) use ($externalKey, $slug): bool {
+                    if ($externalKey !== '' && (string) ($item['external_tenant_id'] ?? '') === $externalKey) {
+                        return true;
+                    }
+
+                    return $slug !== '' && (string) ($item['slug'] ?? '') === $slug;
+                }
+            );
+
+            if (is_array($match)) {
+                return $match;
+            }
         }
 
-        return collect($this->client->extractItems($response))->first(
-            fn (array $item): bool => (string) ($item['external_tenant_id'] ?? '') === (string) $tenant->external_key
-        );
+        return null;
     }
 
     /**

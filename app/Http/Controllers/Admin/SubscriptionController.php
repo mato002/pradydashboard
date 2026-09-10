@@ -163,7 +163,7 @@ class SubscriptionController extends Controller
 
         return redirect()
             ->route('subscriptions.index')
-            ->with('status', __('Plan renewal queued for eligible auto-renew subscriptions.'));
+            ->with('status', __('Renewal invoices queued for eligible auto-renew subscriptions.'));
     }
 
     public function generateInvoice(Request $request): RedirectResponse
@@ -177,11 +177,18 @@ class SubscriptionController extends Controller
 
     public function renewSubscription(TenantSubscription $subscription, SubscriptionBillingService $billing): RedirectResponse
     {
-        $billing->renew($subscription);
+        $invoice = $billing->renew($subscription);
+
+        if ($invoice === null) {
+            return redirect()
+                ->route('subscriptions.index', ['tenant' => $subscription->tenant_id])
+                ->with('status', __('No renewal invoice created — period may already be billed or tenant is missing.'));
+        }
 
         return redirect()
-            ->route('subscriptions.index', ['tenant' => $subscription->tenant_id])
-            ->with('status', __('Subscription renewed for :tenant.', [
+            ->route('invoices.show', $invoice)
+            ->with('status', __('Renewal invoice :number created for :tenant. Period extends after payment.', [
+                'number' => $invoice->invoice_number,
                 'tenant' => $subscription->tenant?->company_name ?? __('tenant'),
             ]));
     }

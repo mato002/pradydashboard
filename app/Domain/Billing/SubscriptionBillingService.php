@@ -20,51 +20,12 @@ class SubscriptionBillingService
         private readonly ActivityLogger $activityLogger,
     ) {}
 
-    public function renew(TenantSubscription $subscription): TenantSubscription
+    /**
+     * Bill the next renewal period. Does not extend entitlement — that happens only after payment.
+     */
+    public function renew(TenantSubscription $subscription): ?TenantInvoice
     {
-        $subscription->loadMissing('tenant');
-
-        $periodStart = $subscription->current_period_end instanceof Carbon
-            ? $subscription->current_period_end->copy()
-            : now();
-
-        if ($periodStart->isPast()) {
-            $periodStart = now();
-        }
-
-        $periodEnd = $subscription->billing_cycle === 'annual'
-            ? $periodStart->copy()->addYear()
-            : $periodStart->copy()->addMonth();
-
-        $subscription->update([
-            'current_period_start' => $periodStart->toDateString(),
-            'current_period_end' => $periodEnd->toDateString(),
-            'status' => in_array($subscription->status, ['overdue', 'grace_period', 'grace'], true)
-                ? 'active'
-                : $subscription->status,
-        ]);
-
-        if ($subscription->tenant) {
-            $subscription->tenant->update([
-                'renewal_date' => $periodEnd->toDateString(),
-                'start_date' => $periodStart->toDateString(),
-                'status' => 'active',
-            ]);
-        }
-
-        $this->activityLogger->log(
-            'subscription.renewed',
-            ActivityLogCategory::BILLING,
-            __('Subscription :plan renewed through :date.', [
-                'plan' => $subscription->plan_name,
-                'date' => $periodEnd->format('M j, Y'),
-            ]),
-            $subscription->tenant,
-            null,
-            ['subscription_id' => $subscription->id],
-        );
-
-        return $subscription->fresh(['tenant', 'saasPlan']);
+        return $this->generateRenewalInvoice($subscription);
     }
 
     public function renewFleet(): int
@@ -77,8 +38,9 @@ class SubscriptionBillingService
             ->whereIn('status', ['active', 'trial', 'grace_period', 'grace', 'overdue'])
             ->whereDate('current_period_end', '<=', now()->addDays(14))
             ->each(function (TenantSubscription $subscription) use (&$count): void {
-                $this->renew($subscription);
-                $count++;
+                if ($this->renew($subscription) !== null) {
+                    $count++;
+                }
             });
 
         return $count;
@@ -120,7 +82,126 @@ class SubscriptionBillingService
             return null;
         }
 
-        return DB::transaction(function () use ($subscription, $tenant): TenantInvoice {
+        $periodStart = $subscription->current_period_start instanceof Carbon
+            ? $subscription->current_period_start->copy()
+            : ($subscription->current_period_start ? Carbon::parse($subscription->current_period_start) : now());
+        $periodEnd = $subscription->current_period_end instanceof Carbon
+            ? $subscription->current_period_end->copy()
+            : ($subscription->current_period_end ? Carbon::parse($subscription->current_period_end) : now()->addMonth());
+
+        return $this->createSubscriptionInvoice(
+            $subscription,
+            $tenant,
+            $periodStart,
+            $periodEnd,
+            __(':plan subscription — :cycle', [
+                'plan' => $subscription->plan_name,
+                'cycle' => ucfirst($subscription->billing_cycle),
+            ]),
+            'subscription.invoice_generated',
+            __('Invoice :number generated for :plan.', [
+                'number' => ':number',
+                'plan' => $subscription->plan_name,
+            ]),
+        );
+    }
+
+    /**
+     * Create an invoice for the upcoming renewal window without changing period or access.
+     */
+    public function generateRenewalInvoice(TenantSubscription $subscription): ?TenantInvoice
+    {
+        $subscription->loadMissing('tenant', 'saasPlan');
+
+        $tenant = $subscription->tenant;
+        if (! $tenant) {
+            return null;
+        }
+
+        [$periodStart, $periodEnd] = $this->resolveNextRenewalWindow($subscription);
+
+        // Renewal invoices are issued near period end (issue_date = today), so dedupe against
+        // the renew eligibility window rather than the future period dates.
+        if ($this->renewalInvoiceAlreadyExists($subscription)) {
+            return null;
+        }
+
+        $description = __(':plan renewal — :start to :end', [
+            'plan' => $subscription->plan_name,
+            'start' => $periodStart->format('M j, Y'),
+            'end' => $periodEnd->format('M j, Y'),
+        ]);
+
+        return $this->createSubscriptionInvoice(
+            $subscription,
+            $tenant,
+            $periodStart,
+            $periodEnd,
+            $description,
+            'subscription.renewal_invoiced',
+            __('Renewal invoice :number generated for :plan (:start – :end).', [
+                'number' => ':number',
+                'plan' => $subscription->plan_name,
+                'start' => $periodStart->format('M j, Y'),
+                'end' => $periodEnd->format('M j, Y'),
+            ]),
+        );
+    }
+
+    public function generateFleetInvoices(): int
+    {
+        $count = 0;
+
+        TenantSubscription::query()
+            ->with('tenant')
+            ->whereIn('status', ['active', 'trial', 'overdue'])
+            ->each(function (TenantSubscription $subscription) use (&$count): void {
+                if ($this->generateInvoice($subscription) !== null) {
+                    $count++;
+                }
+            });
+
+        return $count;
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function resolveNextRenewalWindow(TenantSubscription $subscription): array
+    {
+        $periodStart = $subscription->current_period_end instanceof Carbon
+            ? $subscription->current_period_end->copy()
+            : ($subscription->current_period_end ? Carbon::parse($subscription->current_period_end) : now());
+
+        if ($periodStart->isPast()) {
+            $periodStart = now();
+        }
+
+        $periodEnd = $subscription->billing_cycle === 'annual'
+            ? $periodStart->copy()->addYear()
+            : $periodStart->copy()->addMonth();
+
+        return [$periodStart, $periodEnd];
+    }
+
+    private function createSubscriptionInvoice(
+        TenantSubscription $subscription,
+        Tenant $tenant,
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        string $lineDescription,
+        string $activityAction,
+        string $activityMessageTemplate,
+    ): TenantInvoice {
+        return DB::transaction(function () use (
+            $subscription,
+            $tenant,
+            $periodStart,
+            $periodEnd,
+            $lineDescription,
+            $activityAction,
+            $activityMessageTemplate,
+        ): TenantInvoice {
             $amount = (float) $subscription->amount;
             $taxRate = $tenant->billing_tax_exempt || ! $this->billingSettings->vatRegistered()
                 ? 0.0
@@ -152,10 +233,7 @@ class SubscriptionBillingService
             TenantInvoiceLineItem::query()->create([
                 'tenant_invoice_id' => $invoice->id,
                 'item_type' => 'subscription',
-                'description' => __(':plan subscription — :cycle', [
-                    'plan' => $subscription->plan_name,
-                    'cycle' => ucfirst($subscription->billing_cycle),
-                ]),
+                'description' => $lineDescription,
                 'quantity' => 1,
                 'unit_price' => $amount,
                 'discount' => 0,
@@ -169,36 +247,24 @@ class SubscriptionBillingService
             $invoice->update(['status' => 'sent']);
             $this->documentFinalizer->finalize($invoice);
 
+            $message = str_replace(':number', $invoice->invoice_number, $activityMessageTemplate);
+
             $this->activityLogger->log(
-                'subscription.invoice_generated',
+                $activityAction,
                 ActivityLogCategory::BILLING,
-                __('Invoice :number generated for :plan.', [
-                    'number' => $invoice->invoice_number,
-                    'plan' => $subscription->plan_name,
-                ]),
+                $message,
                 $tenant,
                 null,
-                ['subscription_id' => $subscription->id, 'invoice_id' => $invoice->id],
+                [
+                    'subscription_id' => $subscription->id,
+                    'invoice_id' => $invoice->id,
+                    'period_start' => $periodStart->toDateString(),
+                    'period_end' => $periodEnd->toDateString(),
+                ],
             );
 
             return $invoice->fresh(['lineItems']);
         });
-    }
-
-    public function generateFleetInvoices(): int
-    {
-        $count = 0;
-
-        TenantSubscription::query()
-            ->with('tenant')
-            ->whereIn('status', ['active', 'trial', 'overdue'])
-            ->each(function (TenantSubscription $subscription) use (&$count): void {
-                if ($this->generateInvoice($subscription) !== null) {
-                    $count++;
-                }
-            });
-
-        return $count;
     }
 
     private function invoiceExistsForCurrentPeriod(TenantSubscription $subscription): bool
@@ -207,15 +273,52 @@ class SubscriptionBillingService
             return false;
         }
 
+        $start = $subscription->current_period_start instanceof Carbon
+            ? $subscription->current_period_start
+            : Carbon::parse($subscription->current_period_start);
+        $end = $subscription->current_period_end instanceof Carbon
+            ? $subscription->current_period_end
+            : Carbon::parse($subscription->current_period_end);
+
+        return $this->invoiceExistsForPeriodWindow($subscription, $start, $end);
+    }
+
+    private function invoiceExistsForPeriodWindow(
+        TenantSubscription $subscription,
+        Carbon $periodStart,
+        Carbon $periodEnd,
+    ): bool {
         return TenantInvoiceLineItem::query()
             ->where('item_type', 'subscription')
             ->where('related_model_type', TenantSubscription::class)
             ->where('related_model_id', $subscription->id)
-            ->whereHas('invoice', function ($query) use ($subscription): void {
+            ->whereHas('invoice', function ($query) use ($subscription, $periodStart, $periodEnd): void {
                 $query->where('tenant_id', $subscription->tenant_id)
                     ->whereNotIn('status', ['cancelled', 'void'])
-                    ->whereDate('issue_date', '>=', $subscription->current_period_start)
-                    ->whereDate('issue_date', '<=', $subscription->current_period_end);
+                    ->whereDate('issue_date', '>=', $periodStart->toDateString())
+                    ->whereDate('issue_date', '<=', $periodEnd->toDateString());
+            })
+            ->exists();
+    }
+
+    private function renewalInvoiceAlreadyExists(TenantSubscription $subscription): bool
+    {
+        $periodEnd = $subscription->current_period_end instanceof Carbon
+            ? $subscription->current_period_end->copy()
+            : ($subscription->current_period_end ? Carbon::parse($subscription->current_period_end) : now());
+
+        $windowStart = $periodEnd->copy()->subDays(14);
+
+        return TenantInvoiceLineItem::query()
+            ->where('item_type', 'subscription')
+            ->where('related_model_type', TenantSubscription::class)
+            ->where('related_model_id', $subscription->id)
+            ->where('description', 'like', '%renewal%')
+            ->whereHas('invoice', function ($query) use ($subscription, $windowStart): void {
+                $query->where('tenant_id', $subscription->tenant_id)
+                    ->whereNotIn('status', ['cancelled', 'void'])
+                    ->where('generated_by', 'subscription-billing')
+                    ->whereDate('issue_date', '>=', $windowStart->toDateString());
             })
             ->exists();
     }

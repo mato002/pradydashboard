@@ -64,15 +64,41 @@ class SubscriptionBillingActionsTest extends TestCase
         ]);
     }
 
-    public function test_renew_subscription_extends_billing_period(): void
+    public function test_renew_subscription_creates_invoice_without_extending_period(): void
     {
         $subscription = $this->seedSubscription();
         $previousEnd = $subscription->current_period_end->copy();
+        $previousStatus = $subscription->status;
+        $tenantStatus = $subscription->tenant->status;
 
-        app(SubscriptionBillingService::class)->renew($subscription);
+        $invoice = app(SubscriptionBillingService::class)->renew($subscription);
+
+        $this->assertNotNull($invoice);
+        $this->assertSame('sent', $invoice->status);
+        $this->assertDatabaseHas('tenant_invoices', [
+            'id' => $invoice->id,
+            'tenant_id' => $subscription->tenant_id,
+        ]);
 
         $subscription->refresh();
-        $this->assertTrue($subscription->current_period_end->gt($previousEnd));
+        $this->assertTrue($subscription->current_period_end->equalTo($previousEnd));
+        $this->assertSame($previousStatus, $subscription->status);
+        $this->assertSame($tenantStatus, $subscription->tenant->fresh()->status);
+        $this->assertStringContainsString('renewal', strtolower($invoice->lineItems->first()->description));
+    }
+
+    public function test_renew_does_not_reactivate_overdue_without_payment(): void
+    {
+        $subscription = $this->seedSubscription();
+        $subscription->update(['status' => 'overdue']);
+        $subscription->tenant->update(['status' => 'overdue']);
+
+        $invoice = app(SubscriptionBillingService::class)->renew($subscription->fresh());
+
+        $this->assertNotNull($invoice);
+        $subscription->refresh();
+        $this->assertSame('overdue', $subscription->status);
+        $this->assertSame('overdue', $subscription->tenant->fresh()->status);
     }
 
     public function test_generate_invoice_creates_tenant_invoice(): void
@@ -153,11 +179,18 @@ class SubscriptionBillingActionsTest extends TestCase
         $previousEnd = $subscription->current_period_end->copy();
         $user = User::factory()->create();
 
-        $this->actingAs($user)
-            ->post(route('subscriptions.subscription.renew', $subscription))
-            ->assertRedirect(route('subscriptions.index', ['tenant' => $subscription->tenant_id]));
+        $response = $this->actingAs($user)
+            ->post(route('subscriptions.subscription.renew', $subscription));
 
         $subscription->refresh();
-        $this->assertTrue($subscription->current_period_end->gt($previousEnd));
+        $this->assertTrue($subscription->current_period_end->equalTo($previousEnd));
+
+        $invoice = \App\Models\TenantInvoice::query()
+            ->where('tenant_id', $subscription->tenant_id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($invoice);
+        $response->assertRedirect(route('invoices.show', $invoice));
     }
 }

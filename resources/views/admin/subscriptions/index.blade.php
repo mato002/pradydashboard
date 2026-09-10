@@ -37,7 +37,7 @@
                         <form method="POST" action="{{ route('subscriptions.renew') }}">
                             @csrf
                             <button type="submit" class="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
-                                {{ __('Renew Plan') }}
+                                {{ __('Bill renewals') }}
                             </button>
                         </form>
                         <form method="POST" action="{{ route('subscriptions.invoice') }}">

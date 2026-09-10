@@ -93,6 +93,74 @@ class TenantBillingActivationService
         });
     }
 
+    public function deactivateFromUnpaidInvoice(TenantInvoice $invoice): bool
+    {
+        $invoice->loadMissing(['tenant', 'lineItems']);
+
+        if ($invoice->status === 'paid' || $invoice->document_type !== 'invoice' || ! $invoice->tenant_id) {
+            return false;
+        }
+
+        $tenant = $invoice->tenant;
+        if (! $tenant || in_array($tenant->status, ['cancelled', 'terminated'], true)) {
+            return false;
+        }
+
+        $subscription = $this->resolveSubscription($invoice);
+
+        if ($this->hasOtherPaidCoveringInvoice($invoice, $tenant, $subscription)) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($invoice, $tenant, $subscription): bool {
+            $rolledPeriodEnd = null;
+
+            if ($subscription) {
+                $rolledPeriodEnd = $this->resolvePreviousPeriodEnd($subscription);
+                $rolledPeriodStart = $subscription->billing_cycle === 'annual'
+                    ? $rolledPeriodEnd->copy()->subYear()
+                    : $rolledPeriodEnd->copy()->subMonth();
+
+                $subscription->update([
+                    'status' => 'overdue',
+                    'current_period_start' => $rolledPeriodStart->toDateString(),
+                    'current_period_end' => $rolledPeriodEnd->toDateString(),
+                ]);
+            } else {
+                TenantSubscription::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->whereIn('status', ['active', 'trial', 'grace_period', 'grace'])
+                    ->update(['status' => 'overdue']);
+            }
+
+            $tenant->update([
+                'status' => 'overdue',
+                'renewal_date' => $rolledPeriodEnd?->toDateString() ?? $tenant->renewal_date,
+            ]);
+
+            $this->restrictAccessPolicy($tenant);
+            $this->projectProvisioner->syncPrimarySubscription($tenant->fresh());
+
+            $this->activityLogger->log(
+                'tenant.deactivated_from_payment_reverse',
+                ActivityLogCategory::BILLING,
+                __('Tenant :name access rolled back after invoice :number was unpaid.', [
+                    'name' => $tenant->company_name,
+                    'number' => $invoice->invoice_number,
+                ]),
+                $tenant,
+                null,
+                [
+                    'invoice_id' => $invoice->id,
+                    'subscription_id' => $subscription?->id,
+                    'renewal_date' => $rolledPeriodEnd?->toDateString(),
+                ],
+            );
+
+            return true;
+        });
+    }
+
     private function shouldActivate(Tenant $tenant, TenantInvoice $invoice, ?TenantSubscription $subscription): bool
     {
         if ($subscription !== null) {
@@ -149,6 +217,44 @@ class TenantBillingActivationService
             : $base->copy()->addMonth();
     }
 
+    private function resolvePreviousPeriodEnd(TenantSubscription $subscription): Carbon
+    {
+        $end = $subscription->current_period_end instanceof Carbon
+            ? $subscription->current_period_end->copy()
+            : Carbon::parse($subscription->current_period_end ?? now());
+
+        return $subscription->billing_cycle === 'annual'
+            ? $end->copy()->subYear()
+            : $end->copy()->subMonth();
+    }
+
+    private function hasOtherPaidCoveringInvoice(
+        TenantInvoice $invoice,
+        Tenant $tenant,
+        ?TenantSubscription $subscription,
+    ): bool {
+        $query = TenantInvoice::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('id', '!=', $invoice->id)
+            ->where('document_type', 'invoice')
+            ->where('status', 'paid');
+
+        if ($subscription) {
+            $query->whereHas('lineItems', function ($lineQuery) use ($subscription): void {
+                $lineQuery->where('item_type', 'subscription')
+                    ->where('related_model_type', TenantSubscription::class)
+                    ->where('related_model_id', $subscription->id);
+            });
+        } else {
+            $query->where(function ($inner) {
+                $inner->where('is_recurring', true)
+                    ->orWhereHas('lineItems', fn ($lineQuery) => $lineQuery->where('item_type', 'subscription'));
+            });
+        }
+
+        return $query->exists();
+    }
+
     private function restoreAccessPolicy(Tenant $tenant): void
     {
         TenantAccessControl::query()->create([
@@ -159,6 +265,19 @@ class TenantBillingActivationService
             'effective_from' => now(),
             'effective_until' => null,
             'notes' => __('Access restored automatically after invoice payment.'),
+        ]);
+    }
+
+    private function restrictAccessPolicy(Tenant $tenant): void
+    {
+        TenantAccessControl::query()->create([
+            'tenant_id' => $tenant->id,
+            'level' => 'restricted',
+            'restrict_login' => true,
+            'disabled_modules' => [],
+            'effective_from' => now(),
+            'effective_until' => null,
+            'notes' => __('Access restricted automatically after payment reversal.'),
         ]);
     }
 }

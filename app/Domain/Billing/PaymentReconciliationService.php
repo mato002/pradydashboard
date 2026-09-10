@@ -222,6 +222,7 @@ class PaymentReconciliationService
     {
         return DB::transaction(function () use ($payment): TenantPayment {
             $payment = $payment->fresh(['allocations.invoice']);
+            $affectedInvoices = [];
 
             foreach ($payment->allocations as $allocation) {
                 $invoice = $allocation->invoice;
@@ -235,6 +236,7 @@ class PaymentReconciliationService
                     $invoice->status = 'sent';
                 }
                 $invoice->save();
+                $affectedInvoices[$invoice->id] = $invoice->fresh(['lineItems', 'tenant']);
             }
 
             $payment->allocations()->delete();
@@ -246,6 +248,7 @@ class PaymentReconciliationService
                     $inv->amount_paid = $paid;
                     $inv->syncPaymentStatus();
                     $inv->save();
+                    $affectedInvoices[$inv->id] = $inv->fresh(['lineItems', 'tenant']);
                 }
             }
 
@@ -257,6 +260,12 @@ class PaymentReconciliationService
                 'matched_by' => null,
                 'status' => 'reversed',
             ]);
+
+            foreach ($affectedInvoices as $invoice) {
+                if ($invoice->status !== 'paid') {
+                    $this->billingActivation->deactivateFromUnpaidInvoice($invoice);
+                }
+            }
 
             $this->activityLogger->log(
                 'payment.reversed',

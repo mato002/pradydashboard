@@ -499,8 +499,11 @@ class TenantInvoice extends Model
             return;
         }
 
-        if ($this->due_date && $this->due_date->isPast() && in_array($this->status, ['sent', 'pending', 'partially_paid', 'partial'], true)) {
+        // Fully unpaid again (e.g. after payment reverse) — leave draft alone above.
+        if ($this->due_date && $this->due_date->isPast()) {
             $this->status = 'overdue';
+        } else {
+            $this->status = 'sent';
         }
     }
 

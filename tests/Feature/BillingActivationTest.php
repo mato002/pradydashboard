@@ -136,6 +136,62 @@ class BillingActivationTest extends TestCase
         $this->assertSame('paid', $invoice->fresh()->status);
     }
 
+    public function test_reverse_after_activation_rolls_back_entitlement(): void
+    {
+        Bus::fake([ActivatePaymentsGatewayTenantJob::class]);
+
+        [, , $tenant, $projectSub] = $this->createTenantWithSubscription('Reverse Co', [
+            'status' => 'suspended',
+            'renewal_date' => now()->subDays(10),
+            'billing_cycle' => 'monthly',
+        ]);
+
+        $subscription = TenantSubscription::query()->create([
+            'tenant_id' => $tenant->id,
+            'plan_name' => 'Standard',
+            'amount' => 8000,
+            'billing_cycle' => 'monthly',
+            'current_period_start' => now()->subMonths(2),
+            'current_period_end' => now()->subDays(10),
+            'status' => 'suspended',
+            'auto_renew' => false,
+        ]);
+
+        $periodEndBeforePay = $subscription->current_period_end->copy();
+
+        $invoice = $this->createOpenInvoice($tenant, 8000, 'INV-REV-ACT-01', $subscription);
+
+        $payment = app(PaymentRecorderService::class)->recordForInvoice($invoice, [
+            'amount' => 8000,
+            'payment_date' => now(),
+            'method' => 'mpesa',
+            'reference' => 'REVACT001',
+        ]);
+
+        $this->assertSame('active', $tenant->fresh()->status);
+        $this->assertSame('active', $subscription->fresh()->status);
+        $extendedEnd = $subscription->fresh()->current_period_end->copy();
+        $this->assertTrue($extendedEnd->gt($periodEndBeforePay));
+
+        app(PaymentReconciliationService::class)->reverse($payment->fresh());
+
+        $tenant->refresh();
+        $subscription->refresh();
+        $invoice->refresh();
+        $projectSub->refresh();
+
+        $this->assertNotSame('paid', $invoice->status);
+        $this->assertSame('overdue', $tenant->status);
+        $this->assertSame('overdue', $subscription->status);
+        $this->assertTrue($subscription->current_period_end->lt($extendedEnd));
+        $this->assertSame('restricted', $tenant->latestAccessControl?->level);
+        $this->assertTrue(
+            \App\Models\SystemActivityLog::query()
+                ->where('action', 'tenant.deactivated_from_payment_reverse')
+                ->exists()
+        );
+    }
+
     private function createOpenInvoice($tenant, float $total, string $number, ?TenantSubscription $subscription = null): TenantInvoice
     {
         $invoice = TenantInvoice::query()->create([

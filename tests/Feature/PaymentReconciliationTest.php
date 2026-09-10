@@ -267,6 +267,68 @@ class PaymentReconciliationTest extends TestCase
         $invoice->refresh();
 
         $this->assertSame('unreconciled', $payment->reconciliation_status);
+        $this->assertSame('reversed', $payment->status);
+        $this->assertNotSame('paid', $invoice->status);
         $this->assertTrue(SystemActivityLog::query()->where('action', 'payment.reversed')->exists());
+    }
+
+    public function test_payment_reverse_deactivates_after_subscription_activation(): void
+    {
+        [, , $tenant] = $this->createTenantWithSubscription('Deact Pay Co', [
+            'status' => 'overdue',
+            'renewal_date' => now()->subDays(5),
+            'billing_cycle' => 'monthly',
+        ]);
+
+        $subscription = \App\Models\TenantSubscription::query()->create([
+            'tenant_id' => $tenant->id,
+            'plan_name' => 'Basic',
+            'amount' => 4000,
+            'billing_cycle' => 'monthly',
+            'current_period_start' => now()->subMonth(),
+            'current_period_end' => now()->subDays(5),
+            'status' => 'overdue',
+            'auto_renew' => true,
+        ]);
+
+        $invoice = TenantInvoice::query()->create([
+            'tenant_id' => $tenant->id,
+            'invoice_number' => 'INV-DEACT-01',
+            'document_type' => 'invoice',
+            'currency' => 'KES',
+            'subtotal' => 4000,
+            'total' => 4000,
+            'amount_due' => 4000,
+            'status' => 'sent',
+            'issue_date' => now()->subDays(3)->toDateString(),
+            'due_date' => now()->addDays(5)->toDateString(),
+            'is_recurring' => true,
+        ]);
+
+        TenantInvoiceLineItem::query()->create([
+            'tenant_invoice_id' => $invoice->id,
+            'item_type' => 'subscription',
+            'description' => 'Basic renewal',
+            'quantity' => 1,
+            'unit_price' => 4000,
+            'line_total' => 4000,
+            'related_model_type' => \App\Models\TenantSubscription::class,
+            'related_model_id' => $subscription->id,
+        ]);
+
+        $payment = app(PaymentRecorderService::class)->recordForInvoice($invoice->fresh(['lineItems', 'tenant']), [
+            'amount' => 4000,
+            'payment_date' => now()->toDateString(),
+            'source' => 'mpesa',
+            'reference' => 'DEACT-PAY-1',
+        ]);
+
+        $this->assertSame('active', $tenant->fresh()->status);
+
+        app(PaymentReconciliationService::class)->reverse($payment->fresh());
+
+        $this->assertSame('overdue', $tenant->fresh()->status);
+        $this->assertSame('overdue', $subscription->fresh()->status);
+        $this->assertTrue(SystemActivityLog::query()->where('action', 'tenant.deactivated_from_payment_reverse')->exists());
     }
 }

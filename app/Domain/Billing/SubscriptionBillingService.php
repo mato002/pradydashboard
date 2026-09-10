@@ -69,6 +69,100 @@ class SubscriptionBillingService
         return $subscription->fresh(['tenant']);
     }
 
+    /**
+     * Create a new subscription and cancel the one it replaces (upgrade path).
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function upgradeSubscription(
+        Tenant $tenant,
+        TenantSubscription $replaces,
+        array $attributes,
+    ): TenantSubscription {
+        if ((int) $replaces->tenant_id !== (int) $tenant->id) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'replaces_subscription_id' => [__('The subscription to replace must belong to the selected tenant.')],
+            ]);
+        }
+
+        if (in_array($replaces->status, ['cancelled', 'suspended'], true)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'replaces_subscription_id' => [__('That subscription is already ended and cannot be upgraded.')],
+            ]);
+        }
+
+        return DB::transaction(function () use ($tenant, $replaces, $attributes): TenantSubscription {
+            $replaces->update([
+                'status' => 'cancelled',
+                'auto_renew' => false,
+            ]);
+
+            $productName = $attributes['product_name'] ?? $replaces->product_name;
+            if (filled($productName)) {
+                TenantSubscription::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('id', '!=', $replaces->id)
+                    ->whereIn('status', ['active', 'trial', 'grace_period', 'grace', 'overdue'])
+                    ->where('product_name', $productName)
+                    ->update([
+                        'status' => 'cancelled',
+                        'auto_renew' => false,
+                    ]);
+            }
+            $subscription = TenantSubscription::query()->create([
+                'tenant_id' => $tenant->id,
+                'saas_plan_id' => $attributes['saas_plan_id'] ?? null,
+                'plan_name' => $attributes['plan_name'],
+                'product_name' => $attributes['product_name'] ?? $tenant->project?->name,
+                'amount' => $attributes['amount'],
+                'billing_cycle' => $attributes['billing_cycle'],
+                'current_period_start' => $attributes['current_period_start'],
+                'current_period_end' => $attributes['current_period_end'],
+                'status' => $attributes['status'],
+                'auto_renew' => (bool) ($attributes['auto_renew'] ?? false),
+            ]);
+
+            $tenant->update([
+                'subscription_plan' => $attributes['plan_name'],
+                'subscription_amount' => $attributes['amount'],
+                'billing_cycle' => $attributes['billing_cycle'],
+                'start_date' => $attributes['current_period_start'],
+                'renewal_date' => $attributes['current_period_end'],
+                'status' => $this->mapSubscriptionStatusToTenant((string) $attributes['status']),
+            ]);
+
+            $this->activityLogger->log(
+                'subscription.upgraded',
+                ActivityLogCategory::BILLING,
+                __('Subscription upgraded from :old to :new for :tenant.', [
+                    'old' => $replaces->plan_name,
+                    'new' => $subscription->plan_name,
+                    'tenant' => $tenant->company_name,
+                ]),
+                $tenant,
+                ['subscription_id' => $replaces->id, 'plan' => $replaces->plan_name],
+                [
+                    'subscription_id' => $subscription->id,
+                    'plan' => $subscription->plan_name,
+                    'replaced_subscription_id' => $replaces->id,
+                ],
+            );
+
+            return $subscription->fresh(['tenant', 'saasPlan']);
+        });
+    }
+
+    private function mapSubscriptionStatusToTenant(string $status): string
+    {
+        return match ($status) {
+            'trial' => 'trial',
+            'overdue' => 'overdue',
+            'suspended', 'cancelled' => 'suspended',
+            'grace_period', 'grace' => 'warning',
+            default => 'active',
+        };
+    }
+
     public function generateInvoice(TenantSubscription $subscription): ?TenantInvoice
     {
         $subscription->loadMissing('tenant', 'saasPlan');

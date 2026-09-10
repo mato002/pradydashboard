@@ -2,14 +2,23 @@
     $selectClass = 'mt-1 block w-full rounded-xl border-slate-200/80 bg-white text-sm shadow-sm focus:border-violet-500 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 @endphp
 
-<x-dashboard-layout :heading="__('Add subscription')" :subheading="__('Assign a billing plan to an existing tenant')">
+<x-dashboard-layout
+    :heading="$isUpgrade ? __('Upgrade subscription') : __('Add subscription')"
+    :subheading="$isUpgrade ? __('Replace an existing plan without leaving a duplicate active subscription') : __('Assign a billing plan to an existing tenant')"
+>
     <div class="mx-auto max-w-3xl space-y-6">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <p class="text-xs font-semibold uppercase tracking-widest text-violet-600 dark:text-violet-400">{{ __('Billing') }}</p>
-                <h2 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">{{ __('New subscription') }}</h2>
+                <h2 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                    {{ $isUpgrade ? __('Upgrade plan') : __('New subscription') }}
+                </h2>
                 <p class="mt-1 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-                    {{ __('Link a tenant to a SaaS plan, set billing period, and sync renewal dates to the tenant profile.') }}
+                    @if ($isUpgrade)
+                        {{ __('Pick the subscription to replace, choose the new SaaS plan, and the prior plan will be cancelled automatically.') }}
+                    @else
+                        {{ __('Link a tenant to a SaaS plan, set billing period, and sync renewal dates to the tenant profile.') }}
+                    @endif
                 </p>
             </div>
             <a href="{{ route('subscriptions.index') }}" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
@@ -34,15 +43,33 @@
                     if (name) document.getElementById('plan_name').value = name;
                     const amount = cycle === 'annual' && annual ? annual : monthly;
                     if (amount) document.getElementById('amount').value = amount;
+                },
+                syncReplaceTenant() {
+                    const replaceSel = document.getElementById('replaces_subscription_id');
+                    const opt = replaceSel?.selectedOptions?.[0];
+                    if (!opt || !opt.value) return;
+                    const tenantId = opt.dataset.tenantId;
+                    const tenantSel = document.getElementById('tenant_id');
+                    if (tenantId && tenantSel) {
+                        tenantSel.value = tenantId;
+                    }
+                    const product = opt.dataset.product;
+                    if (product) {
+                        const productInput = document.getElementById('product_name');
+                        if (productInput && !productInput.value) productInput.value = product;
+                    }
                 }
             }"
-            x-init="$nextTick(() => applyPlan())"
+            x-init="$nextTick(() => { applyPlan(); syncReplaceTenant(); })"
         >
             @csrf
+            @if ($isUpgrade)
+                <input type="hidden" name="upgrade" value="1" />
+            @endif
 
             @if ($isUpgrade)
                 <div class="rounded-2xl border border-indigo-500/25 bg-indigo-500/5 px-5 py-3 text-sm text-slate-700 ring-1 ring-indigo-500/15 dark:text-slate-200">
-                    {{ __('Upgrade mode — pick a higher SaaS plan and billing period. The new subscription will sync renewal dates on the tenant profile.') }}
+                    {{ __('Upgrade mode — the selected subscription will be cancelled when the new plan is created. Only one active plan remains.') }}
                 </div>
             @endif
 
@@ -51,6 +78,42 @@
                     <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ __('Tenant & plan') }}</h3>
                 </div>
                 <div class="grid gap-5 p-6 sm:grid-cols-2">
+                    @if ($isUpgrade)
+                        <div class="sm:col-span-2">
+                            <x-input-label for="replaces_subscription_id" :value="__('Subscription to replace')" />
+                            <select
+                                id="replaces_subscription_id"
+                                name="replaces_subscription_id"
+                                class="{{ $selectClass }}"
+                                required
+                                @change="syncReplaceTenant()"
+                            >
+                                <option value="">{{ __('Select subscription to upgrade…') }}</option>
+                                @foreach ($upgradableSubscriptions as $sub)
+                                    <option
+                                        value="{{ $sub->id }}"
+                                        data-tenant-id="{{ $sub->tenant_id }}"
+                                        data-product="{{ $sub->product_name }}"
+                                        @selected(old('replaces_subscription_id', $selectedReplaceId ?? null) == $sub->id)
+                                    >
+                                        {{ $sub->tenant?->company_name ?? __('Tenant') }} — {{ $sub->plan_name }}
+                                        ({{ ucfirst(str_replace('_', ' ', $sub->status)) }})
+                                        @if ($sub->current_period_end)
+                                            · {{ __('renews') }} {{ $sub->current_period_end->format('M j, Y') }}
+                                        @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                            <x-input-error class="mt-2" :messages="$errors->get('replaces_subscription_id')" />
+                            @if ($upgradableSubscriptions->isEmpty())
+                                <p class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                                    {{ __('No active subscriptions available to upgrade.') }}
+                                    <a href="{{ route('subscriptions.create') }}" class="font-semibold underline">{{ __('Create a subscription instead') }}</a>
+                                </p>
+                            @endif
+                        </div>
+                    @endif
+
                     <div class="sm:col-span-2">
                         <x-input-label for="tenant_id" :value="__('Tenant organization')" />
                         <select id="tenant_id" name="tenant_id" class="{{ $selectClass }}" required>
@@ -162,8 +225,12 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-card dark:border-slate-800 dark:bg-slate-900/60">
-                <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:brightness-110" @disabled($tenants->isEmpty())>
-                    {{ __('Create subscription') }}
+                <button
+                    type="submit"
+                    class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:brightness-110"
+                    @disabled($tenants->isEmpty() || ($isUpgrade && $upgradableSubscriptions->isEmpty()))
+                >
+                    {{ $isUpgrade ? __('Upgrade subscription') : __('Create subscription') }}
                 </button>
                 <a href="{{ route('subscriptions.index') }}" class="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">{{ __('Cancel') }}</a>
             </div>

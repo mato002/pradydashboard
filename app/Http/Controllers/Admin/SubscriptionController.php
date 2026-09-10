@@ -30,6 +30,17 @@ class SubscriptionController extends Controller
         $selectedTenantId = $request->integer('tenant_id') ?: null;
         $selectedPlanId = $request->integer('saas_plan_id') ?: null;
         $isUpgrade = $request->boolean('upgrade');
+        $selectedReplaceId = $request->integer('replaces_subscription_id') ?: null;
+
+        $upgradableSubscriptions = collect();
+        if ($isUpgrade) {
+            $upgradableSubscriptions = TenantSubscription::query()
+                ->with('tenant')
+                ->whereIn('status', ['active', 'trial', 'grace_period', 'grace', 'overdue'])
+                ->when($selectedTenantId, fn ($q) => $q->where('tenant_id', $selectedTenantId))
+                ->orderByDesc('current_period_end')
+                ->get();
+        }
 
         return view('admin.subscriptions.create', [
             'subscription' => new TenantSubscription,
@@ -38,11 +49,15 @@ class SubscriptionController extends Controller
             'selectedTenantId' => $selectedTenantId,
             'selectedPlanId' => $selectedPlanId,
             'isUpgrade' => $isUpgrade,
+            'upgradableSubscriptions' => $upgradableSubscriptions,
+            'selectedReplaceId' => $selectedReplaceId,
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, SubscriptionBillingService $billing): RedirectResponse
     {
+        $isUpgrade = $request->boolean('upgrade');
+
         $data = $request->validate([
             'tenant_id' => ['required', 'exists:tenants,id'],
             'saas_plan_id' => ['nullable', 'exists:saas_plans,id'],
@@ -54,12 +69,40 @@ class SubscriptionController extends Controller
             'current_period_end' => ['required', 'date', 'after_or_equal:current_period_start'],
             'status' => ['required', 'in:active,trial,grace_period,grace,overdue,suspended,cancelled'],
             'auto_renew' => ['nullable', 'boolean'],
+            'upgrade' => ['nullable', 'boolean'],
+            'replaces_subscription_id' => [
+                $isUpgrade ? 'required' : 'nullable',
+                'exists:tenant_subscriptions,id',
+            ],
         ]);
 
         $tenant = Tenant::query()->with('project')->findOrFail($data['tenant_id']);
         $plan = ! empty($data['saas_plan_id'])
             ? SaasPlan::query()->find($data['saas_plan_id'])
             : null;
+
+        $attributes = [
+            'saas_plan_id' => $plan?->id,
+            'plan_name' => $data['plan_name'],
+            'product_name' => $data['product_name'] ?? $tenant->project?->name,
+            'amount' => $data['amount'],
+            'billing_cycle' => $data['billing_cycle'],
+            'current_period_start' => $data['current_period_start'],
+            'current_period_end' => $data['current_period_end'],
+            'status' => $data['status'],
+            'auto_renew' => $request->boolean('auto_renew'),
+        ];
+
+        if ($isUpgrade) {
+            $replaces = TenantSubscription::query()->findOrFail($data['replaces_subscription_id']);
+            $billing->upgradeSubscription($tenant, $replaces, $attributes);
+
+            return redirect()
+                ->route('subscriptions.index', ['tenant' => $tenant->id])
+                ->with('status', __('Subscription upgraded for :tenant. Prior plan cancelled.', [
+                    'tenant' => $tenant->company_name,
+                ]));
+        }
 
         TenantSubscription::query()->create([
             'tenant_id' => $tenant->id,

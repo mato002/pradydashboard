@@ -404,10 +404,7 @@ class SubscriptionBillingService
 
     private function isDuplicatePeriodKeyException(QueryException $e): bool
     {
-        $message = strtolower($e->getMessage());
-
-        return str_contains($message, 'subscription_period_key')
-            || str_contains($message, 'tenant_invoices_subscription_period_key_unique');
+        return \App\Support\Billing\BillingPeriodKey::isDuplicatePeriodKeyException($e);
     }
 
     private function invoiceExistsForPeriodWindow(

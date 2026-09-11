@@ -8,6 +8,10 @@ use App\Models\TenantInvoiceLineItem;
 use App\Models\TenantProjectModuleSubscription;
 use App\Models\TenantProjectServiceIntegration;
 use App\Models\TenantProjectSubscription;
+use App\Support\Billing\BillingPeriodKey;
+use App\Support\Cache\OperationalCache;
+use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -16,6 +20,7 @@ class DraftInvoiceGenerator
     public function __construct(
         private readonly BillingSettings $billingSettings,
         private readonly InvoiceNumberGenerator $numberGenerator,
+        private readonly OperationalCache $operationalCache,
     ) {}
 
     /**
@@ -35,93 +40,176 @@ class DraftInvoiceGenerator
             $subscriptions = $subscriptions->where('id', $subscriptionId);
         }
 
-        $linePayloads = collect();
+        $billable = $subscriptions->filter(fn (TenantProjectSubscription $s) => $this->isBillableSubscription($s));
+        [$periodStart, $periodEnd] = $this->resolveDraftPeriod($billable);
 
-        foreach ($subscriptions as $subscription) {
-            if (! $this->isBillableSubscription($subscription)) {
-                continue;
-            }
+        $periodKey = $subscriptionId
+            ? BillingPeriodKey::forDraftProjectSubscription($subscriptionId, $periodStart, $periodEnd)
+            : BillingPeriodKey::forDraftTenant((int) $tenant->id, $periodStart, $periodEnd);
 
-            $linePayloads = $linePayloads->merge($this->linesForSubscription($tenant, $subscription));
+        $lockName = 'billing:draft-invoice:'.$tenant->id.':'.($subscriptionId ?? 'all');
+
+        return $this->operationalCache->lock(
+            $lockName,
+            config('redis_cache.locks.subscription_invoice', 60),
+            function () use ($tenant, $subscriptionId, $subscriptions, $billable, $periodStart, $periodEnd, $periodKey): ?array {
+                if ($this->openInvoiceExistsForPeriodKey($periodKey)) {
+                    return null;
+                }
+
+                $linePayloads = collect();
+
+                foreach ($subscriptions as $subscription) {
+                    if (! $this->isBillableSubscription($subscription)) {
+                        continue;
+                    }
+
+                    $linePayloads = $linePayloads->merge(
+                        $this->linesForSubscription($tenant, $subscription, $periodStart, $periodEnd)
+                    );
+                }
+
+                if (! $subscriptionId) {
+                    $linePayloads = $linePayloads->merge($this->usageLines($tenant));
+                }
+
+                if ($linePayloads->isEmpty()) {
+                    return null;
+                }
+
+                try {
+                    return DB::transaction(function () use (
+                        $tenant,
+                        $subscriptionId,
+                        $subscriptions,
+                        $billable,
+                        $linePayloads,
+                        $periodStart,
+                        $periodEnd,
+                        $periodKey,
+                    ): ?array {
+                        if ($this->openInvoiceExistsForPeriodKey($periodKey)) {
+                            return null;
+                        }
+
+                        $currency = $tenant->billing_preferred_currency
+                            ?? $tenant->tenant_currency
+                            ?? $this->billingSettings->defaultCurrency();
+
+                        $taxRate = $tenant->billing_tax_exempt || ! $this->billingSettings->vatRegistered()
+                            ? 0.0
+                            : $this->billingSettings->vatRate();
+
+                        $computedLines = $linePayloads->map(function (array $line) use ($taxRate): array {
+                            $qty = (float) $line['quantity'];
+                            $unit = (float) $line['unit_price'];
+                            $discount = (float) ($line['discount'] ?? 0);
+                            $lineSubtotal = max(0, ($qty * $unit) - $discount);
+                            $lineTax = round($lineSubtotal * ($taxRate / 100), 2);
+
+                            return array_merge($line, [
+                                'tax_rate' => $taxRate,
+                                'tax_amount' => $lineTax,
+                                'line_total' => round($lineSubtotal + $lineTax, 2),
+                            ]);
+                        });
+
+                        $subtotal = round($computedLines->sum(fn (array $l) => max(0, ((float) $l['quantity'] * (float) $l['unit_price']) - (float) $l['discount'])), 2);
+                        $taxAmount = round($computedLines->sum('tax_amount'), 2);
+                        $total = round($subtotal + $taxAmount, 2);
+
+                        $primarySubscription = $subscriptionId
+                            ? $subscriptions->firstWhere('id', $subscriptionId)
+                            : $billable->first() ?? $subscriptions->first();
+
+                        $paymentTerms = $tenant->billing_payment_terms ?? $this->billingSettings->defaultPaymentTerms();
+                        $dueDays = $this->paymentTermsToDays($paymentTerms);
+
+                        $invoice = TenantInvoice::query()->create([
+                            'tenant_id' => $tenant->id,
+                            'tenant_project_subscription_id' => $primarySubscription?->id,
+                            'invoice_number' => $this->numberGenerator->next(),
+                            'document_type' => 'invoice',
+                            'currency' => $currency,
+                            'subtotal' => $subtotal,
+                            'discount_amount' => 0,
+                            'tax_amount' => $taxAmount,
+                            'total' => $total,
+                            'amount_due' => $total,
+                            'amount_paid' => 0,
+                            'status' => 'draft',
+                            'issue_date' => now()->toDateString(),
+                            'issued_at' => now(),
+                            'due_date' => now()->addDays($dueDays)->toDateString(),
+                            'product_name' => $primarySubscription?->project?->name,
+                            'notes' => null,
+                            'statement_period_start' => $periodStart->toDateString(),
+                            'statement_period_end' => $periodEnd->toDateString(),
+                            'subscription_period_key' => $periodKey,
+                        ]);
+
+                        $lines = $computedLines->map(function (array $line) use ($invoice): TenantInvoiceLineItem {
+                            return $invoice->lineItems()->create($line);
+                        });
+
+                        return ['invoice' => $invoice->fresh(['lineItems']), 'lines' => $lines];
+                    });
+                } catch (QueryException $e) {
+                    if (BillingPeriodKey::isDuplicatePeriodKeyException($e)) {
+                        return null;
+                    }
+
+                    throw $e;
+                }
+            },
+        );
+    }
+
+    /**
+     * @param  Collection<int, TenantProjectSubscription>  $billable
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function resolveDraftPeriod(Collection $billable): array
+    {
+        $cycle = strtolower((string) ($billable->first()?->billing_cycle ?? 'monthly'));
+        $now = now();
+
+        if (in_array($cycle, ['annual', 'yearly', 'year'], true)) {
+            return [$now->copy()->startOfYear(), $now->copy()->endOfYear()];
         }
 
-        $linePayloads = $linePayloads->merge($this->usageLines($tenant));
+        return [$now->copy()->startOfMonth(), $now->copy()->endOfMonth()];
+    }
 
-        if ($linePayloads->isEmpty()) {
-            return null;
-        }
-
-        return DB::transaction(function () use ($tenant, $subscriptionId, $subscriptions, $linePayloads): array {
-            $currency = $tenant->billing_preferred_currency
-                ?? $tenant->tenant_currency
-                ?? $this->billingSettings->defaultCurrency();
-
-            $taxRate = $tenant->billing_tax_exempt || ! $this->billingSettings->vatRegistered()
-                ? 0.0
-                : $this->billingSettings->vatRate();
-
-            $computedLines = $linePayloads->map(function (array $line) use ($taxRate): array {
-                $qty = (float) $line['quantity'];
-                $unit = (float) $line['unit_price'];
-                $discount = (float) ($line['discount'] ?? 0);
-                $lineSubtotal = max(0, ($qty * $unit) - $discount);
-                $lineTax = round($lineSubtotal * ($taxRate / 100), 2);
-
-                return array_merge($line, [
-                    'tax_rate' => $taxRate,
-                    'tax_amount' => $lineTax,
-                    'line_total' => round($lineSubtotal + $lineTax, 2),
-                ]);
-            });
-
-            $subtotal = round($computedLines->sum(fn (array $l) => max(0, ((float) $l['quantity'] * (float) $l['unit_price']) - (float) $l['discount'])), 2);
-            $taxAmount = round($computedLines->sum('tax_amount'), 2);
-            $total = round($subtotal + $taxAmount, 2);
-
-            $primarySubscription = $subscriptionId
-                ? $subscriptions->firstWhere('id', $subscriptionId)
-                : $subscriptions->first();
-
-            $paymentTerms = $tenant->billing_payment_terms ?? $this->billingSettings->defaultPaymentTerms();
-            $dueDays = $this->paymentTermsToDays($paymentTerms);
-
-            $invoice = TenantInvoice::query()->create([
-                'tenant_id' => $tenant->id,
-                'tenant_project_subscription_id' => $primarySubscription?->id,
-                'invoice_number' => $this->numberGenerator->next(),
-                'document_type' => 'invoice',
-                'currency' => $currency,
-                'subtotal' => $subtotal,
-                'discount_amount' => 0,
-                'tax_amount' => $taxAmount,
-                'total' => $total,
-                'amount_due' => $total,
-                'amount_paid' => 0,
-                'status' => 'draft',
-                'issue_date' => now()->toDateString(),
-                'issued_at' => now(),
-                'due_date' => now()->addDays($dueDays)->toDateString(),
-                'product_name' => $primarySubscription?->project?->name,
-                'notes' => null,
-            ]);
-
-            $lines = $computedLines->map(function (array $line) use ($invoice): TenantInvoiceLineItem {
-                return $invoice->lineItems()->create($line);
-            });
-
-            return ['invoice' => $invoice->fresh(['lineItems']), 'lines' => $lines];
-        });
+    private function openInvoiceExistsForPeriodKey(string $periodKey): bool
+    {
+        return TenantInvoice::query()
+            ->where('subscription_period_key', $periodKey)
+            ->whereNotIn('status', ['cancelled', 'void'])
+            ->exists();
     }
 
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function linesForSubscription(Tenant $tenant, TenantProjectSubscription $subscription): Collection
-    {
+    private function linesForSubscription(
+        Tenant $tenant,
+        TenantProjectSubscription $subscription,
+        Carbon $periodStart,
+        Carbon $periodEnd,
+    ): Collection {
         $lines = collect();
         $projectName = $subscription->project?->name ?? __('Product');
 
-        if ((float) ($subscription->monthly_fee ?? 0) > 0) {
+        if ((float) ($subscription->monthly_fee ?? 0) > 0
+            && ! $this->recurringLineAlreadyInvoiced(
+                $tenant,
+                'subscription',
+                TenantProjectSubscription::class,
+                (int) $subscription->id,
+                $periodStart,
+                $periodEnd,
+            )) {
             $lines->push([
                 'item_type' => 'subscription',
                 'description' => __(':product subscription — :package', [
@@ -161,6 +249,17 @@ class DraftInvoiceGenerator
                 continue;
             }
 
+            if ($this->recurringLineAlreadyInvoiced(
+                $tenant,
+                'module',
+                TenantProjectModuleSubscription::class,
+                (int) $moduleSub->id,
+                $periodStart,
+                $periodEnd,
+            )) {
+                continue;
+            }
+
             $lines->push([
                 'item_type' => 'module',
                 'description' => __(':product — module :module', [
@@ -182,6 +281,17 @@ class DraftInvoiceGenerator
 
             $fee = $this->integrationMonthlyFee($integration);
             if ($fee <= 0) {
+                continue;
+            }
+
+            if ($this->recurringLineAlreadyInvoiced(
+                $tenant,
+                'integration',
+                TenantProjectServiceIntegration::class,
+                (int) $integration->id,
+                $periodStart,
+                $periodEnd,
+            )) {
                 continue;
             }
 
@@ -227,6 +337,35 @@ class DraftInvoiceGenerator
                 'related_model_id' => null,
             ],
         ]);
+    }
+
+    private function recurringLineAlreadyInvoiced(
+        Tenant $tenant,
+        string $itemType,
+        string $relatedType,
+        int $relatedId,
+        Carbon $periodStart,
+        Carbon $periodEnd,
+    ): bool {
+        return TenantInvoiceLineItem::query()
+            ->where('item_type', $itemType)
+            ->where('related_model_type', $relatedType)
+            ->where('related_model_id', $relatedId)
+            ->whereHas('invoice', function ($q) use ($tenant, $periodStart, $periodEnd): void {
+                $q->where('tenant_id', $tenant->id)
+                    ->whereNotIn('status', ['cancelled', 'void'])
+                    ->where(function ($inner) use ($periodStart, $periodEnd): void {
+                        $inner->where(function ($period) use ($periodStart, $periodEnd): void {
+                            $period->whereDate('statement_period_start', $periodStart->toDateString())
+                                ->whereDate('statement_period_end', $periodEnd->toDateString());
+                        })->orWhere(function ($issued) use ($periodStart, $periodEnd): void {
+                            $issued->whereNull('statement_period_start')
+                                ->whereDate('issue_date', '>=', $periodStart->toDateString())
+                                ->whereDate('issue_date', '<=', $periodEnd->toDateString());
+                        });
+                    });
+            })
+            ->exists();
     }
 
     private function integrationMonthlyFee(TenantProjectServiceIntegration $integration): float

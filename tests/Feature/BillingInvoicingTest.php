@@ -101,14 +101,34 @@ class BillingInvoicingTest extends TestCase
     {
         [, $tenant] = $this->billableTenant();
         $generator = app(DraftInvoiceGenerator::class);
+        $relations = ['projectSubscriptions.moduleSubscriptions.projectModule', 'projectSubscriptions.serviceIntegrations', 'usageMetric'];
 
-        $generator->generate($tenant->fresh(['projectSubscriptions.moduleSubscriptions.projectModule', 'projectSubscriptions.serviceIntegrations', 'usageMetric']));
+        $first = $generator->generate($tenant->fresh($relations));
+        $this->assertNotNull($first);
         $firstSetupLines = TenantInvoiceLineItem::query()->where('item_type', 'setup_fee')->count();
         $this->assertSame(1, $firstSetupLines);
 
-        $generator->generate($tenant->fresh(['projectSubscriptions.moduleSubscriptions.projectModule', 'projectSubscriptions.serviceIntegrations', 'usageMetric']));
+        $second = $generator->generate($tenant->fresh($relations));
+        $this->assertNull($second);
         $allSetupLines = TenantInvoiceLineItem::query()->where('item_type', 'setup_fee')->count();
         $this->assertSame(1, $allSetupLines);
+        $this->assertSame(1, TenantInvoice::query()->where('tenant_id', $tenant->id)->count());
+    }
+
+    public function test_draft_generate_is_idempotent_for_same_period(): void
+    {
+        [, $tenant] = $this->billableTenant();
+        $generator = app(DraftInvoiceGenerator::class);
+        $relations = ['projectSubscriptions.moduleSubscriptions.projectModule', 'projectSubscriptions.serviceIntegrations', 'usageMetric'];
+
+        $first = $generator->generate($tenant->fresh($relations));
+        $this->assertNotNull($first);
+        $this->assertNotNull($first['invoice']->subscription_period_key);
+        $this->assertNotNull($first['invoice']->statement_period_start);
+
+        $second = $generator->generate($tenant->fresh($relations));
+        $this->assertNull($second);
+        $this->assertSame(1, TenantInvoice::query()->where('tenant_id', $tenant->id)->count());
     }
 
     public function test_tax_calculated_from_billing_settings(): void

@@ -189,9 +189,36 @@ class FinancialOperationsTest extends TestCase
 
         $generated = app(RecurringBillingProcessor::class)->processDueSchedules();
         $this->assertSame(1, $generated->count());
+        $this->assertNotNull($generated->first()->subscription_period_key);
         $this->assertTrue(
             SystemActivityLog::query()->where('action', 'invoice.recurring_generated')->exists()
         );
+    }
+
+    public function test_recurring_invoice_generation_is_idempotent_for_same_period(): void
+    {
+        [, $tenant] = $this->billableTenant();
+        $dueAt = now()->subHour();
+        $schedule = InvoiceRecurringSchedule::query()->create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Monthly SaaS',
+            'amount' => 3000,
+            'tax_rate' => 0,
+            'frequency' => 'monthly',
+            'next_run_at' => $dueAt,
+            'enabled' => true,
+        ]);
+
+        $processor = app(RecurringBillingProcessor::class);
+        $this->assertSame(1, $processor->processDueSchedules()->count());
+        $this->assertSame(1, TenantInvoice::query()->where('tenant_id', $tenant->id)->where('is_recurring', true)->count());
+
+        // Same period forced due again (e.g. crash after create before next_run advance, or double cron).
+        $schedule->update(['next_run_at' => $dueAt]);
+        $this->assertSame(0, $processor->processDueSchedules()->count());
+        $this->assertSame(1, TenantInvoice::query()->where('tenant_id', $tenant->id)->where('is_recurring', true)->count());
+        $schedule->refresh();
+        $this->assertTrue($schedule->next_run_at->gt($dueAt));
     }
 
     public function test_overdue_automation_applies_penalty_and_logs(): void

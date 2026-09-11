@@ -157,9 +157,17 @@ class SubscriptionBillingActionsTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('subscriptions.renew'))
-            ->assertRedirect(route('subscriptions.index'));
+            ->assertRedirect(route('subscriptions.index'))
+            ->assertSessionHas('status');
 
         Bus::assertDispatched(RenewSubscriptionsJob::class);
+
+        $status = session('status');
+        $this->assertIsString($status);
+        $this->assertTrue(
+            str_contains($status, 'queue') || str_contains($status, 'sync'),
+            'Flash should mention queue processing, got: '.$status
+        );
     }
 
     public function test_fleet_invoice_dispatches_job(): void
@@ -170,9 +178,28 @@ class SubscriptionBillingActionsTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('subscriptions.invoice'))
-            ->assertRedirect(route('subscriptions.index'));
+            ->assertRedirect(route('subscriptions.index'))
+            ->assertSessionHas('status');
 
         Bus::assertDispatched(GenerateSubscriptionInvoicesJob::class);
+
+        $status = session('status');
+        $this->assertIsString($status);
+        $this->assertTrue(
+            str_contains($status, 'queue') || str_contains($status, 'sync'),
+            'Flash should mention queue processing, got: '.$status
+        );
+    }
+
+    public function test_subscription_billing_jobs_are_scheduled(): void
+    {
+        $schedule = app(\Illuminate\Console\Scheduling\Schedule::class);
+        $descriptions = collect($schedule->events())
+            ->map(fn ($event) => (string) ($event->description ?? ''))
+            ->implode(' ');
+
+        $this->assertStringContainsString('RenewSubscriptionsJob', $descriptions);
+        $this->assertStringContainsString('GenerateSubscriptionInvoicesJob', $descriptions);
     }
 
     public function test_create_page_accepts_plan_query_param(): void

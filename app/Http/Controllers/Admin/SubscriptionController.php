@@ -206,7 +206,9 @@ class SubscriptionController extends Controller
 
         return redirect()
             ->route('subscriptions.index')
-            ->with('status', __('Renewal invoices queued for eligible auto-renew subscriptions.'));
+            ->with('status', $this->billingQueueStatusMessage(
+                __('Renewal invoice job dispatched to the billing queue for eligible auto-renew subscriptions.'),
+            ));
     }
 
     public function generateInvoice(Request $request): RedirectResponse
@@ -215,7 +217,9 @@ class SubscriptionController extends Controller
 
         return redirect()
             ->route('subscriptions.index')
-            ->with('status', __('Invoice generation queued for active subscriptions.'));
+            ->with('status', $this->billingQueueStatusMessage(
+                __('Invoice generation job dispatched to the billing queue for active subscriptions.'),
+            ));
     }
 
     public function renewSubscription(TenantSubscription $subscription, SubscriptionBillingService $billing): RedirectResponse
@@ -271,6 +275,15 @@ class SubscriptionController extends Controller
             'grace_period', 'grace' => 'warning',
             default => 'active',
         };
+    }
+
+    private function billingQueueStatusMessage(string $dispatched): string
+    {
+        if (config('queue.default') === 'sync') {
+            return $dispatched.' '.__('Processed immediately (sync queue).');
+        }
+
+        return $dispatched.' '.__('A queue worker must be running for the job to execute; the scheduler also runs this daily.');
     }
 
     private function monthlyNormalizedAmount(TenantSubscription $sub): float

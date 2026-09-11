@@ -76,6 +76,16 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping(15)
             ->onOneServer();
 
+        $schedule->job(new \App\Jobs\Billing\RenewSubscriptionsJob())
+            ->dailyAt('06:15')
+            ->withoutOverlapping(60)
+            ->onOneServer();
+
+        $schedule->job(new \App\Jobs\Billing\GenerateSubscriptionInvoicesJob())
+            ->dailyAt('06:30')
+            ->withoutOverlapping(60)
+            ->onOneServer();
+
         $schedule->job(new \App\Jobs\Ssl\RenewSslCertificatesJob())
             ->dailyAt('03:30')
             ->withoutOverlapping(60)

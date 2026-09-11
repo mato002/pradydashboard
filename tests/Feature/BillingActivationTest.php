@@ -192,6 +192,63 @@ class BillingActivationTest extends TestCase
         );
     }
 
+    public function test_paying_upgrade_invoice_activates_new_plan_and_cancels_prior(): void
+    {
+        [, , $tenant] = $this->createTenantWithSubscription('Upgrade Pay Co', [
+            'status' => 'active',
+            'subscription_plan' => 'Starter',
+            'subscription_amount' => 5000,
+            'billing_cycle' => 'monthly',
+        ]);
+
+        $old = TenantSubscription::query()->create([
+            'tenant_id' => $tenant->id,
+            'plan_name' => 'Starter',
+            'product_name' => 'CRM',
+            'amount' => 5000,
+            'billing_cycle' => 'monthly',
+            'current_period_start' => now()->subMonth()->toDateString(),
+            'current_period_end' => now()->addDays(10)->toDateString(),
+            'status' => 'active',
+            'auto_renew' => true,
+        ]);
+
+        $periodEnd = now()->addMonth()->toDateString();
+        $pending = TenantSubscription::query()->create([
+            'tenant_id' => $tenant->id,
+            'plan_name' => 'Professional',
+            'product_name' => 'CRM',
+            'amount' => 15000,
+            'billing_cycle' => 'monthly',
+            'current_period_start' => now()->toDateString(),
+            'current_period_end' => $periodEnd,
+            'status' => 'pending',
+            'auto_renew' => false,
+            'replaces_subscription_id' => $old->id,
+        ]);
+
+        $invoice = $this->createOpenInvoice($tenant, 15000, 'INV-UPG-01', $pending);
+
+        app(PaymentRecorderService::class)->recordForInvoice($invoice, [
+            'amount' => 15000,
+            'payment_date' => now(),
+            'method' => 'mpesa',
+            'reference' => 'UPG001',
+        ]);
+
+        $old->refresh();
+        $pending->refresh();
+        $tenant->refresh();
+
+        $this->assertSame('cancelled', $old->status);
+        $this->assertSame('active', $pending->status);
+        $this->assertTrue($pending->auto_renew);
+        $this->assertSame('Professional', $tenant->subscription_plan);
+        $this->assertEquals(15000, (float) $tenant->subscription_amount);
+        $this->assertSame('active', $tenant->status);
+        $this->assertSame($periodEnd, $pending->current_period_end->toDateString());
+    }
+
     private function createOpenInvoice($tenant, float $total, string $number, ?TenantSubscription $subscription = null): TenantInvoice
     {
         $invoice = TenantInvoice::query()->create([

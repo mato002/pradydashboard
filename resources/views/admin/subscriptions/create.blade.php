@@ -207,11 +207,18 @@
 
                     <div>
                         <x-input-label for="status" :value="__('Subscription status')" />
-                        <select id="status" name="status" class="{{ $selectClass }}" required>
-                            @foreach (['active', 'trial', 'grace_period', 'overdue', 'suspended', 'cancelled'] as $status)
-                                <option value="{{ $status }}" @selected(old('status', 'active') === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
-                            @endforeach
-                        </select>
+                        @if ($isUpgrade)
+                            <input type="hidden" name="status" value="pending" />
+                            <p class="mt-1 rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                                {{ __('Upgrade stays pending until the invoice is paid. The current plan keeps access until then.') }}
+                            </p>
+                        @else
+                            <select id="status" name="status" class="{{ $selectClass }}" required>
+                                @foreach (['active', 'trial', 'grace_period', 'overdue', 'suspended', 'cancelled'] as $status)
+                                    <option value="{{ $status }}" @selected(old('status', 'active') === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
+                                @endforeach
+                            </select>
+                        @endif
                         <x-input-error class="mt-2" :messages="$errors->get('status')" />
                     </div>
 

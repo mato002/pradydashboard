@@ -18,6 +18,7 @@ class TenantSubscription extends Model
         'current_period_end',
         'status',
         'auto_renew',
+        'replaces_subscription_id',
     ];
 
     protected function casts(): array
@@ -40,11 +41,17 @@ class TenantSubscription extends Model
         return $this->belongsTo(SaasPlan::class);
     }
 
+    public function replacesSubscription(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'replaces_subscription_id');
+    }
+
     public function statusVariant(): string
     {
         return match ($this->status) {
             'active' => 'success',
             'trial' => 'info',
+            'pending' => 'warning',
             'grace_period', 'grace' => 'warning',
             'overdue' => 'danger',
             'suspended' => 'danger',

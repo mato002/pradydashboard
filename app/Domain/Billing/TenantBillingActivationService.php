@@ -40,31 +40,43 @@ class TenantBillingActivationService
         }
 
         return DB::transaction(function () use ($invoice, $tenant, $subscription): bool {
-            $periodEnd = $this->resolveNextPeriodEnd($tenant, $subscription);
-
-            $tenant->update([
-                'status' => 'active',
-                'renewal_date' => $periodEnd,
-                'start_date' => $tenant->start_date ?? now()->toDateString(),
-            ]);
+            $isUpgrade = $subscription?->replaces_subscription_id !== null;
+            $periodEnd = $isUpgrade && $subscription->current_period_end
+                ? ($subscription->current_period_end instanceof Carbon
+                    ? $subscription->current_period_end->copy()
+                    : Carbon::parse($subscription->current_period_end))
+                : $this->resolveNextPeriodEnd($tenant, $subscription);
 
             if ($subscription) {
-                $periodStart = now()->toDateString();
+                $periodStart = $isUpgrade && $subscription->current_period_start
+                    ? ($subscription->current_period_start instanceof Carbon
+                        ? $subscription->current_period_start->toDateString()
+                        : Carbon::parse($subscription->current_period_start)->toDateString())
+                    : now()->toDateString();
+
                 $subscription->update([
                     'status' => 'active',
                     'current_period_start' => $periodStart,
                     'current_period_end' => $periodEnd,
                     'auto_renew' => true,
                 ]);
+
+                $this->finalizePaidUpgrade($tenant, $subscription, $periodEnd);
             } else {
                 TenantSubscription::query()
                     ->where('tenant_id', $tenant->id)
-                    ->whereIn('status', ['overdue', 'suspended', 'grace_period', 'grace', 'trial'])
+                    ->whereIn('status', ['overdue', 'suspended', 'grace_period', 'grace', 'trial', 'pending'])
                     ->update([
                         'status' => 'active',
                         'current_period_end' => $periodEnd,
                     ]);
             }
+
+            $tenant->update([
+                'status' => 'active',
+                'renewal_date' => $periodEnd,
+                'start_date' => $tenant->start_date ?? now()->toDateString(),
+            ]);
 
             $this->restoreAccessPolicy($tenant);
             $this->projectProvisioner->syncPrimarySubscription($tenant->fresh());
@@ -113,6 +125,10 @@ class TenantBillingActivationService
         }
 
         return DB::transaction(function () use ($invoice, $tenant, $subscription): bool {
+            if ($subscription?->replaces_subscription_id) {
+                return $this->rollbackPaidUpgrade($invoice, $tenant, $subscription);
+            }
+
             $rolledPeriodEnd = null;
 
             if ($subscription) {
@@ -161,6 +177,116 @@ class TenantBillingActivationService
         });
     }
 
+    private function finalizePaidUpgrade(Tenant $tenant, TenantSubscription $subscription, Carbon $periodEnd): void
+    {
+        $replacedId = $subscription->replaces_subscription_id;
+        if (! $replacedId) {
+            $tenant->update([
+                'subscription_plan' => $subscription->plan_name,
+                'subscription_amount' => $subscription->amount,
+                'billing_cycle' => $subscription->billing_cycle,
+                'start_date' => $subscription->current_period_start?->toDateString() ?? now()->toDateString(),
+                'renewal_date' => $periodEnd,
+            ]);
+
+            return;
+        }
+
+        $replaced = TenantSubscription::query()->find($replacedId);
+        if ($replaced && (int) $replaced->tenant_id === (int) $tenant->id) {
+            $replaced->update([
+                'status' => 'cancelled',
+                'auto_renew' => false,
+            ]);
+        }
+
+        $productName = $subscription->product_name ?? $replaced?->product_name;
+        if (filled($productName)) {
+            TenantSubscription::query()
+                ->where('tenant_id', $tenant->id)
+                ->where('id', '!=', $subscription->id)
+                ->where('id', '!=', $replacedId)
+                ->whereIn('status', ['active', 'trial', 'grace_period', 'grace', 'overdue', 'pending'])
+                ->where('product_name', $productName)
+                ->update([
+                    'status' => 'cancelled',
+                    'auto_renew' => false,
+                ]);
+        }
+
+        $tenant->update([
+            'subscription_plan' => $subscription->plan_name,
+            'subscription_amount' => $subscription->amount,
+            'billing_cycle' => $subscription->billing_cycle,
+            'start_date' => $subscription->current_period_start?->toDateString() ?? now()->toDateString(),
+            'renewal_date' => $periodEnd,
+        ]);
+
+        $this->activityLogger->log(
+            'subscription.upgraded',
+            ActivityLogCategory::BILLING,
+            __('Subscription upgraded from :old to :new for :tenant after payment.', [
+                'old' => $replaced?->plan_name ?? __('prior plan'),
+                'new' => $subscription->plan_name,
+                'tenant' => $tenant->company_name,
+            ]),
+            $tenant,
+            $replaced ? ['subscription_id' => $replaced->id, 'plan' => $replaced->plan_name] : null,
+            [
+                'subscription_id' => $subscription->id,
+                'plan' => $subscription->plan_name,
+                'replaced_subscription_id' => $replacedId,
+            ],
+        );
+    }
+
+    private function rollbackPaidUpgrade(TenantInvoice $invoice, Tenant $tenant, TenantSubscription $subscription): bool
+    {
+        $replaced = TenantSubscription::query()->find($subscription->replaces_subscription_id);
+
+        $subscription->update([
+            'status' => 'pending',
+            'auto_renew' => false,
+        ]);
+
+        if ($replaced && (int) $replaced->tenant_id === (int) $tenant->id) {
+            $replaced->update([
+                'status' => 'active',
+                'auto_renew' => true,
+            ]);
+
+            $tenant->update([
+                'status' => 'active',
+                'subscription_plan' => $replaced->plan_name,
+                'subscription_amount' => $replaced->amount,
+                'billing_cycle' => $replaced->billing_cycle,
+                'start_date' => $replaced->current_period_start?->toDateString() ?? $tenant->start_date,
+                'renewal_date' => $replaced->current_period_end?->toDateString() ?? $tenant->renewal_date,
+            ]);
+        }
+
+        $this->restoreAccessPolicy($tenant);
+        $this->projectProvisioner->syncPrimarySubscription($tenant->fresh());
+
+        $this->activityLogger->log(
+            'tenant.deactivated_from_payment_reverse',
+            ActivityLogCategory::BILLING,
+            __('Upgrade for :name rolled back after invoice :number was unpaid; prior plan restored.', [
+                'name' => $tenant->company_name,
+                'number' => $invoice->invoice_number,
+            ]),
+            $tenant,
+            null,
+            [
+                'invoice_id' => $invoice->id,
+                'subscription_id' => $subscription->id,
+                'replaced_subscription_id' => $replaced?->id,
+            ],
+        );
+
+        return true;
+    }
+
     private function shouldActivate(Tenant $tenant, TenantInvoice $invoice, ?TenantSubscription $subscription): bool
     {
         if ($subscription !== null) {
@@ -197,7 +323,7 @@ class TenantBillingActivationService
 
         return TenantSubscription::query()
             ->where('tenant_id', $invoice->tenant_id)
-            ->whereIn('status', ['active', 'trial', 'overdue', 'grace_period', 'grace', 'suspended'])
+            ->whereIn('status', ['active', 'trial', 'overdue', 'grace_period', 'grace', 'suspended', 'pending'])
             ->orderByDesc('current_period_end')
             ->first();
     }

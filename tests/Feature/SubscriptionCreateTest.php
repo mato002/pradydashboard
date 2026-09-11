@@ -4,14 +4,31 @@ namespace Tests\Feature;
 
 use App\Models\Project;
 use App\Models\SaasPlan;
+use App\Models\Setting;
 use App\Models\Tenant;
+use App\Models\TenantInvoice;
+use App\Models\TenantSubscription;
 use App\Models\User;
+use Database\Seeders\DocumentTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class SubscriptionCreateTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Setting::setJson('platform.billing', [
+            'vat_registered' => false,
+            'tax_rate' => '0',
+            'default_currency' => 'KES',
+            'invoice_prefix' => 'INV',
+        ]);
+        $this->seed(DocumentTemplateSeeder::class);
+    }
 
     public function test_authenticated_user_can_view_subscription_create_page(): void
     {
@@ -85,7 +102,7 @@ class SubscriptionCreateTest extends TestCase
         $this->assertEquals(14999, (float) $tenant->subscription_amount);
     }
 
-    public function test_upgrade_cancels_prior_subscription(): void
+    public function test_upgrade_queues_pending_subscription_and_invoice_without_granting_access(): void
     {
         $user = User::factory()->create();
         $project = Project::query()->create([
@@ -122,7 +139,7 @@ class SubscriptionCreateTest extends TestCase
             'is_active' => true,
         ]);
 
-        $existing = \App\Models\TenantSubscription::query()->create([
+        $existing = TenantSubscription::query()->create([
             'tenant_id' => $tenant->id,
             'saas_plan_id' => $starter->id,
             'plan_name' => 'Starter',
@@ -153,24 +170,38 @@ class SubscriptionCreateTest extends TestCase
             ->assertRedirect(route('subscriptions.index', ['tenant' => $tenant->id]));
 
         $existing->refresh();
-        $this->assertSame('cancelled', $existing->status);
-        $this->assertFalse($existing->auto_renew);
+        $this->assertSame('active', $existing->status);
+        $this->assertTrue($existing->auto_renew);
 
-        $this->assertSame(1, \App\Models\TenantSubscription::query()
+        $pending = TenantSubscription::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('plan_name', 'Professional')
+            ->first();
+        $this->assertNotNull($pending);
+        $this->assertSame('pending', $pending->status);
+        $this->assertFalse($pending->auto_renew);
+        $this->assertSame($existing->id, (int) $pending->replaces_subscription_id);
+
+        $this->assertSame(1, TenantSubscription::query()
             ->where('tenant_id', $tenant->id)
             ->where('status', 'active')
             ->count());
 
-        $this->assertDatabaseHas('tenant_subscriptions', [
-            'tenant_id' => $tenant->id,
-            'plan_name' => 'Professional',
-            'status' => 'active',
-            'amount' => 15000,
-        ]);
+        $this->assertTrue(
+            TenantInvoice::query()
+                ->where('tenant_id', $tenant->id)
+                ->whereNotNull('subscription_period_key')
+                ->whereHas('lineItems', function ($q) use ($pending): void {
+                    $q->where('related_model_type', TenantSubscription::class)
+                        ->where('related_model_id', $pending->id);
+                })
+                ->exists()
+        );
 
         $tenant->refresh();
-        $this->assertSame('Professional', $tenant->subscription_plan);
-        $this->assertEquals(15000, (float) $tenant->subscription_amount);
+        $this->assertSame('Starter', $tenant->subscription_plan);
+        $this->assertEquals(5000, (float) $tenant->subscription_amount);
+        $this->assertSame('active', $tenant->status);
     }
 
     public function test_upgrade_requires_subscription_to_replace(): void

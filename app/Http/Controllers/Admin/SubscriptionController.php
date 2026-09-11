@@ -67,7 +67,7 @@ class SubscriptionController extends Controller
             'billing_cycle' => ['required', 'in:monthly,annual'],
             'current_period_start' => ['required', 'date'],
             'current_period_end' => ['required', 'date', 'after_or_equal:current_period_start'],
-            'status' => ['required', 'in:active,trial,grace_period,grace,overdue,suspended,cancelled'],
+            'status' => ['required', 'in:active,trial,grace_period,grace,overdue,suspended,cancelled,pending'],
             'auto_renew' => ['nullable', 'boolean'],
             'upgrade' => ['nullable', 'boolean'],
             'replaces_subscription_id' => [
@@ -89,7 +89,7 @@ class SubscriptionController extends Controller
             'billing_cycle' => $data['billing_cycle'],
             'current_period_start' => $data['current_period_start'],
             'current_period_end' => $data['current_period_end'],
-            'status' => $data['status'],
+            'status' => $isUpgrade ? 'pending' : $data['status'],
             'auto_renew' => $request->boolean('auto_renew'),
         ];
 
@@ -99,7 +99,7 @@ class SubscriptionController extends Controller
 
             return redirect()
                 ->route('subscriptions.index', ['tenant' => $tenant->id])
-                ->with('status', __('Subscription upgraded for :tenant. Prior plan cancelled.', [
+                ->with('status', __('Upgrade invoice created for :tenant. New plan activates when paid; prior plan stays active until then.', [
                     'tenant' => $tenant->company_name,
                 ]));
         }

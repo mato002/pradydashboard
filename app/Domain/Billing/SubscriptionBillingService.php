@@ -73,7 +73,8 @@ class SubscriptionBillingService
     }
 
     /**
-     * Create a new subscription and cancel the one it replaces (upgrade path).
+     * Queue an upgrade: create a pending subscription + invoice.
+     * Prior plan stays entitled until the upgrade invoice is paid.
      *
      * @param  array<string, mixed>  $attributes
      */
@@ -88,30 +89,25 @@ class SubscriptionBillingService
             ]);
         }
 
-        if (in_array($replaces->status, ['cancelled', 'suspended'], true)) {
+        if (in_array($replaces->status, ['cancelled', 'suspended', 'pending'], true)) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'replaces_subscription_id' => [__('That subscription is already ended and cannot be upgraded.')],
             ]);
         }
 
-        return DB::transaction(function () use ($tenant, $replaces, $attributes): TenantSubscription {
-            $replaces->update([
-                'status' => 'cancelled',
-                'auto_renew' => false,
-            ]);
+        $pendingExists = TenantSubscription::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('status', 'pending')
+            ->where('replaces_subscription_id', $replaces->id)
+            ->exists();
 
-            $productName = $attributes['product_name'] ?? $replaces->product_name;
-            if (filled($productName)) {
-                TenantSubscription::query()
-                    ->where('tenant_id', $tenant->id)
-                    ->where('id', '!=', $replaces->id)
-                    ->whereIn('status', ['active', 'trial', 'grace_period', 'grace', 'overdue'])
-                    ->where('product_name', $productName)
-                    ->update([
-                        'status' => 'cancelled',
-                        'auto_renew' => false,
-                    ]);
-            }
+        if ($pendingExists) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'replaces_subscription_id' => [__('An unpaid upgrade for this subscription is already pending.')],
+            ]);
+        }
+
+        $subscription = DB::transaction(function () use ($tenant, $replaces, $attributes): TenantSubscription {
             $subscription = TenantSubscription::query()->create([
                 'tenant_id' => $tenant->id,
                 'saas_plan_id' => $attributes['saas_plan_id'] ?? null,
@@ -121,23 +117,15 @@ class SubscriptionBillingService
                 'billing_cycle' => $attributes['billing_cycle'],
                 'current_period_start' => $attributes['current_period_start'],
                 'current_period_end' => $attributes['current_period_end'],
-                'status' => $attributes['status'],
-                'auto_renew' => (bool) ($attributes['auto_renew'] ?? false),
-            ]);
-
-            $tenant->update([
-                'subscription_plan' => $attributes['plan_name'],
-                'subscription_amount' => $attributes['amount'],
-                'billing_cycle' => $attributes['billing_cycle'],
-                'start_date' => $attributes['current_period_start'],
-                'renewal_date' => $attributes['current_period_end'],
-                'status' => $this->mapSubscriptionStatusToTenant((string) $attributes['status']),
+                'status' => 'pending',
+                'auto_renew' => false,
+                'replaces_subscription_id' => $replaces->id,
             ]);
 
             $this->activityLogger->log(
-                'subscription.upgraded',
+                'subscription.upgrade_queued',
                 ActivityLogCategory::BILLING,
-                __('Subscription upgraded from :old to :new for :tenant.', [
+                __('Upgrade from :old to :new queued for :tenant; activates when paid.', [
                     'old' => $replaces->plan_name,
                     'new' => $subscription->plan_name,
                     'tenant' => $tenant->company_name,
@@ -153,12 +141,67 @@ class SubscriptionBillingService
 
             return $subscription->fresh(['tenant', 'saasPlan']);
         });
+
+        $this->generateUpgradeInvoice($subscription);
+
+        return $subscription->fresh(['tenant', 'saasPlan']);
+    }
+
+    public function generateUpgradeInvoice(TenantSubscription $subscription): ?TenantInvoice
+    {
+        $subscription->loadMissing('tenant', 'saasPlan', 'replacesSubscription');
+
+        $tenant = $subscription->tenant;
+        if (! $tenant) {
+            return null;
+        }
+
+        if (! $subscription->current_period_start || ! $subscription->current_period_end) {
+            return null;
+        }
+
+        $periodStart = $subscription->current_period_start instanceof Carbon
+            ? $subscription->current_period_start->copy()
+            : Carbon::parse($subscription->current_period_start);
+        $periodEnd = $subscription->current_period_end instanceof Carbon
+            ? $subscription->current_period_end->copy()
+            : Carbon::parse($subscription->current_period_end);
+
+        $oldPlan = $subscription->replacesSubscription?->plan_name ?? __('prior plan');
+
+        return $this->operationalCache->lock(
+            'billing:subscription-invoice:'.$subscription->id,
+            (int) config('redis_cache.locks.subscription_invoice', 60),
+            function () use ($subscription, $tenant, $periodStart, $periodEnd, $oldPlan): ?TenantInvoice {
+                if ($this->invoiceExistsForPeriodWindow($subscription, $periodStart, $periodEnd)) {
+                    return null;
+                }
+
+                return $this->createSubscriptionInvoice(
+                    $subscription,
+                    $tenant,
+                    $periodStart,
+                    $periodEnd,
+                    __('Upgrade to :plan from :old — :cycle', [
+                        'plan' => $subscription->plan_name,
+                        'old' => $oldPlan,
+                        'cycle' => ucfirst($subscription->billing_cycle),
+                    ]),
+                    'subscription.upgrade_invoice_generated',
+                    __('Upgrade invoice :number generated for :plan.', [
+                        'number' => ':number',
+                        'plan' => $subscription->plan_name,
+                    ]),
+                );
+            },
+        );
     }
 
     private function mapSubscriptionStatusToTenant(string $status): string
     {
         return match ($status) {
             'trial' => 'trial',
+            'pending' => 'active',
             'overdue' => 'overdue',
             'suspended', 'cancelled' => 'suspended',
             'grace_period', 'grace' => 'warning',

@@ -136,9 +136,9 @@
                                                     @if ($sub->tenant)
                                                         <x-ui.row-action :href="route('tenants.show', ['tenant' => $sub->tenant, 'tab' => 'monitoring'])">{{ __('View Usage') }}</x-ui.row-action>
                                                         <x-ui.row-action
-                                                            :href="route('access-controls.suspend', $sub->tenant)"
+                                                            :href="route('subscriptions.subscription.suspend', $sub)"
                                                             method="POST"
-                                                            :confirm="__('Suspend :tenant?', ['tenant' => $sub->tenant->company_name])"
+                                                            :confirm="__('Suspend subscription for :tenant?', ['tenant' => $sub->tenant->company_name])"
                                                             danger
                                                         >{{ __('Suspend') }}</x-ui.row-action>
                                                     @endif

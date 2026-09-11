@@ -112,6 +112,41 @@ class SubscriptionBillingActionsTest extends TestCase
             'id' => $invoice->id,
             'tenant_id' => $subscription->tenant_id,
         ]);
+        $this->assertNotNull($invoice->subscription_period_key);
+        $this->assertNotNull($invoice->statement_period_start);
+        $this->assertNotNull($invoice->statement_period_end);
+    }
+
+    public function test_generate_invoice_skips_duplicate_for_same_period(): void
+    {
+        $subscription = $this->seedSubscription();
+        $billing = app(SubscriptionBillingService::class);
+
+        $first = $billing->generateInvoice($subscription);
+        $second = $billing->generateInvoice($subscription->fresh());
+
+        $this->assertNotNull($first);
+        $this->assertNull($second);
+        $this->assertSame(1, \App\Models\TenantInvoice::query()
+            ->where('tenant_id', $subscription->tenant_id)
+            ->where('generated_by', 'subscription-billing')
+            ->whereNotIn('status', ['cancelled', 'void'])
+            ->count());
+    }
+
+    public function test_renewal_invoice_skips_duplicate_for_same_window(): void
+    {
+        $subscription = $this->seedSubscription();
+        $billing = app(SubscriptionBillingService::class);
+
+        $first = $billing->generateRenewalInvoice($subscription);
+        $second = $billing->generateRenewalInvoice($subscription->fresh());
+
+        $this->assertNotNull($first);
+        $this->assertNull($second);
+        $this->assertSame(1, \App\Models\TenantInvoice::query()
+            ->where('subscription_period_key', $first->subscription_period_key)
+            ->count());
     }
 
     public function test_fleet_renew_dispatches_job(): void

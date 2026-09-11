@@ -728,7 +728,10 @@ class InvoiceController extends Controller
         }
 
         $old = ['status' => $invoice->status];
-        $invoice->update(['status' => 'cancelled']);
+        $invoice->update([
+            'status' => 'cancelled',
+            'subscription_period_key' => null,
+        ]);
 
         $this->activityLogger->log(
             'document.cancelled',

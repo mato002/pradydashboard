@@ -32,6 +32,7 @@ return [
     'locks' => [
         'invoice_number' => (int) env('REDIS_LOCK_INVOICE_NUMBER', 15),
         'recurring_schedule' => (int) env('REDIS_LOCK_RECURRING', 120),
+        'subscription_invoice' => (int) env('REDIS_LOCK_SUBSCRIPTION_INVOICE', 60),
         'server_sync' => (int) env('REDIS_LOCK_SERVER_SYNC', 120),
         'payment_reconcile' => (int) env('REDIS_LOCK_PAYMENT', 30),
         'payment_reference' => (int) env('REDIS_LOCK_PAYMENT_REF', 30),

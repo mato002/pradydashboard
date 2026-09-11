@@ -54,6 +54,7 @@ class TenantInvoice extends Model
         'tenant_payment_id',
         'statement_period_start',
         'statement_period_end',
+        'subscription_period_key',
         'is_recurring',
         'pdf_generated',
         'email_delivered_at',

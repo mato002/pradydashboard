@@ -158,4 +158,48 @@ class PaymentReconciliationSummaryTest extends TestCase
 
         $this->assertSame(1, $kpis['paid']);
     }
+
+    public function test_gateway_filter_scopes_kpis_and_reconciliation(): void
+    {
+        [, , $tenant] = $this->createTenantWithSubscription('Gateway Filter Co');
+
+        TenantPayment::query()->create([
+            'transaction_id' => 'TXN-MPESA-OK',
+            'tenant_id' => $tenant->id,
+            'amount' => 3000,
+            'currency' => 'KES',
+            'status' => 'successful',
+            'gateway' => 'mpesa',
+            'reconciliation_status' => PaymentReconciliationStatus::MATCHED,
+            'paid_at' => now(),
+            'matched_at' => now(),
+        ]);
+
+        TenantPayment::query()->create([
+            'transaction_id' => 'TXN-STRIPE-OK',
+            'tenant_id' => $tenant->id,
+            'amount' => 9000,
+            'currency' => 'KES',
+            'status' => 'successful',
+            'gateway' => 'stripe',
+            'reconciliation_status' => PaymentReconciliationStatus::UNRECONCILED,
+            'unapplied_amount' => 9000,
+            'paid_at' => now(),
+        ]);
+
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('payments.index', ['gateway' => 'mpesa']));
+        $response->assertOk();
+        $response->assertSee(__('Payments — :gateway', ['gateway' => 'M-Pesa']));
+        $response->assertSee(__('Not measured'));
+        $response->assertDontSee('+2', false);
+
+        $kpis = $response->viewData('kpis');
+        $reconciliation = $response->viewData('reconciliation');
+
+        $this->assertSame(3000.0, $kpis['collectedRaw']);
+        $this->assertSame(1, $reconciliation['matched']);
+        $this->assertSame(0, $reconciliation['pending']);
+    }
 }

@@ -258,7 +258,7 @@ class InvoiceController extends Controller
                     'line_items' => [[
                         'description' => '',
                         'quantity' => 1,
-                        'unit_price' => 0,
+                        'unit_price' => '',
                         'discount' => 0,
                         'tax_rate' => 0,
                         'item_type' => 'custom',

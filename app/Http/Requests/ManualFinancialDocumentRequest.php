@@ -56,8 +56,8 @@ class ManualFinancialDocumentRequest extends FormRequest
             'line_description' => ['nullable', 'string', 'max:500'],
             'line_items' => [Rule::requiredIf(! $isReceipt || ! $linked), 'array', 'min:1'],
             'line_items.*.description' => ['required_with:line_items', 'string', 'max:500'],
-            'line_items.*.quantity' => ['required_with:line_items', 'numeric', 'min:0'],
-            'line_items.*.unit_price' => ['required_with:line_items', 'numeric', 'min:0'],
+            'line_items.*.quantity' => ['required_with:line_items', 'numeric', 'min:0.01'],
+            'line_items.*.unit_price' => ['required_with:line_items', 'numeric', 'min:0.01'],
             'line_items.*.discount' => ['nullable', 'numeric', 'min:0'],
             'line_items.*.tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'line_items.*.item_type' => ['nullable', Rule::in(ManualDocumentCreator::LINE_ITEM_TYPES)],
@@ -76,6 +76,54 @@ class ManualFinancialDocumentRequest extends FormRequest
         }
 
         return $rules;
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            $type = $this->input('document_type', BillingDocumentType::INVOICE);
+            $isReceipt = $type === BillingDocumentType::RECEIPT;
+            $linked = $this->filled('linked_invoice_id');
+
+            if ($isReceipt && $linked) {
+                return;
+            }
+
+            if ($isReceipt && ! $linked) {
+                return;
+            }
+
+            $lines = $this->input('line_items', []);
+            if (! is_array($lines) || $lines === []) {
+                return;
+            }
+
+            $hasPositiveLine = false;
+            foreach ($lines as $index => $line) {
+                if (! is_array($line)) {
+                    continue;
+                }
+                $qty = (float) ($line['quantity'] ?? 0);
+                $price = (float) ($line['unit_price'] ?? 0);
+                $discount = (float) ($line['discount'] ?? 0);
+                $lineTotal = max(0, ($qty * $price) - $discount);
+                if ($lineTotal <= 0.009) {
+                    $validator->errors()->add(
+                        "line_items.{$index}.unit_price",
+                        __('Each line item must have a positive amount (quantity × unit price).'),
+                    );
+                } else {
+                    $hasPositiveLine = true;
+                }
+            }
+
+            if (! $hasPositiveLine && ! $validator->errors()->has('line_items')) {
+                $validator->errors()->add(
+                    'line_items',
+                    __('Document total must be greater than zero.'),
+                );
+            }
+        });
     }
 
     private function linkedInvoiceBelongsToTenantRule(): Closure

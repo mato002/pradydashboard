@@ -76,6 +76,11 @@ class ManualDocumentCreator
                 'line_items' => [__('Total cannot be negative.')],
             ]);
         }
+        if ($totals['total'] <= 0.009) {
+            throw ValidationException::withMessages([
+                'line_items' => [__('Document total must be greater than zero.')],
+            ]);
+        }
 
         $tenant = $this->resolveTenant($data);
         $amountPaid = max(0, (float) ($data['amount_paid'] ?? 0));
@@ -159,6 +164,11 @@ class ManualDocumentCreator
         if ($totals['total'] < 0) {
             throw ValidationException::withMessages([
                 'line_items' => [__('Total cannot be negative.')],
+            ]);
+        }
+        if ($totals['total'] <= 0.009) {
+            throw ValidationException::withMessages([
+                'line_items' => [__('Document total must be greater than zero.')],
             ]);
         }
 

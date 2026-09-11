@@ -529,4 +529,49 @@ class ManualFinancialDocumentTest extends TestCase
 
         $this->assertSame(now()->format('y'), $service->yearSuffix());
     }
+
+    public function test_zero_value_invoice_lines_are_rejected(): void
+    {
+        [$user, $tenant] = $this->userAndTenant();
+
+        $this->actingAs($user)
+            ->post(route('invoices.manual.store'), [
+                'document_type' => BillingDocumentType::INVOICE,
+                'tenant_id' => $tenant->id,
+                'issue_date' => now()->toDateString(),
+                'currency' => 'KES',
+                'line_items' => [
+                    [
+                        'description' => 'Empty fee',
+                        'quantity' => 1,
+                        'unit_price' => 0,
+                        'discount' => 0,
+                        'tax_rate' => 0,
+                        'item_type' => 'custom',
+                    ],
+                ],
+            ])
+            ->assertSessionHasErrors();
+
+        $this->assertSame(0, TenantInvoice::query()->where('tenant_id', $tenant->id)->count());
+    }
+
+    public function test_walk_in_invoice_still_allowed_with_positive_lines(): void
+    {
+        [$user] = $this->userAndTenant();
+
+        $this->actingAs($user)
+            ->post(route('invoices.manual.store'), array_merge([
+                'document_type' => BillingDocumentType::INVOICE,
+                'manual_client_name' => 'Walk-in Client',
+                'issue_date' => now()->toDateString(),
+                'currency' => 'KES',
+            ], $this->linePayload()))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('tenant_invoices', [
+            'manual_client_name' => 'Walk-in Client',
+            'document_type' => 'invoice',
+        ]);
+    }
 }

@@ -48,9 +48,13 @@
         <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
                 <p class="text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">{{ __('Financials') }}</p>
-                <h2 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">{{ __('Payment Operations Center') }}</h2>
+                <h2 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                    {{ $selectedGatewayLabel ? __('Payments — :gateway', ['gateway' => $selectedGatewayLabel]) : __('Payments') }}
+                </h2>
                 <p class="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                    {{ __('Tenant collections, gateway orchestration, reconciliations, allocations, and treasury monitoring — enterprise-grade payment rails.') }}
+                    {{ $selectedGatewayLabel
+                        ? __('Ledger, KPIs, and reconciliation for the selected gateway.')
+                        : __('Tenant collections, gateway activity, and payment reconciliation.') }}
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -106,12 +110,12 @@
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                 </x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Failed Transactions')" :value="$kpis['failed']" :trend="$kpis['failed'] > 0 ? '-3' : '0'" :sublabel="__('Declined / timeout')" :points="$spark('pay-failed')" tone="rose">
+            <x-ui.kpi-card :title="__('Failed Transactions')" :value="$kpis['failed']" :sublabel="__('Declined / timeout')" :points="$spark('pay-failed')" tone="rose">
                 <x-slot name="icon">
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
                 </x-slot>
             </x-ui.kpi-card>
-            <x-ui.kpi-card :title="__('Pending Payments')" :value="$kpis['pending']" :trend="'+2'" :sublabel="__('Awaiting confirmation')" :points="$spark('pay-pending')" tone="amber">
+            <x-ui.kpi-card :title="__('Pending Payments')" :value="$kpis['pending']" :sublabel="__('Awaiting confirmation')" :points="$spark('pay-pending')" tone="amber">
                 <x-slot name="icon">
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                 </x-slot>
@@ -381,7 +385,7 @@
                                     <div class="h-full rounded-full bg-indigo-500" style="width: {{ min(100, max(0, (float) $success)) }}%"></div>
                                 </div>
                             </div>
-                            <p class="text-[10px] text-slate-400">{{ __('Latency') }}: <span class="font-mono font-semibold text-slate-600 dark:text-slate-300">{{ filled($gw['latency']) ? $gw['latency'].'ms' : '—' }}</span></p>
+                            <p class="text-[10px] text-slate-400">{{ __('Latency') }}: <span class="font-mono font-semibold text-slate-600 dark:text-slate-300">{{ __('Not measured') }}</span></p>
                             @if ($gwActive)
                                 <p class="mt-2 text-[10px] font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">{{ __('Filtering ledger') }}</p>
                             @endif

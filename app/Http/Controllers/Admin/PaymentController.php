@@ -25,32 +25,32 @@ class PaymentController extends Controller
             (new PaymentDemoSeeder)->run();
         }
 
-        $query = TenantPayment::query()
+        $selectedGateway = $request->string('gateway')->toString();
+        $selectedStatus = $request->string('status')->toString();
+
+        $query = $this->paymentsQuery($selectedGateway !== '' ? $selectedGateway : null)
             ->with(['tenant', 'invoice'])
             ->orderByDesc('paid_at')
             ->orderByDesc('created_at');
 
-        if ($status = $request->string('status')->toString()) {
-            $query->where('status', $status);
-        }
-
-        if ($gateway = $request->string('gateway')->toString()) {
-            $query->where('gateway', $gateway);
+        if ($selectedStatus !== '') {
+            $query->where('status', $selectedStatus);
         }
 
         $payments = $query->paginate(14)->withQueryString();
 
-        $selectedGateway = $request->string('gateway')->toString();
+        $gateways = $this->buildGatewayFleet();
         $selectedGatewayLabel = $selectedGateway !== ''
-            ? ($this->buildGatewayFleet()->firstWhere('key', $selectedGateway)['name'] ?? ucfirst(str_replace('_', ' ', $selectedGateway)))
+            ? ($gateways->firstWhere('key', $selectedGateway)['name'] ?? ucfirst(str_replace('_', ' ', $selectedGateway)))
             : null;
 
-        $collected = (float) TenantPayment::query()->where('status', 'successful')->sum('amount');
-        $failedCount = TenantPayment::query()->where('status', 'failed')->count();
-        $pendingCount = TenantPayment::query()->where('status', 'pending')->count();
-        $refundTotal = (float) TenantPayment::query()->where('status', 'refunded')->sum('amount');
-        $totalAttempts = max(1, TenantPayment::query()->count());
-        $successfulCount = TenantPayment::query()->where('status', 'successful')->count();
+        $scoped = $this->paymentsQuery($selectedGateway !== '' ? $selectedGateway : null);
+        $collected = (float) (clone $scoped)->where('status', 'successful')->sum('amount');
+        $failedCount = (clone $scoped)->where('status', 'failed')->count();
+        $pendingCount = (clone $scoped)->where('status', 'pending')->count();
+        $refundTotal = (float) (clone $scoped)->where('status', 'refunded')->sum('amount');
+        $totalAttempts = max(1, (clone $scoped)->count());
+        $successfulCount = (clone $scoped)->where('status', 'successful')->count();
         $collectionRate = round(($successfulCount / $totalAttempts) * 100, 1);
 
         $kpis = [
@@ -61,17 +61,17 @@ class PaymentController extends Controller
             'refunds' => $this->formatKes($refundTotal),
             'refundsRaw' => $refundTotal,
             'collectionRate' => $collectionRate,
-            'gatewayHealth' => $this->gatewayHealthScore(),
+            'gatewayHealth' => $this->gatewayHealthScore($selectedGateway !== '' ? $selectedGateway : null),
         ];
 
         $spark = fn (string $key) => OperationalMetrics::emptySparkline();
-        $collectionSeries = $this->buildCollectionSeries();
-        $gatewayAnalytics = $this->buildGatewayAnalytics();
-        $heatmap = $this->buildTransactionHeatmap();
-        $reconciliation = $this->buildReconciliationSummary();
-        $gateways = $this->buildGatewayFleet();
-        $alerts = $this->buildAlerts();
-        $recurring = $this->buildRecurringStats();
+        $gatewayFilter = $selectedGateway !== '' ? $selectedGateway : null;
+        $collectionSeries = $this->buildCollectionSeries($gatewayFilter);
+        $gatewayAnalytics = $this->buildGatewayAnalytics($gatewayFilter);
+        $heatmap = $this->buildTransactionHeatmap($gatewayFilter);
+        $reconciliation = $this->buildReconciliationSummary($gatewayFilter);
+        $alerts = $this->buildAlerts($gatewayFilter);
+        $recurring = $this->buildRecurringStats($gatewayFilter);
 
         return view('admin.payments.index', compact(
             'payments',
@@ -87,6 +87,20 @@ class PaymentController extends Controller
             'selectedGateway',
             'selectedGatewayLabel',
         ));
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<TenantPayment>
+     */
+    private function paymentsQuery(?string $gateway = null)
+    {
+        $query = TenantPayment::query();
+
+        if ($gateway !== null && $gateway !== '') {
+            $query->where('gateway', $gateway);
+        }
+
+        return $query;
     }
 
     public function reconcile(Request $request): RedirectResponse
@@ -115,15 +129,21 @@ class PaymentController extends Controller
             ->with('status', __('Failed transaction retry sweep initiated across gateways.'));
     }
 
-    private function gatewayHealthScore(): float
+    private function gatewayHealthScore(?string $gateway = null): float
     {
         $gateways = $this->buildGatewayFleet();
 
-        if ($gateways->isEmpty()) {
+        if ($gateway) {
+            $gateways = $gateways->where('key', $gateway)->values();
+        }
+
+        $measured = $gateways->filter(fn (array $gw) => $gw['uptime'] !== null);
+
+        if ($measured->isEmpty()) {
             return 0.0;
         }
 
-        return round($gateways->avg('uptime'), 1);
+        return round($measured->avg('uptime'), 1);
     }
 
     private function formatKes(float $amount): string
@@ -141,16 +161,16 @@ class PaymentController extends Controller
     /**
      * @return array<int, array{label: string, value: float, successful: float}>
      */
-    private function buildCollectionSeries(): array
+    private function buildCollectionSeries(?string $gateway = null): array
     {
         $series = [];
         for ($i = 5; $i >= 0; $i--) {
             $month = Carbon::now()->subMonths($i);
-            $successful = (float) TenantPayment::query()
+            $successful = (float) $this->paymentsQuery($gateway)
                 ->where('status', 'successful')
                 ->whereBetween('paid_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
                 ->sum('amount');
-            $failed = (float) TenantPayment::query()
+            $failed = (float) $this->paymentsQuery($gateway)
                 ->where('status', 'failed')
                 ->whereBetween('created_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
                 ->sum('amount');
@@ -169,7 +189,7 @@ class PaymentController extends Controller
     /**
      * @return Collection<int, array{gateway: string, label: string, volume: float, count: int, success: float}>
      */
-    private function buildGatewayAnalytics(): Collection
+    private function buildGatewayAnalytics(?string $gateway = null): Collection
     {
         $labels = [
             'mpesa' => 'M-Pesa',
@@ -179,7 +199,7 @@ class PaymentController extends Controller
             'bank_transfer' => 'Bank Transfer',
         ];
 
-        $rows = TenantPayment::query()
+        $rows = $this->paymentsQuery($gateway)
             ->selectRaw('gateway')
             ->selectRaw('SUM(amount) as volume')
             ->selectRaw('COUNT(*) as count')
@@ -209,9 +229,9 @@ class PaymentController extends Controller
     /**
      * @return array<int, array{day: string, hours: array<int, int>}>
      */
-    private function buildTransactionHeatmap(): array
+    private function buildTransactionHeatmap(?string $gateway = null): array
     {
-        $payments = TenantPayment::query()
+        $payments = $this->paymentsQuery($gateway)
             ->whereNotNull('paid_at')
             ->where('paid_at', '>=', now()->subDays(7))
             ->get(['paid_at']);
@@ -239,29 +259,29 @@ class PaymentController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function buildReconciliationSummary(): array
+    private function buildReconciliationSummary(?string $gateway = null): array
     {
-        $matched = TenantPayment::query()
+        $matched = $this->paymentsQuery($gateway)
             ->whereIn('reconciliation_status', [
                 PaymentReconciliationStatus::MATCHED,
                 PaymentReconciliationStatus::PARTIALLY_MATCHED,
             ])
             ->count();
 
-        $awaitingMatch = TenantPayment::query()
+        $awaitingMatch = $this->paymentsQuery($gateway)
             ->where('status', 'successful')
             ->where('reconciliation_status', PaymentReconciliationStatus::UNRECONCILED)
             ->whereNotNull('tenant_id')
             ->count();
 
-        $exceptions = TenantPayment::query()
+        $exceptions = $this->paymentsQuery($gateway)
             ->where(function ($query): void {
                 $query->whereIn('status', ['failed', 'reversed'])
                     ->orWhere('reconciliation_status', PaymentReconciliationStatus::DUPLICATE);
             })
             ->count();
 
-        $unallocated = TenantPayment::query()
+        $unallocated = $this->paymentsQuery($gateway)
             ->where('status', 'successful')
             ->where(function ($query): void {
                 $query->whereNull('tenant_invoice_id')
@@ -273,7 +293,7 @@ class PaymentController extends Controller
             ])
             ->count();
 
-        $eligibleSuccessful = TenantPayment::query()
+        $eligibleSuccessful = $this->paymentsQuery($gateway)
             ->where('status', 'successful')
             ->whereNotNull('tenant_id')
             ->count();
@@ -289,7 +309,7 @@ class PaymentController extends Controller
             'pending' => $awaitingMatch,
             'exceptions' => $exceptions,
             'unallocated' => $unallocated,
-            'last_run' => $this->formatReconciliationLastRun($lastRunMeta),
+            'last_run' => $this->formatReconciliationLastRun($lastRunMeta, $gateway),
             'settlement_window' => __('Auto-match ≤:limit payments / run', [
                 'limit' => ReconcilePaymentsBatchJob::BATCH_LIMIT,
             ]),
@@ -300,10 +320,10 @@ class PaymentController extends Controller
     /**
      * @param  array{at?: string, processed?: int, matched?: int}|null  $meta
      */
-    private function formatReconciliationLastRun(?array $meta): string
+    private function formatReconciliationLastRun(?array $meta, ?string $gateway = null): string
     {
         if (! is_array($meta) || empty($meta['at'])) {
-            $latestMatch = TenantPayment::query()
+            $latestMatch = $this->paymentsQuery($gateway)
                 ->whereNotNull('matched_at')
                 ->orderByDesc('matched_at')
                 ->value('matched_at');
@@ -374,11 +394,11 @@ class PaymentController extends Controller
     /**
      * @return Collection<int, array{type: string, title: string, body: string, time: string}>
      */
-    private function buildAlerts(): Collection
+    private function buildAlerts(?string $gateway = null): Collection
     {
         $alerts = collect();
 
-        foreach (TenantPayment::query()->where('status', 'failed')->with('tenant')->latest()->take(3)->get() as $payment) {
+        foreach ($this->paymentsQuery($gateway)->where('status', 'failed')->with('tenant')->latest()->take(3)->get() as $payment) {
             $alerts->push([
                 'type' => 'danger',
                 'title' => __('Failed collection'),
@@ -392,10 +412,10 @@ class PaymentController extends Controller
             ]);
         }
 
-        foreach (TenantPayment::query()->where('status', 'pending')->with('tenant')->latest()->take(2)->get() as $payment) {
+        foreach ($this->paymentsQuery($gateway)->where('status', 'pending')->with('tenant')->latest()->take(2)->get() as $payment) {
             $alerts->push([
                 'type' => 'warning',
-                'title' => __('Pending settlement'),
+                'title' => __('Pending confirmation'),
                 'body' => __(':amount awaiting confirmation from :gateway.', [
                     'amount' => $payment->formattedAmount(),
                     'gateway' => $payment->gatewayLabel(),
@@ -404,21 +424,23 @@ class PaymentController extends Controller
             ]);
         }
 
-        $refunds = TenantPayment::query()->where('status', 'refunded')->count();
+        $refunds = $this->paymentsQuery($gateway)->where('status', 'refunded')->count();
         if ($refunds > 0) {
             $alerts->push([
                 'type' => 'info',
-                'title' => __('Refund queue'),
-                'body' => __(':count refund(s) processed in the current reconciliation window.', ['count' => $refunds]),
-                'time' => __('Treasury'),
+                'title' => __('Refunds'),
+                'body' => __(':count refunded payment(s) in the ledger.', ['count' => $refunds]),
+                'time' => __('Ledger'),
             ]);
         }
 
         if ($alerts->isEmpty()) {
             $alerts->push([
                 'type' => 'success',
-                'title' => __('All payment rails nominal'),
-                'body' => __('No critical transaction exceptions in the current window.'),
+                'title' => __('No exceptions'),
+                'body' => $gateway
+                    ? __('No failed or pending payments for this gateway.')
+                    : __('No failed or pending payments in the current ledger.'),
                 'time' => __('Just now'),
             ]);
         }
@@ -429,11 +451,11 @@ class PaymentController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function buildRecurringStats(): array
+    private function buildRecurringStats(?string $gateway = null): array
     {
-        $retry = TenantPayment::query()->where('status', 'failed')->count();
-        $totalAttempts = max(1, TenantPayment::query()->count());
-        $successfulCount = TenantPayment::query()->where('status', 'successful')->count();
+        $retry = $this->paymentsQuery($gateway)->where('status', 'failed')->count();
+        $totalAttempts = max(1, $this->paymentsQuery($gateway)->count());
+        $successfulCount = $this->paymentsQuery($gateway)->where('status', 'successful')->count();
         $nextSchedule = \App\Models\InvoiceRecurringSchedule::query()
             ->where('enabled', true)
             ->orderBy('next_run_at')

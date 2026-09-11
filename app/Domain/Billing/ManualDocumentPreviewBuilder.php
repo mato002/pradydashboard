@@ -107,15 +107,37 @@ class ManualDocumentPreviewBuilder
         }
 
         $amount = max(0, (float) ($data['amount_received'] ?? 0));
-        $lines = [[
-            'item_type' => 'payment',
-            'description' => trim((string) ($data['line_description'] ?? '')) ?: __('Payment received'),
-            'quantity' => 1,
-            'unit_price' => $amount,
-            'discount' => 0,
-            'tax_rate' => 0,
-        ]];
-        $totals = $this->calculator->compute($lines);
+        $normalized = [];
+        foreach (($data['line_items'] ?? []) as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $description = trim((string) ($row['description'] ?? ''));
+            if ($description === '') {
+                continue;
+            }
+            $normalized[] = [
+                'item_type' => (string) ($row['item_type'] ?? 'payment'),
+                'description' => $description,
+                'quantity' => $row['quantity'] ?? 1,
+                'unit_price' => $row['unit_price'] ?? 0,
+                'discount' => $row['discount'] ?? 0,
+                'tax_rate' => $row['tax_rate'] ?? 0,
+            ];
+        }
+
+        if ($normalized === []) {
+            $normalized = [[
+                'item_type' => 'payment',
+                'description' => trim((string) ($data['line_description'] ?? '')) ?: __('Payment received'),
+                'quantity' => 1,
+                'unit_price' => $amount,
+                'discount' => 0,
+                'tax_rate' => 0,
+            ]];
+        }
+
+        $totals = $this->calculator->compute($normalized);
         $tenant = $this->resolveTenant($data);
 
         $invoice = new TenantInvoice([
@@ -123,9 +145,9 @@ class ManualDocumentPreviewBuilder
             'invoice_number' => $draftNumber,
             'document_type' => BillingDocumentType::RECEIPT,
             'currency' => (string) ($data['currency'] ?? 'KES'),
-            'subtotal' => $totals['total'],
-            'discount_amount' => 0,
-            'tax_amount' => 0,
+            'subtotal' => $totals['subtotal'],
+            'discount_amount' => $totals['discount_amount'],
+            'tax_amount' => $totals['tax_amount'],
             'total' => $totals['total'],
             'amount_due' => 0,
             'amount_paid' => $totals['total'],

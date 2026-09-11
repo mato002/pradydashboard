@@ -328,34 +328,44 @@ class ManualDocumentCreator
      */
     private function createStandaloneReceipt(array $data): TenantInvoice
     {
-        $amount = (float) ($data['amount_received'] ?? $data['amount'] ?? 0);
-        if ($amount <= 0) {
+        $lines = $this->normalizeLines($data['line_items'] ?? []);
+
+        if ($lines === []) {
+            $amount = (float) ($data['amount_received'] ?? $data['amount'] ?? 0);
+            if ($amount <= 0) {
+                throw ValidationException::withMessages([
+                    'line_items' => [__('Add at least one receipt line with a positive amount.')],
+                ]);
+            }
+
+            $lines = [[
+                'item_type' => 'payment',
+                'description' => $data['line_description'] ?? __('Payment received'),
+                'quantity' => 1,
+                'unit_price' => $amount,
+                'discount' => 0,
+                'tax_rate' => 0,
+            ]];
+        }
+
+        $totals = $this->calculator->compute($lines);
+        if ($totals['total'] <= 0.009) {
             throw ValidationException::withMessages([
-                'amount_received' => [__('Amount received must be greater than zero.')],
+                'line_items' => [__('Receipt total must be greater than zero.')],
             ]);
         }
 
-        $lines = [[
-            'item_type' => 'payment',
-            'description' => $data['line_description'] ?? __('Payment received'),
-            'quantity' => 1,
-            'unit_price' => $amount,
-            'discount' => 0,
-            'tax_rate' => 0,
-        ]];
-
-        $totals = $this->calculator->compute($lines);
         $tenant = $this->resolveTenant($data);
 
-        return DB::transaction(function () use ($data, $tenant, $totals, $amount): TenantInvoice {
+        return DB::transaction(function () use ($data, $tenant, $totals): TenantInvoice {
             $receipt = TenantInvoice::query()->create([
                 'tenant_id' => $tenant?->id,
                 'invoice_number' => $this->numberGenerator->next(BillingDocumentType::RECEIPT),
                 'document_type' => BillingDocumentType::RECEIPT,
                 'currency' => (string) ($data['currency'] ?? 'KES'),
-                'subtotal' => $totals['total'],
-                'discount_amount' => 0,
-                'tax_amount' => 0,
+                'subtotal' => $totals['subtotal'],
+                'discount_amount' => $totals['discount_amount'],
+                'tax_amount' => $totals['tax_amount'],
                 'total' => $totals['total'],
                 'amount_due' => 0,
                 'amount_paid' => $totals['total'],

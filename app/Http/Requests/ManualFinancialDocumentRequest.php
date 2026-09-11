@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Domain\Billing\ManualDocumentCreator;
 use App\Models\TenantInvoice;
 use App\Support\Billing\BillingDocumentType;
+use App\Support\Billing\PaymentSource;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -50,7 +51,7 @@ class ManualFinancialDocumentRequest extends FormRequest
                 $this->linkedInvoiceBelongsToTenantRule(),
             ],
             'amount_received' => ['nullable', 'numeric', 'min:0.01'],
-            'payment_method' => ['nullable', 'string', 'max:80'],
+            'payment_method' => ['nullable', 'string', Rule::in(PaymentSource::all())],
             'payment_reference' => ['nullable', 'string', 'max:120'],
             'payment_date' => ['nullable', 'date'],
             'line_description' => ['nullable', 'string', 'max:500'],
@@ -65,14 +66,16 @@ class ManualFinancialDocumentRequest extends FormRequest
 
         if ($isReceipt && $linked) {
             $rules['amount_received'] = ['required', 'numeric', 'min:0.01'];
-            $rules['payment_method'] = ['required', 'string', 'max:80'];
+            $rules['payment_method'] = ['required', 'string', Rule::in(PaymentSource::all())];
             $rules['payment_date'] = ['required', 'date'];
             $rules['line_items'] = ['nullable', 'array'];
         }
 
         if ($isReceipt && ! $linked) {
-            $rules['amount_received'] = ['required', 'numeric', 'min:0.01'];
-            $rules['payment_method'] = ['nullable', 'string', 'max:80'];
+            $rules['amount_received'] = ['nullable', 'numeric', 'min:0.01'];
+            $rules['payment_method'] = ['required', 'string', Rule::in(PaymentSource::all())];
+            $rules['payment_date'] = ['required', 'date'];
+            $rules['line_items'] = ['required', 'array', 'min:1'];
         }
 
         return $rules;
@@ -86,10 +89,6 @@ class ManualFinancialDocumentRequest extends FormRequest
             $linked = $this->filled('linked_invoice_id');
 
             if ($isReceipt && $linked) {
-                return;
-            }
-
-            if ($isReceipt && ! $linked) {
                 return;
             }
 

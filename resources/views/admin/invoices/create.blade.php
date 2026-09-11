@@ -267,33 +267,46 @@
                             {{ __('No open invoices for this tenant.') }}
                         </p>
                     </div>
-                    <div>
+                    <div x-show="linkedInvoiceId" x-cloak>
                         <label class="text-xs text-slate-500">{{ __('Amount received') }} *</label>
-                        <input type="number" step="0.01" min="0.01" name="amount_received" x-model.number="receiptAmount" required class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950">
+                        <input type="number" step="0.01" min="0.01" x-model.number="receiptAmount" :required="!!linkedInvoiceId" class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950">
                     </div>
+                    <input type="hidden" name="amount_received" :value="linkedInvoiceId ? receiptAmount : totals().total">
                     <div>
                         <label class="text-xs text-slate-500">{{ __('Payment date') }} *</label>
                         <input type="date" name="payment_date" x-model="paymentDate" value="{{ old('payment_date', now()->toDateString()) }}" required class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950">
                     </div>
                     <div>
                         <label class="text-xs text-slate-500">{{ __('Payment method') }} *</label>
-                        <input name="payment_method" value="{{ old('payment_method', 'bank_transfer') }}" required class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950">
+                        <select name="payment_method" required class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950">
+                            @foreach (\App\Support\Billing\PaymentSource::all() as $method)
+                                @continue($method === \App\Support\Billing\PaymentSource::PAYMENTS_GATEWAY)
+                                <option value="{{ $method }}" @selected(old('payment_method', 'bank_transfer') === $method)>
+                                    {{ \App\Support\Billing\PaymentSource::label($method) }}
+                                </option>
+                            @endforeach
+                        </select>
                     </div>
                     <div>
                         <label class="text-xs text-slate-500">{{ __('Reference') }}</label>
                         <input name="payment_reference" value="{{ old('payment_reference') }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950">
                     </div>
-                    <div class="sm:col-span-2" x-show="!linkedInvoiceId">
-                        <label class="text-xs text-slate-500">{{ __('Line description') }}</label>
-                        <input name="line_description" x-model="receiptLineDesc" value="{{ old('line_description', __('Payment received')) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm dark:bg-slate-950">
-                    </div>
                 </div>
                 <p class="mt-4 text-right text-sm text-slate-600 dark:text-slate-400">
-                    {{ __('Receipt total (preview)') }}: <span class="font-mono text-base font-semibold text-emerald-700 dark:text-emerald-300" x-text="formatMoney(receiptAmount)"></span>
+                    {{ __('Receipt total (preview)') }}:
+                    <span
+                        class="font-mono text-base font-semibold text-emerald-700 dark:text-emerald-300"
+                        x-text="formatMoney(linkedInvoiceId ? receiptAmount : totals().total)"
+                    ></span>
                 </p>
             </div>
-        @else
-            <div class="rounded-2xl border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        @endif
+
+        <div
+            class="rounded-2xl border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+            x-show="documentType !== 'receipt' || !linkedInvoiceId"
+            x-cloak
+        >
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
                     <h3 class="text-sm font-semibold">{{ __('Line items') }}</h3>
                     <button
@@ -389,7 +402,6 @@
                     </dl>
                 </div>
             </div>
-        @endif
 
         <div>
             <label class="text-xs text-slate-500">{{ __('Notes') }}</label>

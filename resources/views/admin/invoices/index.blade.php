@@ -57,7 +57,7 @@
                             <h3 class="text-sm font-semibold">{{ __('Invoice trends') }}</h3>
                             <div class="mt-3 flex h-32 items-end gap-1">
                                 @foreach ($invoiceTrend as $point)
-                                    @php $h = max(6, (int) round(($point['issued'] / $trendMax) * 100)); @endphp
+                                    @php $h = (int) round(($point['issued'] / $trendMax) * 100); @endphp
                                     <div class="flex flex-1 flex-col items-center gap-1">
                                         <div class="w-full rounded-t bg-indigo-500" style="height:{{ $h }}px"></div>
                                         <span class="text-[9px] text-slate-500">{{ $point['label'] }}</span>
@@ -69,7 +69,7 @@
                             <h3 class="text-sm font-semibold">{{ __('Revenue collected') }}</h3>
                             <div class="mt-3 flex h-32 items-end gap-1">
                                 @foreach ($revenueSeries as $point)
-                                    @php $h = max(6, (int) round(($point['value'] / $revenueMax) * 100)); @endphp
+                                    @php $h = (int) round(($point['value'] / $revenueMax) * 100); @endphp
                                     <div class="flex flex-1 flex-col items-center gap-1">
                                         <div class="w-full rounded-t bg-violet-500" style="height:{{ $h }}px"></div>
                                         <span class="text-[9px] text-slate-500">{{ $point['label'] }}</span>

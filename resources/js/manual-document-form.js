@@ -214,7 +214,7 @@ export function registerManualDocumentForm(Alpine) {
                     notes: this.notes,
                     amount_paid: this.amountPaid,
                     linked_invoice_id: this.linkedInvoiceId || null,
-                    amount_received: this.receiptAmount,
+                    amount_received: this.linkedInvoiceId ? this.receiptAmount : this.totals().total,
                     payment_date: this.paymentDate,
                     line_description: this.receiptLineDesc,
                     line_items: this.lines.map((line) => ({

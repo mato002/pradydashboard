@@ -280,18 +280,62 @@ class ManualFinancialDocumentTest extends TestCase
         $receipt = app(ManualDocumentCreator::class)->create([
             'document_type' => BillingDocumentType::RECEIPT,
             'manual_client_name' => 'Cash Customer',
-            'amount_received' => 1500,
             'payment_method' => 'cash',
             'payment_date' => now()->toDateString(),
             'issue_date' => now()->toDateString(),
             'currency' => 'KES',
-            'line_description' => 'On-site payment',
+            'line_items' => [
+                [
+                    'description' => 'On-site payment',
+                    'quantity' => 1,
+                    'unit_price' => 1000,
+                    'discount' => 0,
+                    'tax_rate' => 0,
+                    'item_type' => 'payment',
+                ],
+                [
+                    'description' => 'Service tip',
+                    'quantity' => 1,
+                    'unit_price' => 500,
+                    'discount' => 0,
+                    'tax_rate' => 0,
+                    'item_type' => 'payment',
+                ],
+            ],
         ]);
 
         $this->assertSame('receipt', $receipt->document_type);
         $this->assertNull($receipt->tenant_id);
         $this->assertSame('Cash Customer', $receipt->manual_client_name);
+        $this->assertSame('cash', $receipt->payment_method);
         $this->assertSame(1500.0, (float) $receipt->total);
+        $this->assertCount(2, $receipt->lineItems);
+    }
+
+    public function test_standalone_receipt_rejects_invalid_payment_method_via_http(): void
+    {
+        [$user] = $this->userAndTenant();
+
+        $this->actingAs($user)
+            ->post(route('invoices.manual.store'), [
+                'document_type' => BillingDocumentType::RECEIPT,
+                'manual_client_name' => 'Walk-in',
+                'payment_method' => 'not-a-method',
+                'payment_date' => now()->toDateString(),
+                'issue_date' => now()->toDateString(),
+                'currency' => 'KES',
+                'line_items' => [
+                    [
+                        'description' => 'Fee',
+                        'quantity' => 1,
+                        'unit_price' => 100,
+                        'discount' => 0,
+                        'tax_rate' => 0,
+                        'item_type' => 'payment',
+                    ],
+                ],
+            ])
+            ->assertSessionHasErrors('payment_method');
     }
 
     public function test_create_form_loads(): void
@@ -344,7 +388,12 @@ class ManualFinancialDocumentTest extends TestCase
             ->get(route('invoices.create', ['type' => 'receipt']))
             ->assertOk()
             ->assertSee('RECEIPT', false)
-            ->assertSee(__('View Preview'), false);
+            ->assertSee(__('View Preview'), false)
+            ->assertSee(__('Add line'), false)
+            ->assertSee('name="payment_method"', false)
+            ->assertSee('<select name="payment_method"', false)
+            ->assertSee(__('Bank transfer'), false)
+            ->assertSee(__('M-Pesa'), false);
     }
 
     public function test_document_preview_shows_paid_and_balance_when_amount_paid(): void

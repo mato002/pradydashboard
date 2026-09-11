@@ -290,7 +290,7 @@
                                 <p class="mt-1 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{{ $reconciliation['matched'] }}</p>
                             </div>
                             <div class="rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950/50">
-                                <p class="text-slate-500">{{ __('Pending') }}</p>
+                                <p class="text-slate-500">{{ __('Awaiting match') }}</p>
                                 <p class="mt-1 text-lg font-bold tabular-nums text-amber-700 dark:text-amber-300">{{ $reconciliation['pending'] }}</p>
                             </div>
                             <div class="rounded-xl border border-rose-200/60 bg-rose-50/50 px-3 py-2.5 dark:border-rose-900/40 dark:bg-rose-950/30">

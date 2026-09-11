@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Jobs\Billing\ReconcilePaymentsBatchJob;
 use App\Jobs\Billing\RetryFailedPaymentsJob;
+use App\Support\Billing\PaymentReconciliationStatus;
 use App\Support\DemoMode;
 use App\Support\OperationalMetrics;
 use App\Models\TenantPayment;
@@ -13,6 +14,7 @@ use Database\Seeders\PaymentDemoSeeder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class PaymentController extends Controller
@@ -91,9 +93,17 @@ class PaymentController extends Controller
     {
         ReconcilePaymentsBatchJob::dispatch();
 
+        $message = __('Auto-match job dispatched for up to :limit unreconciled successful payments.', [
+            'limit' => ReconcilePaymentsBatchJob::BATCH_LIMIT,
+        ]);
+
+        if (config('queue.default') !== 'sync') {
+            $message .= ' '.__('A queue worker must be running for matches to apply.');
+        }
+
         return redirect()
             ->route('payments.index')
-            ->with('status', __('Reconciliation job queued for all open settlement batches.'));
+            ->with('status', $message);
     }
 
     public function retryFailed(Request $request): RedirectResponse
@@ -231,25 +241,87 @@ class PaymentController extends Controller
      */
     private function buildReconciliationSummary(): array
     {
-        $matched = TenantPayment::query()->where('status', 'successful')->count();
-        $pending = TenantPayment::query()->where('status', 'pending')->count();
-        $exceptions = TenantPayment::query()->whereIn('status', ['failed', 'reversed'])->count();
+        $matched = TenantPayment::query()
+            ->whereIn('reconciliation_status', [
+                PaymentReconciliationStatus::MATCHED,
+                PaymentReconciliationStatus::PARTIALLY_MATCHED,
+            ])
+            ->count();
+
+        $awaitingMatch = TenantPayment::query()
+            ->where('status', 'successful')
+            ->where('reconciliation_status', PaymentReconciliationStatus::UNRECONCILED)
+            ->whereNotNull('tenant_id')
+            ->count();
+
+        $exceptions = TenantPayment::query()
+            ->where(function ($query): void {
+                $query->whereIn('status', ['failed', 'reversed'])
+                    ->orWhere('reconciliation_status', PaymentReconciliationStatus::DUPLICATE);
+            })
+            ->count();
+
         $unallocated = TenantPayment::query()
             ->where('status', 'successful')
-            ->whereNull('tenant_invoice_id')
+            ->where(function ($query): void {
+                $query->whereNull('tenant_invoice_id')
+                    ->orWhere('unapplied_amount', '>', 0.009);
+            })
+            ->whereIn('reconciliation_status', [
+                PaymentReconciliationStatus::UNRECONCILED,
+                PaymentReconciliationStatus::PARTIALLY_MATCHED,
+            ])
             ->count();
+
+        $eligibleSuccessful = TenantPayment::query()
+            ->where('status', 'successful')
+            ->whereNotNull('tenant_id')
+            ->count();
+
+        $matchRate = $eligibleSuccessful > 0
+            ? round(($matched / $eligibleSuccessful) * 100, 1)
+            : 0.0;
+
+        $lastRunMeta = Cache::get(ReconcilePaymentsBatchJob::LAST_RUN_CACHE_KEY);
 
         return [
             'matched' => $matched,
-            'pending' => $pending,
+            'pending' => $awaitingMatch,
             'exceptions' => $exceptions,
             'unallocated' => $unallocated,
-            'last_run' => Carbon::now()->subHours(2)->diffForHumans(),
-            'settlement_window' => __('T+1 business day'),
-            'match_rate' => $matched > 0
-                ? round((($matched - $exceptions) / max(1, $matched + $pending)) * 100, 1)
-                : 100.0,
+            'last_run' => $this->formatReconciliationLastRun($lastRunMeta),
+            'settlement_window' => __('Auto-match ≤:limit payments / run', [
+                'limit' => ReconcilePaymentsBatchJob::BATCH_LIMIT,
+            ]),
+            'match_rate' => $matchRate,
         ];
+    }
+
+    /**
+     * @param  array{at?: string, processed?: int, matched?: int}|null  $meta
+     */
+    private function formatReconciliationLastRun(?array $meta): string
+    {
+        if (! is_array($meta) || empty($meta['at'])) {
+            $latestMatch = TenantPayment::query()
+                ->whereNotNull('matched_at')
+                ->orderByDesc('matched_at')
+                ->value('matched_at');
+
+            return $latestMatch
+                ? Carbon::parse($latestMatch)->diffForHumans()
+                : __('Never');
+        }
+
+        $label = Carbon::parse($meta['at'])->diffForHumans();
+        $processed = (int) ($meta['processed'] ?? 0);
+        $matched = (int) ($meta['matched'] ?? 0);
+
+        return __(':time (:matched/:processed matched)', [
+            'time' => $label,
+            'matched' => $matched,
+            'processed' => $processed,
+        ]);
     }
 
     /**

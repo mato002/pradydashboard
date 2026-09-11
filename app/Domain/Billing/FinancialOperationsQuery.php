@@ -66,6 +66,7 @@ class FinancialOperationsQuery
         $paidInvoices = (clone $invoiceScope)
             ->where('document_type', BillingDocumentType::INVOICE)
             ->where('status', 'paid')
+            ->where('total', '>', 0.009)
             ->count();
 
         $overdueInvoices = (clone $invoiceScope)

@@ -481,16 +481,31 @@ class TenantInvoice extends Model
             return;
         }
 
+        $total = $this->invoiceTotal();
+        $amountPaid = (float) $this->amount_paid;
         $balance = $this->balanceDue();
 
-        if ($balance <= 0.009) {
-            $this->status = 'paid';
-            $this->amount_paid = $this->invoiceTotal() + (float) $this->penalty_amount;
+        // Zero-value documents are not collections — never mark them paid without a real payment.
+        if ($total <= 0.009 && $amountPaid <= 0.009) {
+            if ($this->status === 'draft') {
+                return;
+            }
+
+            if ($this->status === 'paid' || $this->status === 'partially_paid') {
+                $this->status = ($this->due_date && $this->due_date->isPast()) ? 'overdue' : 'sent';
+            }
 
             return;
         }
 
-        if ((float) $this->amount_paid > 0) {
+        if ($balance <= 0.009) {
+            $this->status = 'paid';
+            $this->amount_paid = $total + (float) $this->penalty_amount;
+
+            return;
+        }
+
+        if ($amountPaid > 0) {
             $this->status = 'partially_paid';
 
             return;
